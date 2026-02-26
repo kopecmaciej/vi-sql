@@ -4,6 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 )
 
 // Styler is an interface for components that can be styled.
@@ -43,6 +44,9 @@ type (
 	Modal struct {
 		*tview.Modal
 	}
+	ViewModal struct {
+		*primitives.ViewModal
+	}
 )
 
 func NewFlex() *Flex {
@@ -67,6 +71,10 @@ func NewInputField() *InputField {
 
 func NewModal() *Modal {
 	return &Modal{Modal: tview.NewModal()}
+}
+
+func NewViewModal() *ViewModal {
+	return &ViewModal{ViewModal: primitives.NewViewModal()}
 }
 
 func (f *Flex) SetStyle(style *config.Styles) {
@@ -102,4 +110,10 @@ func (m *Modal) SetStyle(style *config.Styles) {
 	m.SetTextColor(style.Global.TextColor.Color())
 	m.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
 	m.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
+}
+
+func (v *ViewModal) SetStyle(style *config.Styles) {
+	SetCommonStyle(v.ViewModal, style)
+	v.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
+	v.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }

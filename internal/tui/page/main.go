@@ -3,12 +3,15 @@ package page
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 )
 
 const (
@@ -20,18 +23,10 @@ type Main struct {
 	*core.Flex
 
 	innerFlex *core.Flex
-
-	// TODO: wire in components once component package is built
-	// header    *component.Header
-	// tabBar    *component.TabBar
-	// schemas   *component.SchemaTree
-	// content   *component.Content
-
-	// placeholder widgets until components exist
-	schemaTree *core.TreeView
-	contentTv  *core.TextView
-	headerTv   *core.TextView
-	statusTv   *core.TextView
+	header    *component.Header
+	tabBar    *component.TabBar
+	schemas   *component.SchemaTree
+	content   *component.Content
 }
 
 func NewMain() *Main {
@@ -39,10 +34,10 @@ func NewMain() *Main {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		innerFlex:   core.NewFlex(),
-		schemaTree:  core.NewTreeView(),
-		contentTv:   core.NewTextView(),
-		headerTv:    core.NewTextView(),
-		statusTv:    core.NewTextView(),
+		header:      component.NewHeader(),
+		tabBar:      component.NewTabBar(),
+		schemas:     component.NewSchemaTree(),
+		content:     component.NewContent(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -57,17 +52,13 @@ func (m *Main) init() error {
 
 	m.handleEvents()
 
-	return nil
+	return m.initComponents()
 }
 
 func (m *Main) setStyles() {
 	m.SetStyle(m.App.GetStyles())
 	m.innerFlex.SetStyle(m.App.GetStyles())
 	m.innerFlex.SetDirection(tview.FlexRow)
-	m.schemaTree.SetStyle(m.App.GetStyles())
-	m.contentTv.SetStyle(m.App.GetStyles())
-	m.headerTv.SetStyle(m.App.GetStyles())
-	m.statusTv.SetStyle(m.App.GetStyles())
 }
 
 func (m *Main) handleEvents() {
@@ -79,177 +70,47 @@ func (m *Main) handleEvents() {
 	})
 }
 
+func (m *Main) initComponents() error {
+	if err := m.header.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.tabBar.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.schemas.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.content.Init(m.App); err != nil {
+		return err
+	}
+
+	m.tabBar.AddTab("Content", m.content, true)
+
+	return nil
+}
+
 func (m *Main) Render() {
-	m.Clear()
-	m.innerFlex.Clear()
+	m.schemas.Render()
+	m.header.Render()
+	m.tabBar.Render()
 
-	// Header
-	m.headerTv.SetBorder(false)
-	m.headerTv.SetDynamicColors(true)
-	m.headerTv.SetTextAlign(tview.AlignLeft)
-	m.renderHeader()
-
-	// Schema tree (left panel)
-	m.schemaTree.SetBorder(true)
-	m.schemaTree.SetTitle(" Schemas ")
-
-	root := tview.NewTreeNode("schemas")
-	m.schemaTree.SetRoot(root)
-	m.schemaTree.SetCurrentNode(root)
-
-	if m.Driver != nil {
-		m.loadSchemas(root)
-	}
-
-	// Content area (right panel)
-	m.contentTv.SetBorder(true)
-	m.contentTv.SetTitle(" Content ")
-	m.contentTv.SetText("Select a table from the schema tree")
-
-	// Status bar
-	m.statusTv.SetBorder(false)
-	m.statusTv.SetDynamicColors(true)
-	m.statusTv.SetTextAlign(tview.AlignLeft)
-	m.statusTv.SetText("[yellow]Ready")
-
-	schemaPanelWidth := m.App.GetConfig().UI.SchemaPanelWidth
-	if schemaPanelWidth == 0 {
-		schemaPanelWidth = 30
-	}
-
-	m.AddItem(m.schemaTree, schemaPanelWidth, 0, true)
-	m.AddItem(m.innerFlex, 0, 7, false)
-	m.innerFlex.AddItem(m.headerTv, 3, 0, false)
-	m.innerFlex.AddItem(m.contentTv, 0, 7, true)
-	m.innerFlex.AddItem(m.statusTv, 1, 0, false)
-}
-
-func (m *Main) renderHeader() {
-	if m.Driver == nil {
-		m.headerTv.SetText("[yellow]Not connected")
-		return
-	}
-
-	conn := m.App.GetConfig().GetCurrentConnection()
-	if conn == nil {
-		m.headerTv.SetText("[yellow]No active connection")
-		return
-	}
-
-	headerText := fmt.Sprintf(
-		" [yellow]Connection:[-] %s  [yellow]Host:[-] %s  [yellow]Database:[-] %s",
-		conn.Name, conn.Host, conn.Database,
-	)
-	m.headerTv.SetText(headerText)
-}
-
-func (m *Main) loadSchemas(root *tview.TreeNode) {
-	ctx := context.Background()
-	schemas, err := m.Driver.ListSchemasWithTables(ctx, "")
-	if err != nil {
-		root.AddChild(tview.NewTreeNode(fmt.Sprintf("Error: %v", err)))
-		return
-	}
-
-	for _, s := range schemas {
-		schemaNode := tview.NewTreeNode(s.Schema).
-			SetSelectable(true).
-			SetExpanded(false)
-
-		for _, t := range s.Tables {
-			tableName := t
-			tableNode := tview.NewTreeNode(tableName).
-				SetSelectable(true).
-				SetReference(schemaTable{Schema: s.Schema, Table: tableName})
-
-			tableNode.SetSelectedFunc(func() {
-				m.onTableSelected(s.Schema, tableName)
-			})
-
-			schemaNode.AddChild(tableNode)
+	m.schemas.SetSelectFunc(func(ctx context.Context, schema, table string) error {
+		err := m.content.HandleTableSelection(ctx, schema, table)
+		if err != nil {
+			return err
 		}
-
-		root.AddChild(schemaNode)
-	}
-}
-
-type schemaTable struct {
-	Schema string
-	Table  string
-}
-
-func (m *Main) onTableSelected(schema, table string) {
-	m.contentTv.SetTitle(fmt.Sprintf(" %s.%s ", schema, table))
-	m.statusTv.SetText(fmt.Sprintf("[yellow]Loading[-] %s.%s...", schema, table))
-
-	ctx := context.Background()
-	state := database.NewTableState(schema, table)
-	state.Limit = 50
-
-	rows, err := m.Driver.ListRows(ctx, state, "", "", nil, func(count int64) {
-		state.Count = count
-		go m.App.QueueUpdateDraw(func() {
-			m.statusTv.SetText(fmt.Sprintf("[yellow]%s.%s[-] | Rows: %d | Page: %d/%d",
-				schema, table, state.Count, state.GetCurrentPage(), state.GetTotalPages()))
-		})
+		m.App.SetFocus(m.tabBar.GetActiveComponent())
+		return nil
 	})
-	if err != nil {
-		m.contentTv.SetText(fmt.Sprintf("Error loading rows: %v", err))
-		return
-	}
 
-	if len(rows) == 0 {
-		m.contentTv.SetText("(empty table)")
-		return
-	}
-
-	cols := database.GetSortedColumnNames(rows[0])
-	var buf fmt.Stringer = &rowFormatter{cols: cols, rows: rows}
-	m.contentTv.SetText(buf.String())
-}
-
-type rowFormatter struct {
-	cols []string
-	rows []database.Row
-}
-
-func (r *rowFormatter) String() string {
-	var b []byte
-
-	// Header
-	for i, col := range r.cols {
-		if i > 0 {
-			b = append(b, " | "...)
-		}
-		b = append(b, col...)
-	}
-	b = append(b, '\n')
-	for i := range r.cols {
-		if i > 0 {
-			b = append(b, "-+-"...)
-		}
-		for j := 0; j < len(r.cols[i]); j++ {
-			b = append(b, '-')
-		}
-	}
-	b = append(b, '\n')
-
-	// Rows
-	for _, row := range r.rows {
-		for i, col := range r.cols {
-			if i > 0 {
-				b = append(b, " | "...)
-			}
-			b = append(b, database.StringifyValue(row[col])...)
-		}
-		b = append(b, '\n')
-	}
-
-	return string(b)
+	m.render()
 }
 
 func (m *Main) UpdateDriver(driver database.Driver) {
 	m.BaseElement.UpdateDriver(driver)
+	m.schemas.UpdateDriver(driver)
+	m.header.UpdateDriver(driver)
+	m.content.UpdateDriver(driver)
 }
 
 func (m *Main) JumpToTable(schema, table string) error {
@@ -257,27 +118,27 @@ func (m *Main) JumpToTable(schema, table string) error {
 		return fmt.Errorf("not connected to a database")
 	}
 
-	// Expand the tree to the target table
-	root := m.schemaTree.GetRoot()
-	if root == nil {
-		return fmt.Errorf("schema tree not loaded")
+	ctx := context.Background()
+	return m.schemas.JumpToTable(ctx, schema, table)
+}
+
+func (m *Main) render() {
+	m.Clear()
+	m.innerFlex.Clear()
+
+	schemaPanelWidth := m.App.GetConfig().UI.SchemaPanelWidth
+	if schemaPanelWidth == 0 {
+		schemaPanelWidth = 30
 	}
 
-	for _, schemaNode := range root.GetChildren() {
-		if schemaNode.GetText() == schema {
-			schemaNode.SetExpanded(true)
-			for _, tableNode := range schemaNode.GetChildren() {
-				if tableNode.GetText() == table {
-					m.schemaTree.SetCurrentNode(tableNode)
-					m.onTableSelected(schema, table)
-					return nil
-				}
-			}
-			return fmt.Errorf("table %q not found in schema %q", table, schema)
-		}
-	}
+	m.AddItem(m.schemas, schemaPanelWidth, 0, true)
+	m.AddItem(m.innerFlex, 0, 7, false)
+	m.innerFlex.AddItem(m.header, 4, 0, false)
+	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
+	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
 
-	return fmt.Errorf("schema %q not found", schema)
+	m.App.Pages.AddPage(m.GetIdentifier(), m, true, true)
+	m.App.SetFocus(m)
 }
 
 func (m *Main) setKeybindings() {
@@ -285,26 +146,32 @@ func (m *Main) setKeybindings() {
 	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case k.Contains(k.Main.FocusNext, event.Name()):
-			if m.schemaTree.HasFocus() {
-				m.App.SetFocus(m.contentTv)
+			if m.schemas.IsFocused() {
+				m.App.SetFocus(m.tabBar.GetActiveComponent())
 			} else {
-				m.App.SetFocus(m.schemaTree)
+				m.innerFlex.RemoveItem(m.tabBar.GetActiveComponent())
+				m.tabBar.NextTab()
+				m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
+				m.App.SetFocus(m.tabBar.GetActiveComponent())
 			}
 			return nil
 		case k.Contains(k.Main.FocusPrevious, event.Name()):
-			if m.contentTv.HasFocus() {
-				m.App.SetFocus(m.schemaTree)
+			if m.tabBar.GetActiveTabIndex() == 0 {
+				m.App.SetFocus(m.schemas)
 			} else {
-				m.App.SetFocus(m.contentTv)
+				m.innerFlex.RemoveItem(m.tabBar.GetActiveComponent())
+				m.tabBar.PreviousTab()
+				m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
+				m.App.SetFocus(m.tabBar.GetActiveComponent())
 			}
 			return nil
 		case k.Contains(k.Main.HideSchema, event.Name()):
-			if _, ok := m.GetItem(0).(*core.TreeView); ok {
-				m.RemoveItem(m.schemaTree)
-				m.App.SetFocus(m.contentTv)
+			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
+				m.RemoveItem(m.schemas)
+				m.App.SetFocus(m.tabBar.GetActiveComponent())
 			} else {
 				m.Clear()
-				m.Render()
+				m.render()
 			}
 			return nil
 		case k.Contains(k.Main.ShowServerInfo, event.Name()):
@@ -320,10 +187,12 @@ func (m *Main) showServerInfo() {
 		return
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	info, err := m.Driver.GetServerInfo(ctx)
 	if err != nil {
-		showError(m.App.Pages, "Failed to get server info", err)
+		modal.ShowError(m.App.Pages, "Failed to get server info", err)
 		return
 	}
 

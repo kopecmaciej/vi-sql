@@ -141,6 +141,7 @@ type (
 		MoveToBottom     Key `json:"moveToBottom"`
 		CopyHighlight    Key `json:"copyHighlight"`
 		CopyValue        Key `json:"copyValue"`
+		ExpandRow        Key `json:"expandRow"`
 		ToggleFullScreen Key `json:"toggleFullScreen"`
 		Exit             Key `json:"exit"`
 	}
@@ -304,11 +305,11 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Clear selection",
 		},
 		CopyHighlight: Key{
-			Runes:       []string{"c"},
+			Runes:       []string{"y"},
 			Description: "Copy highlighted",
 		},
 		CopyRow: Key{
-			Runes:       []string{"C"},
+			Runes:       []string{"Y"},
 			Description: "Copy row",
 		},
 		Refresh: Key{
@@ -446,12 +447,16 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Move to bottom",
 		},
 		CopyHighlight: Key{
-			Runes:       []string{"c"},
+			Runes:       []string{"y"},
 			Description: "Copy highlighted",
 		},
 		CopyValue: Key{
-			Runes:       []string{"C"},
+			Runes:       []string{"Y"},
 			Description: "Copy only value",
+		},
+		ExpandRow: Key{
+			Keys:        []string{"Enter"},
+			Description: "Expand row value",
 		},
 		ToggleFullScreen: Key{
 			Runes:       []string{"F"},
@@ -465,7 +470,7 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.History = HistoryKeys{
 		ClearHistory: Key{
-			Runes:       []string{"C"},
+			Runes:       []string{"D"},
 			Description: "Clear history",
 		},
 		AcceptEntry: Key{
