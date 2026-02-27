@@ -138,13 +138,13 @@ type (
 	}
 
 	PeekerKeys struct {
-		MoveToTop        Key `json:"moveToTop"`
-		MoveToBottom     Key `json:"moveToBottom"`
 		CopyHighlight    Key `json:"copyHighlight"`
 		CopyValue        Key `json:"copyValue"`
 		ExpandRow        Key `json:"expandRow"`
 		ToggleFullScreen Key `json:"toggleFullScreen"`
 		Exit             Key `json:"exit"`
+		MoveToTop        Key `json:"moveToTop"`
+		MoveToBottom     Key `json:"moveToBottom"`
 	}
 
 	HistoryKeys struct {
