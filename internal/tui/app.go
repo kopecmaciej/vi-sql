@@ -69,6 +69,11 @@ func (a *App) setKeybindings() {
 		case a.GetKeys().Contains(a.GetKeys().Global.ShowStyleModal, event.Name()):
 			a.ShowStyleChangeModal()
 			return nil
+		case a.GetKeys().Contains(a.GetKeys().Global.ToggleHeader, event.Name()):
+			if a.main.App != nil {
+				a.main.ToggleHeader()
+			}
+			return nil
 		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFullScreenHelp, event.Name()):
 			if a.Pages.HasPage(page.HelpPageId) {
 				a.Pages.RemovePage(page.HelpPageId)
