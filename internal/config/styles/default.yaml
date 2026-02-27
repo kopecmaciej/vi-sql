@@ -34,9 +34,9 @@ schemas:
   leafTextColor: "#E2E8F0"
   nodeSymbolColor: "#FDE68A"
   leafSymbolColor: "#2563EB"
-  openNodeSymbol: "▼"
-  closedNodeSymbol: "▶"
-  leafSymbol: "◆"
+  openNodeSymbol: "󰦾 "
+  closedNodeSymbol: "󰆼 "
+  leafSymbol: "󰓫 "
 content:
   statusTextColor: "#FDE68A"
   headerRowColor: "#1E293B"

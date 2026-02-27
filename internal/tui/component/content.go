@@ -18,8 +18,9 @@ import (
 
 const (
 	ContentId            = "Content"
-	QueryBarId           = "QueryBar"
+	FilterBarId          = "FilterBar"
 	SortBarId            = "SortBar"
+	QueryBarId           = "QueryBar"
 	ContentDeleteModalId = "ContentDeleteModal"
 )
 
@@ -33,8 +34,9 @@ type Content struct {
 	tableHeader  *core.TextView
 	table        *core.Table
 	style        *config.ContentStyle
-	queryBar     *InputBar
+	filterBar    *InputBar
 	sortBar      *InputBar
+	queryBar     *InputBar
 	confirmModal *modal.Confirm
 	peeker       *Peeker
 	columns      []database.ColumnInfo
@@ -50,8 +52,9 @@ func NewContent() *Content {
 		tableFlex:    core.NewFlex(),
 		tableHeader:  core.NewTextView(),
 		table:        core.NewTable(),
-		queryBar:     NewInputBar(QueryBarId, "WHERE"),
+		filterBar:    NewInputBar(FilterBarId, "WHERE"),
 		sortBar:      NewInputBar(SortBarId, "ORDER BY"),
+		queryBar:     NewInputBar(QueryBarId, "SQL"),
 		confirmModal: modal.NewConfirm(ContentDeleteModalId),
 		peeker:       NewPeeker(),
 		state:        &database.TableState{},
@@ -78,18 +81,23 @@ func (c *Content) init() error {
 	if err := c.peeker.Init(c.App); err != nil {
 		return err
 	}
-	if err := c.queryBar.Init(c.App); err != nil {
+	if err := c.filterBar.Init(c.App); err != nil {
 		return err
 	}
 	if err := c.sortBar.Init(c.App); err != nil {
 		return err
 	}
+	if err := c.queryBar.Init(c.App); err != nil {
+		return err
+	}
 
-	c.queryBar.EnableAutocomplete()
+	c.filterBar.EnableAutocomplete()
 	c.sortBar.EnableAutocomplete()
+	c.queryBar.EnableAutocomplete()
 
-	c.queryBarHandler(ctx)
+	c.filterBarHandler(ctx)
 	c.sortBarHandler(ctx)
+	c.queryBarHandler(ctx)
 
 	c.handleEvents(ctx)
 
@@ -157,8 +165,10 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			return c.handleCopyRow(row)
 		case k.Contains(k.Content.Refresh, event.Name()):
 			return c.handleRefresh(ctx)
+		case k.Contains(k.Content.ToggleFilterBar, event.Name()):
+			return c.handleToggleFilter()
 		case k.Contains(k.Content.ToggleQueryBar, event.Name()):
-			return c.handleToggleQuery()
+			return c.handleToggleQueryBar()
 		case k.Contains(k.Content.ToggleSortBar, event.Name()):
 			return c.handleToggleSort()
 		case k.Contains(k.Content.SortByColumn, event.Name()):
@@ -182,7 +192,7 @@ func (c *Content) setKeybindings(ctx context.Context) {
 
 // HandleTableSelection is called when a schema/table is selected in the SchemaTree.
 func (c *Content) HandleTableSelection(ctx context.Context, schema, table string) error {
-	c.queryBar.SetText("")
+	c.filterBar.SetText("")
 	c.sortBar.SetText("")
 
 	state, ok := c.stateMap.Get(c.stateMap.Key(schema, table))
@@ -224,13 +234,17 @@ func (c *Content) Render() {
 	var focusPrimitive tview.Primitive
 	focusPrimitive = c
 
-	if c.queryBar.IsEnabled() {
-		c.Flex.AddItem(c.queryBar, 3, 0, false)
-		focusPrimitive = c.queryBar
+	if c.filterBar.IsEnabled() {
+		c.Flex.AddItem(c.filterBar, 3, 0, false)
+		focusPrimitive = c.filterBar
 	}
 	if c.sortBar.IsEnabled() {
 		c.Flex.AddItem(c.sortBar, 3, 0, false)
 		focusPrimitive = c.sortBar
+	}
+	if c.queryBar.IsEnabled() {
+		c.Flex.AddItem(c.queryBar, 3, 0, false)
+		focusPrimitive = c.queryBar
 	}
 
 	c.tableFlex.AddItem(c.tableHeader, 2, 0, false)
@@ -268,7 +282,7 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	c.queryBar.LoadAutocompleteKeys(cols)
+	c.filterBar.LoadAutocompleteKeys(cols)
 	c.sortBar.LoadAutocompleteKeys(cols)
 
 	c.App.GetManager().Broadcast(manager.EventMsg{
@@ -322,7 +336,7 @@ func (c *Content) renderTableView(rows []database.Row) {
 	// Build column type map for header display
 	typeMap := make(map[string]string)
 	for _, col := range c.columns {
-		typeMap[col.Name] = col.DataType
+		typeMap[col.Name] = database.AbbreviateTypeName(col.DataType)
 	}
 
 	// Header row: name (type)
@@ -350,7 +364,7 @@ func (c *Content) renderTableView(rows []database.Row) {
 
 			cell := tview.NewTableCell(cellText).
 				SetAlign(tview.AlignLeft).
-				SetMaxWidth(35)
+				SetMaxWidth(30)
 
 			c.table.SetCell(row+1, col, cell)
 		}
@@ -372,9 +386,9 @@ func (c *Content) buildHeaderInfo() string {
 	return headerInfo
 }
 
-// --- Query / Sort bar handlers ---
+// --- Filter / Sort bar handlers ---
 
-func (c *Content) queryBarHandler(ctx context.Context) {
+func (c *Content) filterBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		c.state.SetWhere(text)
 		err := c.updateContent(ctx, false)
@@ -382,15 +396,15 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 			c.state.SetWhere("")
 			modal.ShowError(c.App.Pages, "Error applying WHERE filter", err)
 		} else {
-			c.Flex.RemoveItem(c.queryBar)
+			c.Flex.RemoveItem(c.filterBar)
 			c.App.SetFocus(c.table)
 		}
 	}
 	rejectFunc := func() {
-		c.Flex.RemoveItem(c.queryBar)
+		c.Flex.RemoveItem(c.filterBar)
 		c.App.SetFocus(c.table)
 	}
-	c.queryBar.DoneFuncHandler(acceptFunc, rejectFunc)
+	c.filterBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
 func (c *Content) sortBarHandler(ctx context.Context) {
@@ -538,11 +552,11 @@ func (c *Content) handleRefresh(ctx context.Context) *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleToggleQuery() *tcell.EventKey {
+func (c *Content) handleToggleFilter() *tcell.EventKey {
 	if c.state.Where != "" {
-		c.queryBar.Toggle(c.state.Where)
+		c.filterBar.Toggle(c.state.Where)
 	} else {
-		c.queryBar.Toggle("")
+		c.filterBar.Toggle("")
 	}
 	c.Render()
 	return nil
@@ -630,4 +644,113 @@ func (c *Content) handleMultipleSelect(row int) *tcell.EventKey {
 func (c *Content) handleClearSelection() *tcell.EventKey {
 	c.table.ClearSelection()
 	return nil
+}
+
+func (c *Content) handleToggleQueryBar() *tcell.EventKey {
+	c.queryBar.Toggle("")
+	c.Render()
+	return nil
+}
+
+// queryBarHandler wires the QueryBar's accept/reject callbacks.
+// On Enter it detects whether the SQL is a SELECT-like query or a
+// DML/DDL statement and dispatches accordingly.
+func (c *Content) queryBarHandler(ctx context.Context) {
+	acceptFunc := func(text string) {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			c.Flex.RemoveItem(c.queryBar)
+			c.App.SetFocus(c.table)
+			return
+		}
+
+		if isSelectQuery(text) {
+			rows, cols, err := c.Driver.ExecuteQuery(ctx, text)
+			if err != nil {
+				modal.ShowError(c.App.Pages, "Query error", err)
+				c.Flex.RemoveItem(c.queryBar)
+				c.App.SetFocus(c.table)
+				return
+			}
+			c.renderQueryResults(rows, cols)
+		} else {
+			affected, err := c.Driver.ExecuteStatement(ctx, text)
+			if err != nil {
+				modal.ShowError(c.App.Pages, "Statement error", err)
+				c.Flex.RemoveItem(c.queryBar)
+				c.App.SetFocus(c.table)
+				return
+			}
+			c.showStatementResult(affected)
+		}
+
+		c.Flex.RemoveItem(c.queryBar)
+		c.App.SetFocus(c.table)
+	}
+	rejectFunc := func() {
+		c.Flex.RemoveItem(c.queryBar)
+		c.App.SetFocus(c.table)
+	}
+	c.queryBar.DoneFuncHandler(acceptFunc, rejectFunc)
+}
+
+// renderQueryResults displays the rows returned by an ad-hoc SQL query.
+func (c *Content) renderQueryResults(rows []database.Row, cols []database.ColumnInfo) {
+	c.table.Clear()
+	c.table.SetFixed(1, 0)
+	c.table.SetSelectable(true, true)
+
+	if len(rows) == 0 {
+		c.tableHeader.SetText("Query returned 0 rows")
+		c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
+		return
+	}
+
+	c.tableHeader.SetText(fmt.Sprintf("Query result: %d rows", len(rows)))
+
+	for i, col := range cols {
+		headerText := fmt.Sprintf("[%s]%s", c.style.ColumnKeyColor.String(), col.Name)
+		if col.DataType != "" {
+			headerText += fmt.Sprintf(" [%s]%s",
+				c.style.ColumnTypeColor.String(),
+				database.AbbreviateTypeName(col.DataType))
+		}
+		c.table.SetCell(0, i, tview.NewTableCell(headerText).
+			SetReference(col.Name).
+			SetSelectable(false).
+			SetBackgroundColor(c.style.HeaderRowBackgroundColor.Color()).
+			SetAlign(tview.AlignCenter))
+	}
+
+	for r, row := range rows {
+		for i, col := range cols {
+			cellText := database.StringifyValue(row[col.Name])
+			if len(cellText) > 35 {
+				cellText = cellText[:35] + "..."
+			}
+			c.table.SetCell(r+1, i, tview.NewTableCell(cellText).
+				SetAlign(tview.AlignLeft).
+				SetMaxWidth(30))
+		}
+	}
+	c.table.Select(1, 0)
+}
+
+// showStatementResult updates the table area after a non-SELECT statement.
+func (c *Content) showStatementResult(affected int64) {
+	c.table.Clear()
+	c.table.SetFixed(0, 0)
+	c.table.SetSelectable(false, false)
+	c.tableHeader.SetText(fmt.Sprintf("Statement executed: %d rows affected", affected))
+	c.table.SetCell(0, 0, tview.NewTableCell(
+		fmt.Sprintf("%d rows affected", affected)))
+}
+
+// isSelectQuery returns true when sql is a statement that returns rows.
+func isSelectQuery(sql string) bool {
+	upper := strings.ToUpper(sql)
+	return strings.HasPrefix(upper, "SELECT") ||
+		strings.HasPrefix(upper, "WITH") ||
+		strings.HasPrefix(upper, "EXPLAIN") ||
+		strings.HasPrefix(upper, "TABLE")
 }

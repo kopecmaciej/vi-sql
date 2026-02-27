@@ -71,31 +71,32 @@ type (
 	}
 
 	ContentKeys struct {
-		ChangeView                 Key `json:"switchView"`
-		PeekRow                    Key `json:"peekRow"`
-		FullPagePeek               Key `json:"fullPagePeek"`
-		AddRow                     Key `json:"addRow"`
-		EditRow                    Key `json:"editRow"`
-		InlineEdit                 Key `json:"inlineEdit"`
-		DuplicateRow               Key `json:"duplicateRow"`
-		DuplicateRowNoConfirm      Key `json:"duplicateRowNoConfirm"`
-		DeleteRow                  Key `json:"deleteRow"`
-		DeleteRowNoConfirm         Key `json:"deleteRowNoConfirm"`
-		CopyHighlight              Key `json:"copyValue"`
-		CopyRow                    Key `json:"copyRow"`
-		Refresh                    Key `json:"refresh"`
-		ToggleQueryBar             Key `json:"toggleQueryBar"`
-		NextRow                    Key `json:"nextRow"`
-		PreviousRow                Key `json:"previousRow"`
-		NextPage                   Key `json:"nextPage"`
-		PreviousPage               Key `json:"previousPage"`
-		ToggleSortBar              Key `json:"toggleSortBar"`
-		SortByColumn               Key `json:"sortByColumn"`
-		HideColumn                 Key `json:"hideColumn"`
-		ResetHiddenColumns         Key `json:"resetHiddenColumns"`
-		ToggleQueryOptions         Key `json:"toggleQueryOptions"`
-		MultipleSelect             Key `json:"multipleSelect"`
-		ClearSelection             Key `json:"clearSelection"`
+		ChangeView            Key `json:"switchView"`
+		PeekRow               Key `json:"peekRow"`
+		FullPagePeek          Key `json:"fullPagePeek"`
+		AddRow                Key `json:"addRow"`
+		EditRow               Key `json:"editRow"`
+		InlineEdit            Key `json:"inlineEdit"`
+		DuplicateRow          Key `json:"duplicateRow"`
+		DuplicateRowNoConfirm Key `json:"duplicateRowNoConfirm"`
+		DeleteRow             Key `json:"deleteRow"`
+		DeleteRowNoConfirm    Key `json:"deleteRowNoConfirm"`
+		CopyHighlight         Key `json:"copyValue"`
+		CopyRow               Key `json:"copyRow"`
+		Refresh               Key `json:"refresh"`
+		ToggleFilterBar       Key `json:"toggleFilterBar"`
+		ToggleQueryBar        Key `json:"toggleQueryBar"`
+		NextRow               Key `json:"nextRow"`
+		PreviousRow           Key `json:"previousRow"`
+		NextPage              Key `json:"nextPage"`
+		PreviousPage          Key `json:"previousPage"`
+		ToggleSortBar         Key `json:"toggleSortBar"`
+		SortByColumn          Key `json:"sortByColumn"`
+		HideColumn            Key `json:"hideColumn"`
+		ResetHiddenColumns    Key `json:"resetHiddenColumns"`
+		ToggleFilterOptions   Key `json:"toggleFilterOptions"`
+		MultipleSelect        Key `json:"multipleSelect"`
+		ClearSelection        Key `json:"clearSelection"`
 	}
 
 	QueryBar struct {
@@ -316,9 +317,13 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"R"},
 			Description: "Refresh",
 		},
-		ToggleQueryBar: Key{
+		ToggleFilterBar: Key{
 			Runes:       []string{"/"},
-			Description: "Toggle query bar",
+			Description: "Toggle filter bar",
+		},
+		ToggleQueryBar: Key{
+			Runes:       []string{":"},
+			Description: "Toggle SQL query bar",
 		},
 		ToggleSortBar: Key{
 			Runes:       []string{"s"},
@@ -352,9 +357,9 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"b"},
 			Description: "Previous page",
 		},
-		ToggleQueryOptions: Key{
+		ToggleFilterOptions: Key{
 			Keys:        []string{"Alt+o"},
-			Description: "Toggle query options",
+			Description: "Toggle filter options",
 		},
 	}
 

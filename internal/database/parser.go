@@ -46,6 +46,29 @@ func parseTimeValue(value string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("cannot parse time value: %s", value)
 }
 
+// AbbreviateTypeName shortens verbose SQL type names to common abbreviations.
+func AbbreviateTypeName(t string) string {
+	switch strings.ToLower(t) {
+	case "timestamp without time zone":
+		return "timestamp"
+	case "timestamp with time zone":
+		return "timestamptz"
+	case "time without time zone":
+		return "time"
+	case "time with time zone":
+		return "timetz"
+	case "double precision":
+		return "float8"
+	case "character varying":
+		return "varchar"
+	case "character":
+		return "char"
+	case "bit varying":
+		return "varbit"
+	}
+	return t
+}
+
 // SanitizeWhereClause performs basic sanity checks on user-provided WHERE input.
 // It rejects obvious DDL/DML injection attempts in a filter context.
 func SanitizeWhereClause(where string) error {

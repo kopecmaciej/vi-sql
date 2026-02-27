@@ -123,7 +123,7 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 	query := `
 		SELECT
 			c.column_name,
-			c.data_type,
+			CASE WHEN c.data_type = 'USER-DEFINED' THEN c.udt_name ELSE c.data_type END,
 			c.is_nullable = 'YES',
 			c.column_default,
 			COALESCE(tc.constraint_type = 'PRIMARY KEY', false),

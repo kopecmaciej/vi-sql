@@ -201,9 +201,9 @@ func (s *Styles) loadDefaults() {
 		LeafTextColor:    "#E2E8F0",
 		NodeSymbolColor:  "#FDE68A",
 		LeafSymbolColor:  "#2563EB",
-		OpenNodeSymbol:   "▼",
-		ClosedNodeSymbol: "▶",
-		LeafSymbol:       "◆",
+		OpenNodeSymbol:   "▾",
+		ClosedNodeSymbol: "▸",
+		LeafSymbol:       "⊞",
 	}
 
 	s.Content = ContentStyle{
