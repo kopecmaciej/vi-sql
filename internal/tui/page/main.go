@@ -152,6 +152,10 @@ func (m *Main) ToggleHeader() {
 	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
 	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
 	m.header.Render()
+	m.App.GetManager().Broadcast(manager.EventMsg{
+		Sender:  m.GetIdentifier(),
+		Message: manager.Message{Type: manager.HeaderHeightChanged, Data: m.headerHeight},
+	})
 }
 
 func (m *Main) setKeybindings() {

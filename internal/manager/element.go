@@ -12,6 +12,7 @@ const (
 	StyleChanged           MessageType = "style_changed"
 	UpdateAutocompleteKeys MessageType = "update_autocomplete"
 	UpdateQueryBar         MessageType = "update_query_bar"
+	HeaderHeightChanged    MessageType = "header_height_changed"
 )
 
 type (

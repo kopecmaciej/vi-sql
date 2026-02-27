@@ -43,6 +43,9 @@ type ViewModal struct {
 	// Margins (top/bottom padding inside the modal)
 	marginTop    int
 	marginBottom int
+	// topOffset overrides the default top-margin calculation so the modal
+	// can be pushed below a dynamically-sized header.
+	topOffset int
 
 	isFullScreen bool
 
@@ -55,6 +58,7 @@ func NewViewModal() *ViewModal {
 		Box:          tview.NewBox(),
 		marginTop:    6,
 		marginBottom: 6,
+		topOffset:    3, // marginTop/2, matches the historical default
 		expanded:     make(map[int]bool),
 		keyColor:     tview.Styles.SecondaryTextColor,
 		typeColor:    tview.Styles.TertiaryTextColor,
@@ -194,6 +198,12 @@ func (m *ViewModal) SetFullScreen(fullScreen bool) *ViewModal {
 
 func (m *ViewModal) IsFullScreen() bool {
 	return m.isFullScreen
+}
+
+// SetTopOffset sets the y position where the modal starts, allowing it to
+// sit below a dynamically-sized header. Has no effect in full-screen mode.
+func (m *ViewModal) SetTopOffset(y int) {
+	m.topOffset = y
 }
 
 // --- Focus ---
@@ -360,10 +370,10 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 			width = screenWidth - 4
 		}
 		x = (screenWidth - width) / 2
-		y = m.marginTop / 2
+		y = m.topOffset
 	}
 
-	maxVisualLines := screenHeight - m.marginTop - m.marginBottom
+	maxVisualLines := screenHeight - y - m.marginBottom
 	if m.isFullScreen {
 		maxVisualLines = screenHeight - m.marginBottom
 	}
