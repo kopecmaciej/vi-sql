@@ -27,6 +27,8 @@ type Main struct {
 	tabBar       *component.TabBar
 	schemas      *component.SchemaTree
 	content      *component.Content
+	structure    *component.Structure
+	indexes      *component.Indexes
 	headerHeight int
 }
 
@@ -39,6 +41,8 @@ func NewMain() *Main {
 		tabBar:      component.NewTabBar(),
 		schemas:     component.NewSchemaTree(),
 		content:     component.NewContent(),
+		structure:   component.NewStructure(),
+		indexes:     component.NewIndexes(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -84,8 +88,16 @@ func (m *Main) initComponents() error {
 	if err := m.content.Init(m.App); err != nil {
 		return err
 	}
+	if err := m.structure.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.indexes.Init(m.App); err != nil {
+		return err
+	}
 
 	m.tabBar.AddTab("Content", m.content, true)
+	m.tabBar.AddTab("Structure", m.structure, false)
+	m.tabBar.AddTab("Indexes", m.indexes, false)
 
 	return nil
 }
@@ -95,11 +107,21 @@ func (m *Main) Render() {
 	m.header.Render()
 	m.tabBar.Render()
 
+	m.header.SetOnHeightChange(func() {
+		newHeight := m.header.ExpandedHeight()
+		if newHeight == m.headerHeight {
+			return
+		}
+		m.headerHeight = newHeight
+		m.innerFlex.ResizeItem(m.header, newHeight, 0)
+	})
+
 	m.schemas.SetSelectFunc(func(ctx context.Context, schema, table string) error {
-		err := m.content.HandleTableSelection(ctx, schema, table)
-		if err != nil {
+		if err := m.content.HandleTableSelection(ctx, schema, table); err != nil {
 			return err
 		}
+		m.structure.HandleTableSelection(ctx, schema, table)
+		m.indexes.HandleTableSelection(ctx, schema, table)
 		m.App.SetFocus(m.tabBar.GetActiveComponent())
 		return nil
 	})
@@ -112,6 +134,8 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.schemas.UpdateDriver(driver)
 	m.header.UpdateDriver(driver)
 	m.content.UpdateDriver(driver)
+	m.structure.UpdateDriver(driver)
+	m.indexes.UpdateDriver(driver)
 }
 
 func (m *Main) JumpToTable(schema, table string) error {

@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
@@ -27,11 +28,12 @@ type (
 		*core.BaseElement
 		*core.Table
 
-		style        *config.HeaderStyle
-		baseInfo     BaseInfo
-		keys         []config.Key
-		currentFocus tview.Identifier
-		expanded     bool
+		style          *config.HeaderStyle
+		baseInfo       BaseInfo
+		keys           []config.Key
+		currentFocus   tview.Identifier
+		expanded       bool
+		onHeightChange func()
 	}
 )
 
@@ -51,9 +53,7 @@ func NewHeader() *Header {
 func (h *Header) init() error {
 	h.setStyle()
 	h.setLayout()
-
 	h.handleEvents()
-
 	return nil
 }
 
@@ -68,23 +68,46 @@ func (h *Header) setStyle() {
 	h.SetStyle(h.App.GetStyles())
 }
 
+// SetOnHeightChange registers a callback invoked when the header height needs
+// to change due to a focus switch while expanded.
+func (h *Header) SetOnHeightChange(f func()) {
+	h.onHeightChange = f
+}
+
+// SetBaseInfo populates base info with connection host and port.
 func (h *Header) SetBaseInfo() BaseInfo {
 	conn := h.App.GetConfig().GetCurrentConnection()
 	if conn == nil {
 		h.baseInfo = BaseInfo{
-			0: {"Status", h.style.InactiveSymbol.String()},
+			0: {h.style.InactiveSymbol.String(), "not connected"},
 		}
 		return h.baseInfo
 	}
 	h.baseInfo = BaseInfo{
-		0: {"Status", h.style.ActiveSymbol.String()},
-		1: {"Host", conn.Host},
+		0: {"host", conn.Host},
+		1: {"port", fmt.Sprintf("%d", conn.Port)},
 	}
 	return h.baseInfo
 }
 
-// Toggle flips the expanded state and returns the new required height for the
-// header so the caller can resize the layout accordingly.
+func (h *Header) setInactiveBaseInfo(err error) {
+	conn := h.App.GetConfig().GetCurrentConnection()
+	h.baseInfo = make(BaseInfo)
+	host := ""
+	if conn != nil {
+		host = conn.Host
+	}
+	h.baseInfo[0] = info{"host", host}
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+			h.baseInfo[1] = info{"error", "unauthorized — check credentials"}
+		} else {
+			h.baseInfo[1] = info{"error", err.Error()}
+		}
+	}
+}
+
+// Toggle flips the expanded state and returns the new required height.
 func (h *Header) Toggle() int {
 	h.expanded = !h.expanded
 	if h.expanded {
@@ -102,42 +125,21 @@ func (h *Header) collectPairs() []info {
 		b := base[order(i)]
 		pairs = append(pairs, info{b.label, b.value})
 	}
-	if h.currentFocus != "" {
-		focus := h.currentFocus
-		if focus == SchemaTreeId {
-			focus = "Schema"
-		}
-		if orderedKeys, err := h.App.GetKeys().GetKeysForElement(string(focus)); err == nil && len(orderedKeys) > 0 {
-			for _, key := range orderedKeys[0].Keys {
-				var keyString string
-				var iter []string
-				if len(key.Keys) > 0 {
-					iter = append(iter, key.Keys...)
-				}
-				if len(key.Runes) > 0 {
-					iter = append(iter, key.Runes...)
-				}
-				for i, k := range iter {
-					if i == 0 {
-						keyString = k
-					} else {
-						keyString = fmt.Sprintf("%s, %s", keyString, k)
-					}
-				}
-				pairs = append(pairs, info{keyString, key.Description})
-			}
-		}
+
+	keys, _ := h.UpdateKeys()
+	for _, key := range keys {
+		pairs = append(pairs, info{formatKeyString(key), key.Description})
 	}
 	return pairs
 }
 
 // expandedLayout computes the number of column groups and rows for the expanded
-// view given the available inner width. Each group is estimated at 40 chars.
-func (h *Header) expandedLayout(width int) (numGroups, numRows int) {
+// view given the available inner width and the set of pairs to display.
+// Each group is estimated at 40 chars wide.
+func (h *Header) expandedLayout(width int, pairs []info) (numGroups, numRows int) {
 	if width <= 0 {
 		width = 80
 	}
-	pairs := h.collectPairs()
 	if len(pairs) == 0 {
 		return 1, 0
 	}
@@ -149,16 +151,15 @@ func (h *Header) expandedLayout(width int) (numGroups, numRows int) {
 	return numGroups, numRows
 }
 
-// ExpandedHeight returns the number of rows the header needs when expanded,
-// taking the current inner width into account to compute the column layout.
+// ExpandedHeight returns the rows the header needs when expanded.
 func (h *Header) ExpandedHeight() int {
 	_, _, width, _ := h.Table.GetInnerRect()
-	_, numRows := h.expandedLayout(width)
-	return numRows + 2 // +2 for top/bottom borders
+	pairs := h.collectPairs()
+	_, numRows := h.expandedLayout(width, pairs)
+	return numRows + 2 // +2 for borders
 }
 
-// renderExpanded draws all pairs in a column-major multi-column grid, filling
-// as many column groups as the available width allows.
+// renderExpanded draws all pairs in a column-major multi-column grid.
 func (h *Header) renderExpanded() {
 	h.Table.Clear()
 	pairs := h.collectPairs()
@@ -167,26 +168,28 @@ func (h *Header) renderExpanded() {
 	}
 
 	_, _, width, _ := h.Table.GetInnerRect()
-	numGroups, numRows := h.expandedLayout(width)
+	numGroups, numRows := h.expandedLayout(width, pairs)
 
 	for i, p := range pairs {
 		row := i % numRows
 		group := i / numRows
-		col := group * 2 // each group occupies 2 table columns (key + value)
+		col := group * 2
 		h.Table.SetCell(row, col, h.keyCell(p.label))
 		h.Table.SetCell(row, col+1, h.valueCell(p.value))
-		// Spacer between groups
 		if group < numGroups-1 {
-			h.Table.SetCell(row, col+2, tview.NewTableCell(" "))
+			h.Table.SetCell(row, col+2, tview.NewTableCell(""))
 		}
 	}
 }
 
+// Render draws the header. In collapsed mode it shows the connection base info
+// on the left, a spacer column, then the focused element's keybindings.
 func (h *Header) Render() {
 	if h.expanded {
 		h.renderExpanded()
 		return
 	}
+
 	h.Table.Clear()
 	base := h.SetBaseInfo()
 
@@ -199,21 +202,22 @@ func (h *Header) Render() {
 			currCol += 2
 			currRow = 0
 		}
-		order := order(i)
-		h.Table.SetCell(currRow, currCol, h.keyCell(base[order].label))
-		h.Table.SetCell(currRow, currCol+1, h.valueCell(base[order].value))
+		o := order(i)
+		h.Table.SetCell(currRow, currCol, h.keyCell(base[o].label))
+		h.Table.SetCell(currRow, currCol+1, h.valueCell(base[o].value))
 		currRow++
 	}
 
-	h.Table.SetCell(0, 2, tview.NewTableCell(" "))
-	h.Table.SetCell(1, 2, tview.NewTableCell(" "))
+	// Spacer between base info and keys
+	h.Table.SetCell(0, 2, tview.NewTableCell(""))
+	h.Table.SetCell(1, 2, tview.NewTableCell(""))
 	currCol++
 
 	k, err := h.UpdateKeys()
 	if err != nil {
 		currCol += 2
-		h.Table.SetCell(0, currCol, h.keyCell("No special keys for this element"))
-		h.Table.SetCell(1, currCol, h.valueCell("Press "+"<"+h.App.GetKeys().Global.ToggleFullScreenHelp.String()+">"+" to see available keybindings"))
+		h.Table.SetCell(0, currCol, h.keyCell("no keys for this element"))
+		h.Table.SetCell(1, currCol, h.valueCell("press <"+h.App.GetKeys().Global.ToggleFullScreenHelp.String()+"> for all keybindings"))
 		return
 	}
 
@@ -222,23 +226,7 @@ func (h *Header) Render() {
 			currCol += 2
 			currRow = 0
 		}
-		var keyString string
-		var iter []string
-		if len(key.Keys) > 0 {
-			iter = append(iter, key.Keys...)
-		}
-		if len(key.Runes) > 0 {
-			iter = append(iter, key.Runes...)
-		}
-		for i, k := range iter {
-			if i == 0 {
-				keyString = k
-			} else {
-				keyString = fmt.Sprintf("%s, %s", keyString, k)
-			}
-		}
-
-		h.Table.SetCell(currRow, currCol, h.keyCell(keyString))
+		h.Table.SetCell(currRow, currCol, h.keyCell(formatKeyString(key)))
 		h.Table.SetCell(currRow, currCol+1, h.valueCell(key.Description))
 		currRow++
 	}
@@ -250,6 +238,9 @@ func (h *Header) handleEvents() {
 		case manager.FocusChanged:
 			h.currentFocus = tview.Identifier(event.Message.Data.(tview.Identifier))
 			go h.App.QueueUpdateDraw(func() {
+				if h.expanded && h.onHeightChange != nil {
+					h.onHeightChange()
+				}
 				h.Render()
 			})
 		case manager.StyleChanged:
@@ -273,12 +264,12 @@ func (h *Header) valueCell(text string) *tview.TableCell {
 	return cell
 }
 
+// UpdateKeys returns the keybindings for the currently focused element.
 func (h *Header) UpdateKeys() ([]config.Key, error) {
 	if h.currentFocus == "" {
 		return nil, nil
 	}
 
-	// SchemaTree reports as "SchemaTree", but keys are under "Schema"
 	focus := h.currentFocus
 	if focus == SchemaTreeId {
 		focus = "Schema"
@@ -297,4 +288,11 @@ func (h *Header) UpdateKeys() ([]config.Key, error) {
 	}
 
 	return keys, nil
+}
+
+func formatKeyString(key config.Key) string {
+	var parts []string
+	parts = append(parts, key.Keys...)
+	parts = append(parts, key.Runes...)
+	return strings.Join(parts, ", ")
 }

@@ -322,7 +322,7 @@ func (c *Content) renderTableView(rows []database.Row) {
 	c.table.SetFixed(1, 0)
 	c.table.SetSelectable(true, true)
 
-	allCols := database.GetSortedColumnNames(rows[0])
+	allCols := c.orderedColumnNames(rows[0])
 
 	// Filter hidden columns
 	hiddenCols := c.stateMap.GetHiddenColumns(c.state.Schema, c.state.Table)
@@ -504,7 +504,7 @@ func (c *Content) getVisibleColumns() []string {
 	if len(rows) == 0 {
 		return nil
 	}
-	allCols := database.GetSortedColumnNames(rows[0])
+	allCols := c.orderedColumnNames(rows[0])
 	hiddenCols := c.stateMap.GetHiddenColumns(c.state.Schema, c.state.Table)
 	var visible []string
 	for _, col := range allCols {
@@ -513,6 +513,21 @@ func (c *Content) getVisibleColumns() []string {
 		}
 	}
 	return visible
+}
+
+// orderedColumnNames returns column names in their ordinal_position order
+// using c.columns metadata. Falls back to alphabetical if metadata is absent.
+func (c *Content) orderedColumnNames(row database.Row) []string {
+	if len(c.columns) > 0 {
+		names := make([]string, 0, len(c.columns))
+		for _, col := range c.columns {
+			if _, ok := row[col.Name]; ok {
+				names = append(names, col.Name)
+			}
+		}
+		return names
+	}
+	return database.GetSortedColumnNames(row)
 }
 
 func (c *Content) handleCopyCell(row, col int) *tcell.EventKey {
