@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	IndexId           = "Index"
+	IndexId            = "Index"
 	IndexDeleteModalId = "IndexDeleteModal"
 	IndexInputModalId  = "IndexInputModal"
 )
@@ -28,6 +28,7 @@ type Indexes struct {
 
 	innerFlex    *core.Flex
 	table        *core.Table
+	detailView   *core.TextView
 	confirmModal *modal.Confirm
 	inputModal   *primitives.InputModal
 
@@ -42,6 +43,7 @@ func NewIndexes() *Indexes {
 		Flex:         core.NewFlex(),
 		innerFlex:    core.NewFlex(),
 		table:        core.NewTable(),
+		detailView:   core.NewTextView(),
 		confirmModal: modal.NewConfirm(IndexDeleteModalId),
 		inputModal:   primitives.NewInputModal(),
 	}
@@ -71,8 +73,10 @@ func (idx *Indexes) setStyle() {
 	idx.Flex.SetStyle(styles)
 	idx.innerFlex.SetStyle(styles)
 	idx.table.SetStyle(styles)
+	idx.detailView.SetStyle(styles)
 	idx.innerFlex.SetBorderColor(styles.Others.SeparatorColor.Color())
 	idx.table.SetBordersColor(styles.Others.SeparatorColor.Color())
+	idx.detailView.SetTextColor(styles.Global.TextColor.Color())
 
 	idx.inputModal.SetBorderColor(styles.Global.BorderColor.Color())
 	idx.inputModal.SetBackgroundColor(styles.Global.BackgroundColor.Color())
@@ -89,6 +93,13 @@ func (idx *Indexes) setLayout() {
 	idx.innerFlex.SetBorderPadding(0, 0, 1, 1)
 	idx.innerFlex.SetDirection(tview.FlexRow)
 
+	idx.detailView.SetBorder(true)
+	idx.detailView.SetTitle(" Definition ")
+	idx.detailView.SetTitleAlign(tview.AlignLeft)
+	idx.detailView.SetBorderPadding(0, 0, 1, 1)
+	idx.detailView.SetWordWrap(true)
+	idx.detailView.SetDynamicColors(false)
+
 	idx.inputModal.SetBorder(true)
 	idx.inputModal.SetTitle(" Add Index ")
 }
@@ -96,6 +107,10 @@ func (idx *Indexes) setLayout() {
 func (idx *Indexes) setKeybindings() {
 	k := idx.App.GetKeys()
 	ctx := context.Background()
+
+	idx.table.SetSelectionChangedFunc(func(row, col int) {
+		idx.updateDetailView(row)
+	})
 
 	idx.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -108,6 +123,14 @@ func (idx *Indexes) setKeybindings() {
 		}
 		return event
 	})
+}
+
+func (idx *Indexes) updateDetailView(row int) {
+	if row < 1 || row-1 >= len(idx.indexes) {
+		idx.detailView.SetText("")
+		return
+	}
+	idx.detailView.SetText(idx.indexes[row-1].Definition)
 }
 
 func (idx *Indexes) handleEvents() {
@@ -127,6 +150,7 @@ func (idx *Indexes) Render() {
 	idx.innerFlex.Clear()
 	idx.innerFlex.AddItem(idx.table, 0, 1, true)
 	idx.Flex.AddItem(idx.innerFlex, 0, 1, true)
+	idx.Flex.AddItem(idx.detailView, 4, 0, false)
 }
 
 // HandleTableSelection loads index data for the given schema/table.
@@ -156,6 +180,7 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 	idx.table.Clear()
 	idx.table.SetFixed(1, 0)
 	idx.table.SetSelectable(true, false)
+	idx.detailView.SetText("")
 
 	if len(indexes) == 0 {
 		idx.table.SetCell(0, 0, tview.NewTableCell("No indexes found").SetSelectable(false))
@@ -182,9 +207,6 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 		}
 		cols := strings.Join(ix.Columns, ", ")
 		def := ix.Definition
-		if len(def) > 40 {
-			def = def[:40] + "..."
-		}
 
 		idx.table.SetCell(r+1, 0, tview.NewTableCell(" "+ix.Name+" ").
 			SetTextColor(styles.Content.ColumnKeyColor.Color()).
@@ -204,6 +226,7 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 	}
 
 	idx.table.Select(1, 0)
+	idx.updateDetailView(1)
 }
 
 func (idx *Indexes) showAddModal(ctx context.Context) {
