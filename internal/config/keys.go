@@ -18,21 +18,22 @@ type (
 	}
 
 	KeyBindings struct {
-		Global     GlobalKeys     `yaml:"global"`
-		Help       HelpKeys       `yaml:"help"`
-		Welcome    WelcomeKeys    `yaml:"welcome"`
-		Connection ConnectionKeys `yaml:"connection"`
-		Main       MainKeys       `yaml:"main"`
-		Schema     SchemaKeys     `yaml:"schema"`
-		FilterBar  FilterBarKeys  `yaml:"filterBar"`
-		Content    ContentKeys    `yaml:"content"`
-		Peeker     PeekerKeys     `yaml:"peeker"`
-		QueryBar   QueryBar       `yaml:"queryBar"`
-		SortBar    SortBar        `yaml:"sortBar"`
-		Index      IndexKeys      `yaml:"index"`
-		Structure  StructureKeys  `yaml:"structure"`
-		AIQuery    AIQuery        `yaml:"aiPrompt"`
-		History    HistoryKeys    `yaml:"history"`
+		Global       GlobalKeys       `yaml:"global"`
+		Help         HelpKeys         `yaml:"help"`
+		Welcome      WelcomeKeys      `yaml:"welcome"`
+		Connection   ConnectionKeys   `yaml:"connection"`
+		Main         MainKeys         `yaml:"main"`
+		Schema       SchemaKeys       `yaml:"schema"`
+		FilterBar    FilterBarKeys    `yaml:"filterBar"`
+		Content      ContentKeys      `yaml:"content"`
+		Peeker       PeekerKeys       `yaml:"peeker"`
+		QueryBar     QueryBar         `yaml:"queryBar"`
+		SortBar      SortBar          `yaml:"sortBar"`
+		Index        IndexKeys        `yaml:"index"`
+		IndexAddForm IndexAddFormKeys `yaml:"indexAddForm"`
+		Structure    StructureKeys    `yaml:"structure"`
+		AIQuery      AIQuery          `yaml:"aiPrompt"`
+		History      HistoryKeys      `yaml:"history"`
 	}
 
 	Key struct {
@@ -162,6 +163,13 @@ type (
 		DeleteIndex  Key `yaml:"deleteIndex"`
 	}
 
+	IndexAddFormKeys struct {
+		ExitForm      Key `yaml:"exitForm"`
+		ToggleSQLMode Key `yaml:"toggleSQLMode"`
+		AddColumn     Key `yaml:"addColumn"`
+		CreateIndex   Key `yaml:"createIndex"`
+	}
+
 	StructureKeys struct {
 		Refresh Key `yaml:"refresh"`
 	}
@@ -218,7 +226,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Hide schema panel",
 		},
 		ShowServerInfo: Key{
-			Keys:        []string{"Ctrl+s"},
+			Keys:        []string{"Alt+s"},
 			Description: "Show server info",
 		},
 		ShowAIQuery: Key{
@@ -518,6 +526,25 @@ func (k *KeyBindings) loadDefaults() {
 		DeleteIndex: Key{
 			Keys:        []string{"Ctrl+d"},
 			Description: "Delete index",
+		},
+	}
+
+	k.IndexAddForm = IndexAddFormKeys{
+		ExitForm: Key{
+			Keys:        []string{"Esc"},
+			Description: "Exit form",
+		},
+		ToggleSQLMode: Key{
+			Keys:        []string{"Ctrl+e"},
+			Description: "Edit SQL mode",
+		},
+		AddColumn: Key{
+			Keys:        []string{"Ctrl+a"},
+			Description: "Add column",
+		},
+		CreateIndex: Key{
+			Keys:        []string{"Ctrl+s"},
+			Description: "Create index",
 		},
 	}
 

@@ -17,6 +17,7 @@ import (
 
 const (
 	IndexId            = "Index"
+	IndexAddFormId     = "IndexAddForm"
 	IndexDeleteModalId = "IndexDeleteModal"
 )
 
@@ -34,7 +35,7 @@ type Indexes struct {
 	colKeys          []string
 	columnCount      int
 	isAddFormVisible bool
-	isRawMode        bool
+	isSQLMode        bool
 }
 
 func NewIndexes() *Indexes {
@@ -49,6 +50,7 @@ func NewIndexes() *Indexes {
 
 	idx.SetIdentifier(IndexId)
 	idx.table.SetIdentifier(IndexId)
+	idx.addForm.SetIdentifier(IndexAddFormId)
 	idx.SetAfterInitFunc(idx.init)
 
 	return idx
@@ -89,11 +91,6 @@ func (idx *Indexes) setKeybindings() {
 
 	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Index.ExitAddIndex, event.Name()):
-			if idx.isAddFormVisible {
-				idx.closeAddForm()
-				return nil
-			}
 		case k.Contains(k.Index.AddIndex, event.Name()):
 			if !idx.isAddFormVisible {
 				idx.showAddForm()
@@ -102,6 +99,27 @@ func (idx *Indexes) setKeybindings() {
 		case k.Contains(k.Index.DeleteIndex, event.Name()):
 			if !idx.isAddFormVisible {
 				idx.showDeleteIndexModal(context.Background())
+				return nil
+			}
+		case k.Contains(k.IndexAddForm.ExitForm, event.Name()):
+			if idx.isAddFormVisible {
+				idx.closeAddForm()
+				return nil
+			}
+		case k.Contains(k.IndexAddForm.ToggleSQLMode, event.Name()):
+			if idx.isAddFormVisible {
+				idx.isSQLMode = !idx.isSQLMode
+				idx.showAddForm()
+				return nil
+			}
+		case k.Contains(k.IndexAddForm.AddColumn, event.Name()):
+			if idx.isAddFormVisible && !idx.isSQLMode {
+				idx.addColumn()
+				return nil
+			}
+		case k.Contains(k.IndexAddForm.CreateIndex, event.Name()):
+			if idx.isAddFormVisible {
+				idx.handleCreate()
 				return nil
 			}
 		}
@@ -217,10 +235,8 @@ func (idx *Indexes) showAddForm() {
 	idx.columnCount = 1
 	idx.addForm.Clear(true)
 
-	modeLabel := "Raw SQL"
-	if idx.isRawMode {
+	if idx.isSQLMode {
 		idx.addForm.AddInputField("SQL", "", 0, nil, nil)
-		modeLabel = "Form"
 	} else {
 		idx.insertColumnPair(0, 1)
 		idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
@@ -230,10 +246,6 @@ func (idx *Indexes) showAddForm() {
 		idx.addForm.AddButton("+Column", idx.addColumn)
 	}
 
-	idx.addForm.AddButton(modeLabel, func() {
-		idx.isRawMode = !idx.isRawMode
-		idx.showAddForm()
-	})
 	idx.addForm.AddButton("Create", idx.handleCreate)
 	idx.addForm.AddButton("Cancel", idx.closeAddForm)
 
@@ -283,13 +295,14 @@ func (idx *Indexes) addColumn() {
 
 	idx.columnCount++
 	idx.insertColumnPair(sepIdx, idx.columnCount)
+	idx.addForm.SetFocus(sepIdx)
 	idx.App.SetFocus(idx.addForm)
 }
 
 func (idx *Indexes) handleCreate() {
 	ctx := context.Background()
 
-	if idx.isRawMode {
+	if idx.isSQLMode {
 		sql := idx.addForm.GetFormItemByLabel("SQL").(*tview.InputField).GetText()
 		if strings.TrimSpace(sql) == "" {
 			modal.ShowError(idx.App.Pages, "Validation error", fmt.Errorf("SQL statement is required"))
