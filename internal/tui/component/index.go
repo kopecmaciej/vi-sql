@@ -217,8 +217,10 @@ func (idx *Indexes) showAddForm() {
 	idx.columnCount = 1
 	idx.addForm.Clear(true)
 
+	modeLabel := "Raw SQL"
 	if idx.isRawMode {
 		idx.addForm.AddInputField("SQL", "", 0, nil, nil)
+		modeLabel = "Form"
 	} else {
 		idx.insertColumnPair(0, 1)
 		idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
@@ -228,26 +230,16 @@ func (idx *Indexes) showAddForm() {
 		idx.addForm.AddButton("+Column", idx.addColumn)
 	}
 
-	idx.addFormButtons()
+	idx.addForm.AddButton(modeLabel, func() {
+		idx.isRawMode = !idx.isRawMode
+		idx.showAddForm()
+	})
+	idx.addForm.AddButton("Create", idx.handleCreate)
+	idx.addForm.AddButton("Cancel", idx.closeAddForm)
 
 	idx.isAddFormVisible = true
 	idx.Render()
 	idx.App.SetFocus(idx.addForm)
-}
-
-func (idx *Indexes) addFormButtons() {
-	modeLabel := "Raw SQL"
-	if idx.isRawMode {
-		modeLabel = "Form"
-	}
-	idx.addForm.AddButton(modeLabel, idx.toggleMode)
-	idx.addForm.AddButton("Create", idx.handleCreate)
-	idx.addForm.AddButton("Cancel", idx.closeAddForm)
-}
-
-func (idx *Indexes) toggleMode() {
-	idx.isRawMode = !idx.isRawMode
-	idx.showAddForm()
 }
 
 func (idx *Indexes) insertColumnPair(pos, n int) {
@@ -291,7 +283,6 @@ func (idx *Indexes) addColumn() {
 
 	idx.columnCount++
 	idx.insertColumnPair(sepIdx, idx.columnCount)
-	idx.addFormButtons()
 	idx.App.SetFocus(idx.addForm)
 }
 

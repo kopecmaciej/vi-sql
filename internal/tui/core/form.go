@@ -21,8 +21,7 @@ func (f *Form) SetStyle(style *config.Styles) {
 	f.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 
-// InsertFormItem inserts a form item at the given position.
-// Buttons are not preserved — re-add them separately if needed.
+// InsertFormItem inserts a form item at the given position, preserving buttons.
 func (f *Form) InsertFormItem(pos int, item tview.FormItem) *Form {
 	count := f.GetFormItemCount()
 	if pos < 0 || pos > count {
@@ -34,7 +33,7 @@ func (f *Form) InsertFormItem(pos int, item tview.FormItem) *Form {
 		existingItems[i] = f.GetFormItem(i)
 	}
 
-	f.Clear(true)
+	f.Clear(false)
 	for i := 0; i < pos; i++ {
 		f.AddFormItem(existingItems[i])
 	}
