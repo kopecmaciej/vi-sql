@@ -3,6 +3,8 @@ package component
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -11,41 +13,38 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 )
 
 const (
 	IndexId            = "Index"
 	IndexDeleteModalId = "IndexDeleteModal"
-	IndexInputModalId  = "IndexInputModal"
 )
 
-// Indexes displays index information for the currently selected table and
-// allows creating and dropping indexes.
 type Indexes struct {
 	*core.BaseElement
 	*core.Flex
 
-	innerFlex    *core.Flex
-	table        *core.Table
-	detailView   *core.TextView
-	confirmModal *modal.Confirm
-	inputModal   *primitives.InputModal
+	table       *core.Table
+	deleteModal *modal.Confirm
+	addForm     *core.Form
 
-	schema  string
-	tbl     string
-	indexes []database.IndexInfo
+	schema           string
+	tbl              string
+	indexes          []database.IndexInfo
+	colKeys          []string
+	columnCount      int
+	isAddFormVisible bool
+	isRawMode        bool
 }
 
 func NewIndexes() *Indexes {
 	idx := &Indexes{
-		BaseElement:  core.NewBaseElement(),
-		Flex:         core.NewFlex(),
-		innerFlex:    core.NewFlex(),
-		table:        core.NewTable(),
-		detailView:   core.NewTextView(),
-		confirmModal: modal.NewConfirm(IndexDeleteModalId),
-		inputModal:   primitives.NewInputModal(),
+		BaseElement:      core.NewBaseElement(),
+		Flex:             core.NewFlex(),
+		table:            core.NewTable(),
+		deleteModal:      modal.NewConfirm(IndexDeleteModalId),
+		addForm:          core.NewForm(),
+		isAddFormVisible: false,
 	}
 
 	idx.SetIdentifier(IndexId)
@@ -60,7 +59,7 @@ func (idx *Indexes) init() error {
 	idx.setLayout()
 	idx.setKeybindings()
 
-	if err := idx.confirmModal.Init(idx.App); err != nil {
+	if err := idx.deleteModal.Init(idx.App); err != nil {
 		return err
 	}
 
@@ -71,66 +70,44 @@ func (idx *Indexes) init() error {
 func (idx *Indexes) setStyle() {
 	styles := idx.App.GetStyles()
 	idx.Flex.SetStyle(styles)
-	idx.innerFlex.SetStyle(styles)
 	idx.table.SetStyle(styles)
-	idx.detailView.SetStyle(styles)
-	idx.innerFlex.SetBorderColor(styles.Others.SeparatorColor.Color())
+	idx.addForm.SetStyle(styles)
+	idx.Flex.SetBorderColor(styles.Others.SeparatorColor.Color())
 	idx.table.SetBordersColor(styles.Others.SeparatorColor.Color())
-	idx.detailView.SetTextColor(styles.Global.TextColor.Color())
-
-	idx.inputModal.SetBorderColor(styles.Global.BorderColor.Color())
-	idx.inputModal.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	idx.inputModal.SetFieldTextColor(styles.Others.ModalTextColor.Color())
-	idx.inputModal.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
 }
 
 func (idx *Indexes) setLayout() {
+	idx.Flex.SetBorder(true)
+	idx.Flex.SetTitle(" Indexes ")
+	idx.Flex.SetTitleAlign(tview.AlignCenter)
+	idx.Flex.SetBorderPadding(0, 0, 1, 1)
 	idx.Flex.SetDirection(tview.FlexRow)
-
-	idx.innerFlex.SetBorder(true)
-	idx.innerFlex.SetTitle(" Indexes ")
-	idx.innerFlex.SetTitleAlign(tview.AlignCenter)
-	idx.innerFlex.SetBorderPadding(0, 0, 1, 1)
-	idx.innerFlex.SetDirection(tview.FlexRow)
-
-	idx.detailView.SetBorder(true)
-	idx.detailView.SetTitle(" Definition ")
-	idx.detailView.SetTitleAlign(tview.AlignLeft)
-	idx.detailView.SetBorderPadding(0, 0, 1, 1)
-	idx.detailView.SetWordWrap(true)
-	idx.detailView.SetDynamicColors(false)
-
-	idx.inputModal.SetBorder(true)
-	idx.inputModal.SetTitle(" Add Index ")
 }
 
 func (idx *Indexes) setKeybindings() {
 	k := idx.App.GetKeys()
 	ctx := context.Background()
 
-	idx.table.SetSelectionChangedFunc(func(row, col int) {
-		idx.updateDetailView(row)
-	})
-
-	idx.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
+		case k.Contains(k.Index.ExitAddIndex, event.Name()):
+			if idx.isAddFormVisible {
+				idx.closeAddForm()
+				return nil
+			}
 		case k.Contains(k.Index.AddIndex, event.Name()):
-			idx.showAddModal(ctx)
-			return nil
+			if !idx.isAddFormVisible {
+				idx.showAddForm(ctx)
+				return nil
+			}
 		case k.Contains(k.Index.DeleteIndex, event.Name()):
-			idx.showDeleteModal(ctx)
-			return nil
+			if !idx.isAddFormVisible {
+				idx.showDeleteIndexModal(ctx)
+				return nil
+			}
 		}
 		return event
 	})
-}
-
-func (idx *Indexes) updateDetailView(row int) {
-	if row < 1 || row-1 >= len(idx.indexes) {
-		idx.detailView.SetText("")
-		return
-	}
-	idx.detailView.SetText(idx.indexes[row-1].Definition)
 }
 
 func (idx *Indexes) handleEvents() {
@@ -147,17 +124,28 @@ func (idx *Indexes) handleEvents() {
 
 func (idx *Indexes) Render() {
 	idx.Flex.Clear()
-	idx.innerFlex.Clear()
-	idx.innerFlex.AddItem(idx.table, 0, 1, true)
-	idx.Flex.AddItem(idx.innerFlex, 0, 1, true)
-	idx.Flex.AddItem(idx.detailView, 4, 0, false)
+
+	if idx.isAddFormVisible {
+		idx.Flex.AddItem(idx.addForm, 0, 1, true)
+	} else {
+		idx.Flex.AddItem(idx.table, 0, 1, true)
+	}
 }
 
 // HandleTableSelection loads index data for the given schema/table.
 func (idx *Indexes) HandleTableSelection(ctx context.Context, schema, table string) {
 	idx.schema = schema
 	idx.tbl = table
+	idx.loadColKeys(ctx)
 	idx.loadData(ctx)
+}
+
+func (idx *Indexes) loadColKeys(ctx context.Context) {
+	keys, err := idx.Driver.GetTableColumnNames(ctx, idx.schema, idx.tbl)
+	if err != nil {
+		return
+	}
+	idx.colKeys = keys
 }
 
 func (idx *Indexes) loadData(ctx context.Context) {
@@ -180,8 +168,6 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 	idx.table.Clear()
 	idx.table.SetFixed(1, 0)
 	idx.table.SetSelectable(true, false)
-	idx.detailView.SetText("")
-
 	if len(indexes) == 0 {
 		idx.table.SetCell(0, 0, tview.NewTableCell("No indexes found").SetSelectable(false))
 		return
@@ -206,7 +192,6 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 			primary = "✓"
 		}
 		cols := strings.Join(ix.Columns, ", ")
-		def := ix.Definition
 
 		idx.table.SetCell(r+1, 0, tview.NewTableCell(" "+ix.Name+" ").
 			SetTextColor(styles.Content.ColumnKeyColor.Color()).
@@ -221,75 +206,178 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 		idx.table.SetCell(r+1, 4, tview.NewTableCell(" "+primary+" ").
 			SetTextColor(styles.Content.ColumnTypeColor.Color()).
 			SetAlign(tview.AlignCenter))
-		idx.table.SetCell(r+1, 5, tview.NewTableCell(" "+def+" ").
+		idx.table.SetCell(r+1, 5, tview.NewTableCell(" "+ix.Definition+" ").
 			SetTextColor(styles.Global.TextColor.Color()))
 	}
 
 	idx.table.Select(1, 0)
-	idx.updateDetailView(1)
 }
 
-func (idx *Indexes) showAddModal(ctx context.Context) {
-	template := fmt.Sprintf("CREATE INDEX idx_%s_ ON %s.%s (col)", idx.tbl, idx.schema, idx.tbl)
-	idx.inputModal.SetText(template)
-	idx.inputModal.SetLabel(fmt.Sprintf("Create index on [::b]%s.%s", idx.schema, idx.tbl))
+// showAddForm replaces the table with an inline form for creating a new index.
+func (idx *Indexes) showAddForm(ctx context.Context) {
+	idx.columnCount = 1
+	idx.addForm.Clear(true)
 
-	idx.inputModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEnter:
-			sql := strings.TrimSpace(idx.inputModal.GetText())
-			if sql == "" {
-				return event
-			}
-			_, err := idx.Driver.ExecuteStatement(ctx, sql)
-			if err != nil {
-				modal.ShowError(idx.App.Pages, "Error creating index", err)
-			} else {
-				idx.loadData(ctx)
-			}
-			idx.closeAddModal()
-		case tcell.KeyEscape:
-			idx.closeAddModal()
-		}
-		return event
+	if idx.isRawMode {
+		idx.addForm.AddInputField("SQL", "", 0, nil, nil)
+	} else {
+		idx.addForm.AddFormItem(idx.newColumnInput(1))
+		idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
+		idx.addForm.AddInputField("Index Name", "", 30, nil, nil)
+		idx.addForm.AddDropDown("Type", []string{"btree", "hash", "gin", "gist", "brin", "spgist"}, 0, nil)
+		idx.addForm.AddCheckbox("Unique", false, nil)
+		idx.addForm.AddButton("+Column", func() {
+			idx.App.QueueUpdateDraw(func() {
+				idx.addColumn()
+			})
+		})
+	}
+
+	modeLabel := "Raw SQL"
+	if idx.isRawMode {
+		modeLabel = "Form"
+	}
+	idx.addForm.AddButton(modeLabel, func() {
+		idx.isRawMode = !idx.isRawMode
+		idx.showAddForm(ctx)
 	})
+	idx.addForm.AddButton("Create", func() {
+		idx.handleCreate(ctx)
+	})
+	idx.addForm.AddButton("Cancel", idx.closeAddForm)
 
-	idx.App.Pages.AddPage(IndexInputModalId, idx.inputModal, true, true)
+	idx.isAddFormVisible = true
+	idx.Render()
+	idx.App.SetFocus(idx.addForm)
 }
 
-func (idx *Indexes) closeAddModal() {
-	idx.inputModal.SetText("")
-	idx.App.Pages.RemovePage(IndexInputModalId)
+func (idx *Indexes) newColumnInput(n int) *tview.InputField {
+	input := tview.NewInputField().
+		SetLabel(fmt.Sprintf("Column %d", n)).
+		SetFieldWidth(30)
+	input.SetAutocompleteFunc(idx.autocompleteFunc)
+	return input
 }
 
-func (idx *Indexes) showDeleteModal(ctx context.Context) {
+func (idx *Indexes) autocompleteFunc(currentText string) []tview.AutocompleteItem {
+	entries := make([]tview.AutocompleteItem, 0, len(idx.colKeys))
+	for _, key := range idx.colKeys {
+		if matched, _ := regexp.MatchString("(?i)^"+regexp.QuoteMeta(currentText), key); matched {
+			entries = append(entries, tview.AutocompleteItem{Main: key})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].Main) < strings.ToLower(entries[j].Main)
+	})
+	return entries
+}
+
+func (idx *Indexes) addColumn() {
+	sepIdx := -1
+	for i := 0; i < idx.addForm.GetFormItemCount(); i++ {
+		if tv, ok := idx.addForm.GetFormItem(i).(*tview.TextView); ok && strings.Contains(tv.GetText(false), "──") {
+			sepIdx = i
+			break
+		}
+	}
+	if sepIdx == -1 {
+		return
+	}
+
+	idx.columnCount++
+	idx.addForm.InsertFormItem(sepIdx, idx.newColumnInput(idx.columnCount))
+	idx.App.SetFocus(idx.addForm)
+}
+
+func (idx *Indexes) handleCreate(ctx context.Context) {
+	if idx.isRawMode {
+		sql := idx.addForm.GetFormItemByLabel("SQL").(*tview.InputField).GetText()
+		if strings.TrimSpace(sql) == "" {
+			modal.ShowError(idx.App.Pages, "Validation error", fmt.Errorf("SQL statement is required"))
+			return
+		}
+		if _, err := idx.Driver.ExecuteStatement(ctx, sql); err != nil {
+			modal.ShowError(idx.App.Pages, "Error creating index", err)
+			return
+		}
+		idx.closeAddForm()
+		idx.loadData(ctx)
+		return
+	}
+
+	var columns []string
+	for i := 1; i <= idx.columnCount; i++ {
+		item := idx.addForm.GetFormItemByLabel(fmt.Sprintf("Column %d", i))
+		if item == nil {
+			continue
+		}
+		col := item.(*tview.InputField).GetText()
+		if col != "" {
+			columns = append(columns, col)
+		}
+	}
+
+	if len(columns) == 0 {
+		modal.ShowError(idx.App.Pages, "Validation error", fmt.Errorf("at least one column is required"))
+		return
+	}
+
+	name := idx.addForm.GetFormItemByLabel("Index Name").(*tview.InputField).GetText()
+	_, indexType := idx.addForm.GetFormItemByLabel("Type").(*tview.DropDown).GetCurrentOption()
+	unique := idx.addForm.GetFormItemByLabel("Unique").(*tview.Checkbox).IsChecked()
+
+	def := database.IndexDefinition{
+		Name:     name,
+		Columns:  columns,
+		IsUnique: unique,
+		Type:     indexType,
+	}
+
+	if err := idx.Driver.CreateIndex(ctx, idx.schema, idx.tbl, def); err != nil {
+		modal.ShowError(idx.App.Pages, "Error creating index", err)
+		return
+	}
+
+	idx.closeAddForm()
+	idx.loadData(ctx)
+}
+
+func (idx *Indexes) closeAddForm() {
+	idx.addForm.Clear(true)
+	idx.isAddFormVisible = false
+	idx.Render()
+	idx.App.SetFocus(idx)
+}
+
+func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 	row, _ := idx.table.GetSelection()
 	if row < 1 {
 		return
 	}
-
 	cell := idx.table.GetCell(row, 0)
-	if cell == nil {
-		return
-	}
 	indexName, _ := cell.GetReference().(string)
 	if indexName == "" {
 		return
 	}
 
-	idx.confirmModal.SetConfirmButtonLabel("Drop")
-	idx.confirmModal.SetText(fmt.Sprintf("Drop index [::b]%s[-:-:-]?", indexName))
-	idx.confirmModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+	idx.deleteModal.SetConfirmButtonLabel("Drop")
+	idx.deleteModal.SetText(fmt.Sprintf("Drop index [::b]%s[-:-:-]?", indexName))
+	idx.deleteModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		defer idx.App.Pages.RemovePage(IndexDeleteModalId)
-		if buttonLabel == "Drop" {
+		if buttonIndex == 0 {
 			err := idx.Driver.DropIndex(ctx, idx.schema, indexName)
 			if err != nil {
 				modal.ShowError(idx.App.Pages, "Error dropping index", err)
 				return
 			}
-			idx.loadData(ctx)
+			idx.table.RemoveRow(row)
+			idx.table.Select(row-1, 0)
 		}
 	})
 
-	idx.App.Pages.AddPage(IndexDeleteModalId, idx.confirmModal, true, true)
+	idx.App.Pages.AddPage(IndexDeleteModalId, idx.deleteModal, true, true)
+}
+
+func (idx *Indexes) IsAddFormFocused() bool {
+	return idx.isAddFormVisible
 }
