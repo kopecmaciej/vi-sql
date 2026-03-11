@@ -560,7 +560,11 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 
 	quotedCols := make([]string, len(def.Columns))
 	for i, c := range def.Columns {
-		quotedCols[i] = pgx.Identifier{c}.Sanitize()
+		parts := strings.Fields(c)
+		quotedCols[i] = pgx.Identifier{parts[0]}.Sanitize()
+		if len(parts) > 1 {
+			quotedCols[i] += " " + parts[1]
+		}
 	}
 
 	fqTable := pgx.Identifier{schema, table}.Sanitize()

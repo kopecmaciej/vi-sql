@@ -86,7 +86,6 @@ func (idx *Indexes) setLayout() {
 
 func (idx *Indexes) setKeybindings() {
 	k := idx.App.GetKeys()
-	ctx := context.Background()
 
 	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -97,12 +96,12 @@ func (idx *Indexes) setKeybindings() {
 			}
 		case k.Contains(k.Index.AddIndex, event.Name()):
 			if !idx.isAddFormVisible {
-				idx.showAddForm(ctx)
+				idx.showAddForm()
 				return nil
 			}
 		case k.Contains(k.Index.DeleteIndex, event.Name()):
 			if !idx.isAddFormVisible {
-				idx.showDeleteIndexModal(ctx)
+				idx.showDeleteIndexModal(context.Background())
 				return nil
 			}
 		}
@@ -214,49 +213,55 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 }
 
 // showAddForm replaces the table with an inline form for creating a new index.
-func (idx *Indexes) showAddForm(ctx context.Context) {
+func (idx *Indexes) showAddForm() {
 	idx.columnCount = 1
 	idx.addForm.Clear(true)
 
 	if idx.isRawMode {
 		idx.addForm.AddInputField("SQL", "", 0, nil, nil)
 	} else {
-		idx.addForm.AddFormItem(idx.newColumnInput(1))
+		idx.insertColumnPair(0, 1)
 		idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
 		idx.addForm.AddInputField("Index Name", "", 30, nil, nil)
 		idx.addForm.AddDropDown("Type", []string{"btree", "hash", "gin", "gist", "brin", "spgist"}, 0, nil)
 		idx.addForm.AddCheckbox("Unique", false, nil)
-		idx.addForm.AddButton("+Column", func() {
-			idx.App.QueueUpdateDraw(func() {
-				idx.addColumn()
-			})
-		})
+		idx.addForm.AddButton("+Column", idx.addColumn)
 	}
 
-	modeLabel := "Raw SQL"
-	if idx.isRawMode {
-		modeLabel = "Form"
-	}
-	idx.addForm.AddButton(modeLabel, func() {
-		idx.isRawMode = !idx.isRawMode
-		idx.showAddForm(ctx)
-	})
-	idx.addForm.AddButton("Create", func() {
-		idx.handleCreate(ctx)
-	})
-	idx.addForm.AddButton("Cancel", idx.closeAddForm)
+	idx.addFormButtons()
 
 	idx.isAddFormVisible = true
 	idx.Render()
 	idx.App.SetFocus(idx.addForm)
 }
 
-func (idx *Indexes) newColumnInput(n int) *tview.InputField {
+func (idx *Indexes) addFormButtons() {
+	modeLabel := "Raw SQL"
+	if idx.isRawMode {
+		modeLabel = "Form"
+	}
+	idx.addForm.AddButton(modeLabel, idx.toggleMode)
+	idx.addForm.AddButton("Create", idx.handleCreate)
+	idx.addForm.AddButton("Cancel", idx.closeAddForm)
+}
+
+func (idx *Indexes) toggleMode() {
+	idx.isRawMode = !idx.isRawMode
+	idx.showAddForm()
+}
+
+func (idx *Indexes) insertColumnPair(pos, n int) {
 	input := tview.NewInputField().
 		SetLabel(fmt.Sprintf("Column %d", n)).
 		SetFieldWidth(30)
 	input.SetAutocompleteFunc(idx.autocompleteFunc)
-	return input
+
+	dropdown := tview.NewDropDown().
+		SetLabel(fmt.Sprintf("Order %d", n)).
+		SetOptions([]string{"ASC", "DESC"}, nil)
+
+	idx.addForm.InsertFormItem(pos, input)
+	idx.addForm.InsertFormItem(pos+1, dropdown)
 }
 
 func (idx *Indexes) autocompleteFunc(currentText string) []tview.AutocompleteItem {
@@ -285,11 +290,14 @@ func (idx *Indexes) addColumn() {
 	}
 
 	idx.columnCount++
-	idx.addForm.InsertFormItem(sepIdx, idx.newColumnInput(idx.columnCount))
+	idx.insertColumnPair(sepIdx, idx.columnCount)
+	idx.addFormButtons()
 	idx.App.SetFocus(idx.addForm)
 }
 
-func (idx *Indexes) handleCreate(ctx context.Context) {
+func (idx *Indexes) handleCreate() {
+	ctx := context.Background()
+
 	if idx.isRawMode {
 		sql := idx.addForm.GetFormItemByLabel("SQL").(*tview.InputField).GetText()
 		if strings.TrimSpace(sql) == "" {
@@ -312,9 +320,16 @@ func (idx *Indexes) handleCreate(ctx context.Context) {
 			continue
 		}
 		col := item.(*tview.InputField).GetText()
-		if col != "" {
-			columns = append(columns, col)
+		if col == "" {
+			continue
 		}
+		dir := "ASC"
+		if orderItem := idx.addForm.GetFormItemByLabel(fmt.Sprintf("Order %d", i)); orderItem != nil {
+			if _, opt := orderItem.(*tview.DropDown).GetCurrentOption(); opt != "" {
+				dir = opt
+			}
+		}
+		columns = append(columns, col+" "+dir)
 	}
 
 	if len(columns) == 0 {
