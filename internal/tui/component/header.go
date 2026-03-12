@@ -89,7 +89,7 @@ func (h *Header) SetBaseInfo() BaseInfo {
 	port := conn.Port
 
 	if (host == "" || port == 0) && conn.DSN != "" {
-		if parsed, err := util.ParseDSN(conn.GetDSN()); err == nil {
+		if parsed, err := util.ParsePostgresDSN(conn.GetDSN()); err == nil {
 			host = parsed.Host
 			var p int
 			if n, _ := fmt.Sscanf(parsed.Port, "%d", &p); n == 1 {

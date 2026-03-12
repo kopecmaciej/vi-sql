@@ -35,7 +35,7 @@ func (c *Client) Connect() error {
 		if sslMode == "" {
 			sslMode = "disable"
 		}
-		dsn = util.BuildDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode)
+		dsn = util.BuildPostgresDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode)
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)

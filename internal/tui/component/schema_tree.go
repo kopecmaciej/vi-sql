@@ -452,7 +452,7 @@ func (s *SchemaTree) showAddTableModal(ctx context.Context) {
 			if tableName == "" {
 				return event
 			}
-			ddl := fmt.Sprintf("CREATE TABLE %s (id serial PRIMARY KEY)", tableName)
+			ddl := s.Driver.DefaultCreateTableDDL(schemaName, tableName)
 			err := s.Driver.CreateTable(ctx, schemaName, ddl)
 			if err != nil {
 				modal.ShowError(s.App.Pages, "Error creating table", err)

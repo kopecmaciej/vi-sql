@@ -11,6 +11,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/tui"
 	"github.com/kopecmaciej/vi-sql/internal/util"
+	_ "github.com/kopecmaciej/vi-sql/internal/postgres"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"

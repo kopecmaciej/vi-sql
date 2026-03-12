@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// ParsedDSN holds parts of a PostgreSQL connection string.
-type ParsedDSN struct {
+// PostgresDSN holds parts of a PostgreSQL connection string.
+type PostgresDSN struct {
 	Host     string
 	Port     string
 	Database string
@@ -16,14 +16,14 @@ type ParsedDSN struct {
 	SSLMode  string
 }
 
-// ParseDSN parses a PostgreSQL DSN (URL form) into its components.
-func ParseDSN(dsn string) (*ParsedDSN, error) {
+// ParsePostgresDSN parses a PostgreSQL DSN (URL form) into its components.
+func ParsePostgresDSN(dsn string) (*PostgresDSN, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse DSN: %w", err)
 	}
 
-	result := &ParsedDSN{
+	result := &PostgresDSN{
 		Host:     u.Hostname(),
 		Port:     u.Port(),
 		Database: strings.TrimPrefix(u.Path, "/"),
@@ -45,8 +45,8 @@ func ParseDSN(dsn string) (*ParsedDSN, error) {
 	return result, nil
 }
 
-// BuildDSN constructs a PostgreSQL DSN from individual components.
-func BuildDSN(host string, port int, database, username, password, sslMode string) string {
+// BuildPostgresDSN constructs a PostgreSQL DSN from individual components.
+func BuildPostgresDSN(host string, port int, database, username, password, sslMode string) string {
 	var userInfo string
 	if username != "" {
 		if password != "" {

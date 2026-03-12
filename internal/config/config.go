@@ -29,6 +29,7 @@ type SQLOptions struct {
 }
 
 type SQLConfig struct {
+	Driver   string     `yaml:"driver"`
 	DSN      string     `yaml:"dsn"`
 	Host     string     `yaml:"host"`
 	Port     int        `yaml:"port"`
@@ -39,6 +40,14 @@ type SQLConfig struct {
 	Name     string     `yaml:"name"`
 	Timeout  int        `yaml:"timeout"`
 	Options  SQLOptions `yaml:"options"`
+}
+
+// GetDriver returns the configured driver name, defaulting to "postgres".
+func (m *SQLConfig) GetDriver() string {
+	if m.Driver == "" {
+		return "postgres"
+	}
+	return m.Driver
 }
 
 type LogConfig struct {
@@ -252,7 +261,7 @@ func (c *Config) AddConnection(sqlConfig *SQLConfig) error {
 func (c *Config) AddConnectionFromDSN(sqlConfig *SQLConfig) error {
 	log.Info().Msgf("Adding connection from DSN: %s", sqlConfig.GetSafeDSN())
 
-	parsed, err := util.ParseDSN(sqlConfig.DSN)
+	parsed, err := util.ParsePostgresDSN(sqlConfig.DSN)
 	if err != nil {
 		return err
 	}
@@ -326,7 +335,7 @@ func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) err
 }
 
 func (c *Config) UpdateConnectionFromDSN(originalName string, sqlConfig *SQLConfig) error {
-	parsed, err := util.ParseDSN(sqlConfig.DSN)
+	parsed, err := util.ParsePostgresDSN(sqlConfig.DSN)
 	if err != nil {
 		return err
 	}
@@ -387,12 +396,14 @@ func (m *SQLConfig) GetDSN() string {
 		return m.DSN
 	}
 
-	sslMode := m.SSLMode
-	if sslMode == "" {
-		sslMode = "disable"
+	switch m.GetDriver() {
+	default: // "postgres"
+		sslMode := m.SSLMode
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		return util.BuildPostgresDSN(m.Host, m.Port, m.Database, m.Username, m.Password, sslMode)
 	}
-
-	return util.BuildDSN(m.Host, m.Port, m.Database, m.Username, m.Password, sslMode)
 }
 
 // GetDecryptedDSN returns the DSN with decrypted password.
@@ -413,7 +424,7 @@ func (m *SQLConfig) GetDecryptedDSN() string {
 		sslMode = "disable"
 	}
 
-	return util.BuildDSN(m.Host, m.Port, m.Database, m.Username, decryptedPass, sslMode)
+	return util.BuildPostgresDSN(m.Host, m.Port, m.Database, m.Username, decryptedPass, sslMode)
 }
 
 // GetSafeDSN returns the DSN with password replaced by asterisks.

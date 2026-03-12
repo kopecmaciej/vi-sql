@@ -13,6 +13,7 @@ type App struct {
 
 	Pages         *Pages
 	driver        database.Driver
+	formatter     database.ValueFormatter
 	manager       *manager.ElementManager
 	styles        *config.Styles
 	config        *config.Config
@@ -100,6 +101,14 @@ func (a *App) GetDriver() database.Driver {
 
 func (a *App) SetDriver(driver database.Driver) {
 	a.driver = driver
+}
+
+func (a *App) GetFormatter() database.ValueFormatter {
+	return a.formatter
+}
+
+func (a *App) SetFormatter(formatter database.ValueFormatter) {
+	a.formatter = formatter
 }
 
 func (a *App) GetManager() *manager.ElementManager {

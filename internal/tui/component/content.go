@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
@@ -873,7 +872,7 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 		return nil
 	}
 	originalRow := rows[dataRow]
-	currentValue := editableString(originalRow[colName])
+	currentValue := c.App.GetFormatter().EditableString(originalRow[colName])
 
 	c.inlineEdit.SetApplyCallback(func(fieldName, newValue string) error {
 		updatedRow := make(database.Row)
@@ -882,7 +881,7 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 		}
 		// If the displayed string is unchanged keep the original typed value
 		// so the DB driver doesn't need to reparse it (avoids type coercion issues).
-		if newValue != editableString(originalRow[fieldName]) {
+		if newValue != c.App.GetFormatter().EditableString(originalRow[fieldName]) {
 			updatedRow[fieldName] = newValue
 		}
 
@@ -950,13 +949,13 @@ func (c *Content) buildUpdateSQL(row database.Row, pk *database.PrimaryKey) stri
 
 	var setClauses []string
 	for _, col := range cols {
-		setClauses = append(setClauses, fmt.Sprintf("    \"%s\" = %s", col, sqlLiteral(row[col])))
+		setClauses = append(setClauses, fmt.Sprintf("    \"%s\" = %s", col, c.App.GetFormatter().SQLLiteral(row[col])))
 	}
 
 	pkCols := c.state.GetPrimaryKey()
 	var whereParts []string
 	for _, pkCol := range pkCols {
-		whereParts = append(whereParts, fmt.Sprintf("\"%s\" = %s", pkCol, sqlLiteral(pk.Columns[pkCol])))
+		whereParts = append(whereParts, fmt.Sprintf("\"%s\" = %s", pkCol, c.App.GetFormatter().SQLLiteral(pk.Columns[pkCol])))
 	}
 
 	return fmt.Sprintf("UPDATE \"%s\".\"%s\"\nSET\n%s\nWHERE %s;",
@@ -966,30 +965,6 @@ func (c *Content) buildUpdateSQL(row database.Row, pk *database.PrimaryKey) stri
 		strings.Join(whereParts, " AND "))
 }
 
-// sqlLiteral formats a value as a SQL literal for use in a generated UPDATE template.
-// time.Time is rendered in RFC3339Nano (offset-based) so PostgreSQL can parse it back.
-func sqlLiteral(val any) string {
-	if val == nil {
-		return "NULL"
-	}
-	if t, ok := val.(time.Time); ok {
-		return "'" + t.Format(time.RFC3339Nano) + "'"
-	}
-	s := database.StringifyValue(val)
-	if s == "NULL" {
-		return "NULL"
-	}
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
-// editableString returns the value formatted for display in the inline edit input.
-// time.Time uses RFC3339Nano so the user can submit it back to PostgreSQL unchanged.
-func editableString(val any) string {
-	if t, ok := val.(time.Time); ok {
-		return t.Format(time.RFC3339Nano)
-	}
-	return database.StringifyValue(val)
-}
 
 // isSelectQuery returns true when sql is a statement that returns rows.
 func isSelectQuery(sql string) bool {

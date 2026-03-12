@@ -3,14 +3,10 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/rs/zerolog/log"
 )
@@ -475,6 +471,11 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 	return nil
 }
 
+func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
+	return fmt.Sprintf("CREATE TABLE %s (id serial PRIMARY KEY)",
+		pgx.Identifier{schema, tableName}.Sanitize())
+}
+
 func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
 	_, err := d.client.Pool.Exec(ctx, ddl)
 	if err != nil {
@@ -694,117 +695,3 @@ func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([
 	return cols, rows.Err()
 }
 
-// convertValue converts pgx/pgtype-specific types to plain Go types so that
-// the driver-agnostic database package can stringify them correctly.
-func convertValue(v any) any {
-	switch val := v.(type) {
-	case pgtype.Numeric:
-		if !val.Valid {
-			return nil
-		}
-		if val.NaN {
-			return "NaN"
-		}
-		if val.InfinityModifier == pgtype.Infinity {
-			return "Infinity"
-		}
-		if val.InfinityModifier == pgtype.NegativeInfinity {
-			return "-Infinity"
-		}
-		if val.Int == nil {
-			return "0"
-		}
-		if val.Exp >= 0 {
-			result := new(big.Int).Mul(val.Int, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(val.Exp)), nil))
-			return result.String()
-		}
-		// Exp < 0: format with a decimal point
-		absExp := int(-val.Exp)
-		s := val.Int.String()
-		negative := len(s) > 0 && s[0] == '-'
-		if negative {
-			s = s[1:]
-		}
-		for len(s) <= absExp {
-			s = "0" + s
-		}
-		dotPos := len(s) - absExp
-		result := s[:dotPos] + "." + s[dotPos:]
-		if negative {
-			return "-" + result
-		}
-		return result
-	case pgtype.UUID:
-		if !val.Valid {
-			return nil
-		}
-		return val.Bytes // [16]byte — StringifyValue formats this as a UUID string
-	case pgtype.Range[any]:
-		if !val.Valid {
-			return nil
-		}
-		if val.LowerType == pgtype.Empty {
-			return "empty"
-		}
-		var b strings.Builder
-		if val.LowerType == pgtype.Inclusive {
-			b.WriteByte('[')
-		} else {
-			b.WriteByte('(')
-		}
-		if val.LowerType != pgtype.Unbounded {
-			b.WriteString(formatRangeBound(val.Lower))
-		}
-		b.WriteByte(',')
-		if val.UpperType != pgtype.Unbounded {
-			b.WriteString(formatRangeBound(val.Upper))
-		}
-		if val.UpperType == pgtype.Inclusive {
-			b.WriteByte(']')
-		} else {
-			b.WriteByte(')')
-		}
-		return b.String()
-	default:
-		return v
-	}
-}
-
-// formatRangeBound converts a single range bound value (as returned by pgx DecodeValue) to
-// a string suitable for embedding inside a PostgreSQL range literal.
-func formatRangeBound(v any) string {
-	switch val := v.(type) {
-	case time.Time:
-		return val.Format(time.RFC3339Nano)
-	case pgtype.InfinityModifier:
-		if val == pgtype.Infinity {
-			return "infinity"
-		}
-		return "-infinity"
-	case int32:
-		return strconv.FormatInt(int64(val), 10)
-	case int64:
-		return strconv.FormatInt(val, 10)
-	case pgtype.Numeric:
-		s := convertValue(val)
-		if s == nil {
-			return ""
-		}
-		return fmt.Sprintf("%v", s)
-	default:
-		return fmt.Sprintf("%v", v)
-	}
-}
-
-// buildPKWhere creates WHERE clause parts and args from a PrimaryKey.
-func buildPKWhere(pk database.PrimaryKey) ([]string, []any) {
-	parts := make([]string, 0, len(pk.Columns))
-	args := make([]any, 0, len(pk.Columns))
-	i := 1
-	for col, val := range pk.Columns {
-		parts = append(parts, fmt.Sprintf("%s = $%d", pgx.Identifier{col}.Sanitize(), i))
-		args = append(args, val)
-		i++
-	}
-	return parts, args
-}

@@ -7,7 +7,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	"github.com/kopecmaciej/vi-sql/internal/postgres"
+	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
@@ -112,16 +112,13 @@ func (a *App) connectToDatabase() error {
 		return nil
 	}
 
-	client := postgres.NewClient(currConn)
-	if err := client.Connect(); err != nil {
-		log.Error().Err(err).Msg("Failed to connect to PostgreSQL")
+	driver, formatter, err := database.NewDriver(currConn)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to connect to database")
 		return err
 	}
-	if err := client.Ping(); err != nil {
-		log.Error().Err(err).Msg("Failed to ping PostgreSQL")
-		return err
-	}
-	a.SetDriver(postgres.NewDao(client))
+	a.SetDriver(driver)
+	a.SetFormatter(formatter)
 	return nil
 }
 

@@ -357,7 +357,7 @@ func (c *Connection) saveButtonFunc() {
 				showError(c.App.Pages, "Invalid DSN", fmt.Errorf("DSN must start with postgres:// or postgresql://"))
 				return
 			}
-			parsed, err := util.ParseDSN(trimmedDSN)
+			parsed, err := util.ParsePostgresDSN(trimmedDSN)
 			if err != nil || parsed.Host == "" {
 				showError(c.App.Pages, "Invalid DSN", fmt.Errorf("could not parse host from DSN — check format: postgresql://user:pass@host:5432/db"))
 				return
