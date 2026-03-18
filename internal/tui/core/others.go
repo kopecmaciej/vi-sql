@@ -131,3 +131,35 @@ func (f *FormModal) SetStyle(style *config.Styles) {
 	f.Form.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
 	f.Form.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
+
+// DropdownNavKeys returns a tview.AutocompleteNavKeys configured from the
+// application keybindings. Use this on any InputField with autocomplete.
+func DropdownNavKeys(k *config.KeyBindings) tview.AutocompleteNavKeys {
+	return tview.AutocompleteNavKeys{
+		Up:      func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.DropdownUp, e.Name()) },
+		Down:    func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.DropdownDown, e.Name()) },
+		Accept:  func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.DropdownAccept, e.Name()) },
+		Dismiss: func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.DropdownDismiss, e.Name()) },
+	}
+}
+
+// dropdownInputCapture returns an input capture that translates configured
+// dropdown keys to the arrow/enter keys that tview's DropDown list understands.
+func dropdownInputCapture(k *config.KeyBindings, next func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Contains(k.Navigation.DropdownUp, event.Name()):
+			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
+		case k.Contains(k.Navigation.DropdownDown, event.Name()):
+			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
+		case k.Contains(k.Navigation.DropdownAccept, event.Name()):
+			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
+		case k.Contains(k.Navigation.DropdownDismiss, event.Name()):
+			return tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone)
+		}
+		if next != nil {
+			return next(event)
+		}
+		return event
+	}
+}

@@ -41,15 +41,16 @@ type (
 	}
 
 	NavigationKeys struct {
-		MoveUp             Key `yaml:"moveUp"`
-		MoveDown           Key `yaml:"moveDown"`
-		MoveLeft           Key `yaml:"moveLeft"`
-		MoveRight          Key `yaml:"moveRight"`
-		FocusLeft          Key `yaml:"focusLeft"`
-		FocusRight         Key `yaml:"focusRight"`
-		AutocompleteUp     Key `yaml:"autocompleteUp"`
-		AutocompleteDown   Key `yaml:"autocompleteDown"`
-		AutocompleteAccept Key `yaml:"autocompleteAccept"`
+		MoveDown        Key `yaml:"moveDown"`
+		MoveUp          Key `yaml:"moveUp"`
+		MoveLeft        Key `yaml:"moveLeft"`
+		MoveRight       Key `yaml:"moveRight"`
+		FocusLeft       Key `yaml:"focusLeft"`
+		FocusRight      Key `yaml:"focusRight"`
+		DropdownUp      Key `yaml:"dropdownUp"`
+		DropdownDown    Key `yaml:"dropdownDown"`
+		DropdownAccept  Key `yaml:"dropdownAccept"`
+		DropdownDismiss Key `yaml:"dropdownDismiss"`
 	}
 
 	GlobalKeys struct {
@@ -83,32 +84,28 @@ type (
 	}
 
 	ContentKeys struct {
-		PeekRow               Key `yaml:"peekRow"`
-		FullPagePeek          Key `yaml:"fullPagePeek"`
-		OpenEditor            Key `yaml:"openEditor"`
-		AddRow                Key `yaml:"addRow"`
-		EditRow               Key `yaml:"editRow"`
-		InlineEdit            Key `yaml:"inlineEdit"`
-		DuplicateRow          Key `yaml:"duplicateRow"`
-		DuplicateRowNoConfirm Key `yaml:"duplicateRowNoConfirm"`
-		DeleteRow             Key `yaml:"deleteRow"`
-		DeleteRowNoConfirm    Key `yaml:"deleteRowNoConfirm"`
-		CopyHighlight         Key `yaml:"copyValue"`
-		CopyRow               Key `yaml:"copyRow"`
-		Refresh               Key `yaml:"refresh"`
-		ToggleFilterBar       Key `yaml:"toggleFilterBar"`
-		ToggleQueryBar        Key `yaml:"toggleQueryBar"`
-		NextRow               Key `yaml:"nextRow"`
-		PreviousRow           Key `yaml:"previousRow"`
-		NextPage              Key `yaml:"nextPage"`
-		PreviousPage          Key `yaml:"previousPage"`
-		ToggleSortBar         Key `yaml:"toggleSortBar"`
-		SortByColumn          Key `yaml:"sortByColumn"`
-		HideColumn            Key `yaml:"hideColumn"`
-		ResetHiddenColumns    Key `yaml:"resetHiddenColumns"`
-		ToggleFilterOptions   Key `yaml:"toggleFilterOptions"`
-		MultipleSelect        Key `yaml:"multipleSelect"`
-		ClearSelection        Key `yaml:"clearSelection"`
+		PeekRow             Key `yaml:"peekRow"`
+		FullPagePeek        Key `yaml:"fullPagePeek"`
+		OpenEditor          Key `yaml:"openEditor"`
+		AddRow              Key `yaml:"addRow"`
+		EditRow             Key `yaml:"editRow"`
+		InlineEdit          Key `yaml:"inlineEdit"`
+		DuplicateRow        Key `yaml:"duplicateRow"`
+		DeleteRow           Key `yaml:"deleteRow"`
+		CopyValue           Key `yaml:"copyValue"`
+		CopyRow             Key `yaml:"copyRow"`
+		Refresh             Key `yaml:"refresh"`
+		ToggleFilterBar     Key `yaml:"toggleFilterBar"`
+		ToggleQueryBar      Key `yaml:"toggleQueryBar"`
+		NextPage            Key `yaml:"nextPage"`
+		PreviousPage        Key `yaml:"previousPage"`
+		ToggleSortBar       Key `yaml:"toggleSortBar"`
+		SortByColumn        Key `yaml:"sortByColumn"`
+		HideColumn          Key `yaml:"hideColumn"`
+		ResetHiddenColumns  Key `yaml:"resetHiddenColumns"`
+		ToggleFilterOptions Key `yaml:"toggleFilterOptions"`
+		MultipleSelect      Key `yaml:"multipleSelect"`
+		ClearSelection      Key `yaml:"clearSelection"`
 	}
 
 	QueryBar struct {
@@ -180,7 +177,7 @@ var keyGroupParents = map[string]string{
 }
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
-# keys:  named/combo keys (e.g. [Enter], [Escape], [Tab], [Space])
+# keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space])
 #        Ctrl+<letter>: case-insensitive in config, but no Ctrl+Shift — use lowercase (e.g. Ctrl+l)
 #        Alt+<char>:    case-sensitive, both upper and lower work (e.g. Alt+a, Alt+A)
 
@@ -216,17 +213,21 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+l", "Alt+Right"},
 			Description: "Focus right component",
 		},
-		AutocompleteUp: Key{
-			Keys:        []string{"Ctrl+p", "Backtab", "Up"},
-			Description: "Autocomplete up",
+		DropdownUp: Key{
+			Keys:        []string{"Ctrl+p", "Up"},
+			Description: "Dropdown up",
 		},
-		AutocompleteDown: Key{
-			Keys:        []string{"Ctrl+n", "Tab", "Down"},
-			Description: "Autocomplete down",
+		DropdownDown: Key{
+			Keys:        []string{"Ctrl+n", "Down"},
+			Description: "Dropdown down",
 		},
-		AutocompleteAccept: Key{
+		DropdownAccept: Key{
 			Keys:        []string{"Ctrl+y", "Enter"},
-			Description: "Autocomplete accept",
+			Description: "Dropdown accept",
+		},
+		DropdownDismiss: Key{
+			Keys:        []string{"Ctrl+e"},
+			Description: "Dropdown dismiss",
 		},
 	}
 	k.Global = GlobalKeys{
@@ -301,7 +302,7 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.InputBar = InputBarKeys{
 		Exit: Key{
-			Keys:        []string{"Escape"},
+			Keys:        []string{"Esc"},
 			Description: "Close / cancel",
 		},
 		ClearInput: Key{
@@ -344,17 +345,9 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"D"},
 			Description: "Duplicate row",
 		},
-		DuplicateRowNoConfirm: Key{
-			Keys:        []string{"Alt+D"},
-			Description: "Duplicate without confirmation",
-		},
 		DeleteRow: Key{
 			Keys:        []string{"Ctrl+d"},
 			Description: "Delete row",
-		},
-		DeleteRowNoConfirm: Key{
-			Keys:        []string{"Alt+d"},
-			Description: "Delete without confirmation",
 		},
 		MultipleSelect: Key{
 			Runes:       []string{"V"},
@@ -364,7 +357,7 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Esc"},
 			Description: "Clear selection",
 		},
-		CopyHighlight: Key{
+		CopyValue: Key{
 			Runes:       []string{"c"},
 			Description: "Copy highlighted",
 		},
@@ -399,14 +392,6 @@ func (k *KeyBindings) loadDefaults() {
 		ResetHiddenColumns: Key{
 			Runes:       []string{"r"},
 			Description: "Reset hidden columns",
-		},
-		NextRow: Key{
-			Runes:       []string{"]"},
-			Description: "Next row",
-		},
-		PreviousRow: Key{
-			Runes:       []string{"["},
-			Description: "Previous row",
 		},
 		NextPage: Key{
 			Runes:       []string{"n"},
@@ -471,13 +456,13 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"G"},
 			Description: "Move to bottom",
 		},
-		CopyHighlight: Key{
-			Runes:       []string{"c"},
-			Description: "Copy highlighted",
-		},
 		CopyValue: Key{
-			Runes:       []string{"C"},
+			Runes:       []string{"c"},
 			Description: "Copy only value",
+		},
+		CopyHighlight: Key{
+			Runes:       []string{"C"},
+			Description: "Copy highlighted",
 		},
 		ExpandRow: Key{
 			Keys:        []string{"Enter"},
@@ -488,7 +473,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Open value in viewer",
 		},
 		ToggleFullScreen: Key{
-			Runes:       []string{"F"},
+			Runes:       []string{"f"},
 			Description: "Toggle full screen",
 		},
 		Exit: Key{

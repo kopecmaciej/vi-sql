@@ -217,6 +217,7 @@ func (c *Connection) renderForm() *core.Form {
 	c.form.GetFormItemByLabel("Password").(*tview.InputField).SetClipboard(util.GetClipboard())
 	c.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
 
+	c.form.ApplyDropdownNavKeys(c.App.GetKeys())
 	c.AddItem(c.form, 60, 0, true)
 
 	return c.form

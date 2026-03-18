@@ -175,7 +175,7 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			return c.handleEditRow(ctx, row)
 		case k.Contains(k.Content.DeleteRow, event.Name()):
 			return c.handleDeleteRow(ctx, row, col)
-		case k.Contains(k.Content.CopyHighlight, event.Name()):
+		case k.Contains(k.Content.CopyValue, event.Name()):
 			return c.handleCopyCell(row, col)
 		case k.Contains(k.Content.CopyRow, event.Name()):
 			return c.handleCopyRow(row)

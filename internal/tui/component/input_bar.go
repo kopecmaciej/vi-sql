@@ -102,13 +102,7 @@ func (i *InputBar) setKeybindings() {
 		return event
 	})
 
-	// TODO: Think maybe if this is the best way to tackle that, for now it's enough
-	i.InputField.SetAutocompleteNavKeys(tview.AutocompleteNavKeys{
-		Up:      func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.AutocompleteUp, e.Name()) },
-		Down:    func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.AutocompleteDown, e.Name()) },
-		Accept:  func(e *tcell.EventKey) bool { return k.Contains(k.Navigation.AutocompleteAccept, e.Name()) },
-		Dismiss: func(e *tcell.EventKey) bool { return k.Contains(k.InputBar.Exit, e.Name()) },
-	})
+	i.InputField.SetAutocompleteNavKeys(core.DropdownNavKeys(k))
 }
 
 func (i *InputBar) handleEvents() {
