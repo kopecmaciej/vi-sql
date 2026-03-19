@@ -15,7 +15,7 @@ func NewForm() *Form {
 }
 
 // ApplyFormNavKeys installs an input capture on the form that translates the
-// configured FormDown/FormUp keys to Tab/Backtab. Raw Tab/Backtab are blocked
+// configured FocusDown/FocusUp keys to Tab/Backtab. Raw Tab/Backtab are blocked
 // so only the configured keys navigate between fields. Call this after any
 // page-specific SetInputCapture so the translation wraps the inner handler.
 func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {

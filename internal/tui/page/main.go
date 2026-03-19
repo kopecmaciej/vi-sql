@@ -96,8 +96,8 @@ func (m *Main) initComponents() error {
 	}
 
 	m.tabBar.AddTab("Content", m.content, true)
-	m.tabBar.AddTab("Structure", m.structure, false)
 	m.tabBar.AddTab("Indexes", m.indexes, false)
+	m.tabBar.AddTab("Structure", m.structure, false)
 
 	return nil
 }
