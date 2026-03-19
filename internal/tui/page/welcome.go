@@ -42,6 +42,7 @@ func (w *Welcome) Init(app *core.App) error {
 
 	w.setLayout()
 	w.setStyle()
+	w.form.ApplyFormNavKeys(app.GetKeys())
 
 	w.handleEvents()
 

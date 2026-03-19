@@ -106,6 +106,18 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	}
 
 	MergeConfigs(config, defaultConfig)
+
+	// Write merged config back so any fields added to the struct after the file was
+	// created appear on disk. Existing user values take priority — MergeConfigs only
+	// fills fields that are empty/zero in the loaded config.
+	mergedBytes, err := marshalConfig(config, configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal merged config: %w", err)
+	}
+	if err = os.WriteFile(configPath, mergedBytes, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write merged config: %w", err)
+	}
+
 	return config, nil
 }
 

@@ -89,6 +89,8 @@ func (idx *Indexes) setLayout() {
 func (idx *Indexes) setKeybindings() {
 	k := idx.App.GetKeys()
 
+	idx.addForm.ApplyFormNavKeys(k)
+
 	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case k.Contains(k.Index.AddIndex, event.Name()):
@@ -261,7 +263,7 @@ func (idx *Indexes) insertColumnPair(pos, n int) {
 		SetLabel(fmt.Sprintf("Column %d", n)).
 		SetFieldWidth(30)
 	input.SetAutocompleteFunc(idx.autocompleteFunc)
-	input.SetAutocompleteNavKeys(core.DropdownNavKeys(idx.App.GetKeys()))
+	input.SetInputCapture(core.DropdownInputCapture(idx.App.GetKeys(), nil))
 
 	dropdown := tview.NewDropDown().
 		SetLabel(fmt.Sprintf("Order %d", n)).

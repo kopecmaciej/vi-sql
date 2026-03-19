@@ -84,7 +84,7 @@ func (i *InputBar) setStyle() {
 func (i *InputBar) setKeybindings() {
 	k := i.App.GetKeys()
 
-	i.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	inputBarCapture := func(event *tcell.EventKey) *tcell.EventKey {
 		k := i.App.GetKeys()
 
 		switch {
@@ -100,9 +100,9 @@ func (i *InputBar) setKeybindings() {
 		}
 
 		return event
-	})
+	}
 
-	i.InputField.SetAutocompleteNavKeys(core.DropdownNavKeys(k))
+	i.SetInputCapture(core.DropdownInputCapture(k, inputBarCapture))
 }
 
 func (i *InputBar) handleEvents() {

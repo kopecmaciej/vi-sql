@@ -11,16 +11,29 @@ type Form struct {
 }
 
 func NewForm() *Form {
-	f := &Form{Form: tview.NewForm()}
-	f.Form.SetInputCapture(formNavCapture(nil))
-	return f
+	return &Form{Form: tview.NewForm()}
 }
 
-// SetInputCapture wraps the provided capture function so that Ctrl+J/K always
-// translate to Tab/Backtab for form field navigation, regardless of what
-// page-specific bindings are layered on top.
-func (f *Form) SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventKey) *tview.Box {
-	return f.Form.SetInputCapture(formNavCapture(capture))
+// ApplyFormNavKeys installs an input capture on the form that translates the
+// configured FormDown/FormUp keys to Tab/Backtab. Raw Tab/Backtab are blocked
+// so only the configured keys navigate between fields. Call this after any
+// page-specific SetInputCapture so the translation wraps the inner handler.
+func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {
+	existing := f.Form.GetInputCapture()
+	f.Form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Contains(k.Navigation.FocusDown, event.Name()):
+			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
+		case k.Contains(k.Navigation.FocusUp, event.Name()):
+			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift)
+		case event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab:
+			return nil
+		}
+		if existing != nil {
+			return existing(event)
+		}
+		return event
+	})
 }
 
 // ApplyDropdownNavKeys wires the configured dropdown navigation keys onto every
@@ -29,25 +42,8 @@ func (f *Form) SetInputCapture(capture func(event *tcell.EventKey) *tcell.EventK
 func (f *Form) ApplyDropdownNavKeys(k *config.KeyBindings) {
 	for i := 0; i < f.GetFormItemCount(); i++ {
 		if dd, ok := f.GetFormItem(i).(*tview.DropDown); ok {
-			dd.SetInputCapture(dropdownInputCapture(k, dd.GetInputCapture()))
+			dd.SetInputCapture(DropdownInputCapture(k, dd.GetInputCapture()))
 		}
-	}
-}
-
-// formNavCapture prepends Ctrl+J/K → Tab/Backtab translation before any
-// caller-supplied capture function.
-func formNavCapture(next func(event *tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
-	return func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyCtrlJ:
-			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-		case tcell.KeyCtrlK:
-			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift)
-		}
-		if next != nil {
-			return next(event)
-		}
-		return event
 	}
 }
 

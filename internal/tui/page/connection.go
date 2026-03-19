@@ -152,6 +152,7 @@ func (c *Connection) setKeybindings() {
 		}
 		return event
 	})
+	c.form.ApplyFormNavKeys(c.App.GetKeys())
 
 	c.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
