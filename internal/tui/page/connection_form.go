@@ -14,6 +14,15 @@ import (
 
 const (
 	ConnectionFormPageId = "ConnectionForm"
+
+	// Form width breakpoints (terminal columns).
+	// Below formNarrowBreakpoint the form fills full width (no side padding).
+	// Below formWideBreakpoint the form is capped at formWidthMedium.
+	// At formWideBreakpoint and above the form is capped at formWidthWide.
+	formNarrowBreakpoint = 80
+	formWideBreakpoint   = 140
+	formWidthMedium      = 70
+	formWidthWide        = 90
 )
 
 // ConnectionForm is a full-page add/edit form for a single SQL connection.
@@ -22,7 +31,9 @@ type ConnectionForm struct {
 	*core.BaseElement
 	*core.Flex
 
-	form *core.Form
+	form     *core.Form
+	leftPad  *tview.Box
+	rightPad *tview.Box
 
 	editConn      *config.SQLConfig // nil == add mode
 	editOrigName  string
@@ -88,11 +99,38 @@ func (cf *ConnectionForm) Render() {
 
 	cf.buildForm(cf.currentDriver)
 
-	cf.AddItem(tview.NewBox(), 0, 1, false)
+	cf.leftPad = tview.NewBox()
+	cf.rightPad = tview.NewBox()
+	cf.AddItem(cf.leftPad, 0, 1, false)
 	cf.AddItem(cf.form, 0, 4, true)
-	cf.AddItem(tview.NewBox(), 0, 1, false)
+	cf.AddItem(cf.rightPad, 0, 1, false)
 
 	cf.App.SetFocus(cf.form)
+}
+
+// Draw adjusts the form width responsively before each render:
+//   - narrow  (< formNarrowBreakpoint): form fills the full width
+//   - medium  (formNarrowBreakpoint – formWideBreakpoint-1): capped at formWidthMedium, centered
+//   - wide    (≥ formWideBreakpoint): capped at formWidthWide, centered
+func (cf *ConnectionForm) Draw(screen tcell.Screen) {
+	if cf.leftPad != nil && cf.rightPad != nil {
+		w, _ := screen.Size()
+		switch {
+		case w < formNarrowBreakpoint:
+			cf.ResizeItem(cf.leftPad, 0, 0)
+			cf.ResizeItem(cf.form, 0, 1)
+			cf.ResizeItem(cf.rightPad, 0, 0)
+		case w < formWideBreakpoint:
+			cf.ResizeItem(cf.leftPad, 0, 1)
+			cf.ResizeItem(cf.form, formWidthMedium, 0)
+			cf.ResizeItem(cf.rightPad, 0, 1)
+		default:
+			cf.ResizeItem(cf.leftPad, 0, 1)
+			cf.ResizeItem(cf.form, formWidthWide, 0)
+			cf.ResizeItem(cf.rightPad, 0, 1)
+		}
+	}
+	cf.Flex.Draw(screen)
 }
 
 // buildForm clears and rebuilds the form for the given driver.

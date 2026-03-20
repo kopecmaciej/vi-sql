@@ -13,13 +13,24 @@ import (
 
 const (
 	ConnectionPageId = "Connection"
+
+	// List width breakpoints (terminal columns).
+	// Below connNarrowBreakpoint the list fills full width (no side padding).
+	// Below connWideBreakpoint the list is capped at connWidthMedium.
+	// At connWideBreakpoint and above the list is capped at connWidthWide.
+	connNarrowBreakpoint = 80
+	connWideBreakpoint   = 140
+	connWidthMedium      = 70
+	connWidthWide        = 90
 )
 
 type Connection struct {
 	*core.BaseElement
 	*core.Flex
 
-	list *core.List
+	list     *core.List
+	leftPad  *tview.Box
+	rightPad *tview.Box
 
 	style *config.ConnectionStyle
 
@@ -157,7 +168,9 @@ func (c *Connection) openEditForm() {
 func (c *Connection) Render() {
 	c.Clear()
 
-	c.AddItem(tview.NewBox(), 0, 1, false)
+	c.leftPad = tview.NewBox()
+	c.rightPad = tview.NewBox()
+	c.AddItem(c.leftPad, 0, 1, false)
 
 	if page, _ := c.App.Pages.GetFrontPage(); page == ConnectionPageId {
 		c.renderList()
@@ -169,7 +182,32 @@ func (c *Connection) Render() {
 		}
 	}
 
-	c.AddItem(tview.NewBox(), 0, 1, false)
+	c.AddItem(c.rightPad, 0, 1, false)
+}
+
+// Draw adjusts the list width responsively before each render:
+//   - narrow  (< connNarrowBreakpoint): list fills the full width
+//   - medium  (connNarrowBreakpoint – connWideBreakpoint-1): capped at connWidthMedium, centered
+//   - wide    (≥ connWideBreakpoint): capped at connWidthWide, centered
+func (c *Connection) Draw(screen tcell.Screen) {
+	if c.leftPad != nil && c.rightPad != nil {
+		w, _ := screen.Size()
+		switch {
+		case w < connNarrowBreakpoint:
+			c.ResizeItem(c.leftPad, 0, 0)
+			c.ResizeItem(c.list, 0, 1)
+			c.ResizeItem(c.rightPad, 0, 0)
+		case w < connWideBreakpoint:
+			c.ResizeItem(c.leftPad, 0, 1)
+			c.ResizeItem(c.list, connWidthMedium, 0)
+			c.ResizeItem(c.rightPad, 0, 1)
+		default:
+			c.ResizeItem(c.leftPad, 0, 1)
+			c.ResizeItem(c.list, connWidthWide, 0)
+			c.ResizeItem(c.rightPad, 0, 1)
+		}
+	}
+	c.Flex.Draw(screen)
 }
 
 func (c *Connection) renderList() {
