@@ -14,14 +14,10 @@ import (
 const (
 	ConnectionPageId = "Connection"
 
-	// List width breakpoints (terminal columns).
-	// Below connNarrowBreakpoint the list fills full width (no side padding).
-	// Below connWideBreakpoint the list is capped at connWidthMedium.
-	// At connWideBreakpoint and above the list is capped at connWidthWide.
-	connNarrowBreakpoint = 80
-	connWideBreakpoint   = 140
-	connWidthMedium      = 70
-	connWidthWide        = 90
+	connScreenFull  = 80  // below: list fills terminal width
+	connScreenLarge = 140 // above: use connLarge width
+	connMedium      = 70  // list width on medium screen
+	connLarge       = 90  // list width on large screen
 )
 
 type Connection struct {
@@ -186,24 +182,25 @@ func (c *Connection) Render() {
 }
 
 // Draw adjusts the list width responsively before each render:
-//   - narrow  (< connNarrowBreakpoint): list fills the full width
-//   - medium  (connNarrowBreakpoint – connWideBreakpoint-1): capped at connWidthMedium, centered
-//   - wide    (≥ connWideBreakpoint): capped at connWidthWide, centered
+// Draw adjusts the list width responsively before each render:
+//   - below connScreenFull: list fills the full width
+//   - below connScreenLarge: capped at connMedium, centered
+//   - connScreenLarge and above: capped at connLarge, centered
 func (c *Connection) Draw(screen tcell.Screen) {
 	if c.leftPad != nil && c.rightPad != nil {
 		w, _ := screen.Size()
 		switch {
-		case w < connNarrowBreakpoint:
+		case w < connScreenFull:
 			c.ResizeItem(c.leftPad, 0, 0)
 			c.ResizeItem(c.list, 0, 1)
 			c.ResizeItem(c.rightPad, 0, 0)
-		case w < connWideBreakpoint:
+		case w < connScreenLarge:
 			c.ResizeItem(c.leftPad, 0, 1)
-			c.ResizeItem(c.list, connWidthMedium, 0)
+			c.ResizeItem(c.list, connMedium, 0)
 			c.ResizeItem(c.rightPad, 0, 1)
 		default:
 			c.ResizeItem(c.leftPad, 0, 1)
-			c.ResizeItem(c.list, connWidthWide, 0)
+			c.ResizeItem(c.list, connLarge, 0)
 			c.ResizeItem(c.rightPad, 0, 1)
 		}
 	}

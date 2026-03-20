@@ -15,14 +15,10 @@ import (
 const (
 	ConnectionFormPageId = "ConnectionForm"
 
-	// Form width breakpoints (terminal columns).
-	// Below formNarrowBreakpoint the form fills full width (no side padding).
-	// Below formWideBreakpoint the form is capped at formWidthMedium.
-	// At formWideBreakpoint and above the form is capped at formWidthWide.
-	formNarrowBreakpoint = 80
-	formWideBreakpoint   = 140
-	formWidthMedium      = 70
-	formWidthWide        = 90
+	formScreenFull  = 80  // below: form fills terminal width
+	formScreenLarge = 140 // above: use formLarge width
+	formMedium      = 70  // form width on medium screen
+	formLarge       = 90  // form width on large screen
 )
 
 // ConnectionForm is a full-page add/edit form for a single SQL connection.
@@ -109,24 +105,24 @@ func (cf *ConnectionForm) Render() {
 }
 
 // Draw adjusts the form width responsively before each render:
-//   - narrow  (< formNarrowBreakpoint): form fills the full width
-//   - medium  (formNarrowBreakpoint – formWideBreakpoint-1): capped at formWidthMedium, centered
-//   - wide    (≥ formWideBreakpoint): capped at formWidthWide, centered
+//   - below formScreenFull: form fills the full width
+//   - below formScreenLarge: capped at formMedium, centered
+//   - formScreenLarge and above: capped at formLarge, centered
 func (cf *ConnectionForm) Draw(screen tcell.Screen) {
 	if cf.leftPad != nil && cf.rightPad != nil {
 		w, _ := screen.Size()
 		switch {
-		case w < formNarrowBreakpoint:
+		case w < formScreenFull:
 			cf.ResizeItem(cf.leftPad, 0, 0)
 			cf.ResizeItem(cf.form, 0, 1)
 			cf.ResizeItem(cf.rightPad, 0, 0)
-		case w < formWideBreakpoint:
+		case w < formScreenLarge:
 			cf.ResizeItem(cf.leftPad, 0, 1)
-			cf.ResizeItem(cf.form, formWidthMedium, 0)
+			cf.ResizeItem(cf.form, formMedium, 0)
 			cf.ResizeItem(cf.rightPad, 0, 1)
 		default:
 			cf.ResizeItem(cf.leftPad, 0, 1)
-			cf.ResizeItem(cf.form, formWidthWide, 0)
+			cf.ResizeItem(cf.form, formLarge, 0)
 			cf.ResizeItem(cf.rightPad, 0, 1)
 		}
 	}
@@ -184,10 +180,10 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		}
 		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
 		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
-		cf.form.AddTextView("Example", "postgresql://user:pass@host:5432/db?...", 0, 1, true, false)
+		cf.form.AddTextView("Example", "postgresql://user:password@host:port/db?options", 0, 1, true, false)
 		pasteKey := cf.App.GetKeys().InputBar.Paste.String()
-		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste(%s) DSN, $ENV or use form", pasteKey), 0, 1, true, false)
-		cf.form.AddTextView(" ", "----------------------------------------", 0, 1, true, false)
+		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste (%s): DSN, $DSN_ENV or use form", pasteKey), 0, 1, true, false)
+		cf.form.AddTextView(" ", "----------------------------------------------", 0, 1, true, false)
 
 		hostVal, portVal, userVal, passVal, dbVal := "", "5432", "", "", ""
 		sslIdx := 0
