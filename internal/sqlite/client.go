@@ -37,16 +37,19 @@ func resolvePath(p string) (string, error) {
 func (c *Client) Connect(ctx context.Context) error {
 	dsn := c.Config.GetDSN()
 
-	resolved, err := resolvePath(dsn)
-	if err != nil {
-		return err
-	}
-	dsn = resolved
+	// file: URIs and :memory: are passed directly to the driver.
+	if !strings.HasPrefix(dsn, "file:") && dsn != ":memory:" {
+		resolved, err := resolvePath(dsn)
+		if err != nil {
+			return err
+		}
+		dsn = resolved
 
-	// Ensure parent directory exists so SQLite can create the file.
-	dir := filepath.Dir(dsn)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return fmt.Errorf("failed to create database directory %q: %w", dir, err)
+		// Ensure parent directory exists so SQLite can create the file.
+		dir := filepath.Dir(dsn)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("failed to create database directory %q: %w", dir, err)
+		}
 	}
 
 	db, err := sql.Open("sqlite", dsn)

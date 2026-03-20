@@ -170,8 +170,9 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		if cf.editConn != nil {
 			fileVal = cf.editConn.DSN
 		}
-		cf.form.AddInputField("File path", fileVal, 0, nil, nil)
-		cf.form.GetFormItemByLabel("File path").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.AddInputField("Path / URI", fileVal, 0, nil, nil)
+		cf.form.GetFormItemByLabel("Path / URI").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.AddTextView("Example", "~/db.sqlite, file:/path/db?mode=ro or :memory:", 0, 1, true, false)
 
 	default: // postgres
 		dsnVal := "postgresql://"
@@ -293,9 +294,9 @@ func (cf *ConnectionForm) save() {
 
 	switch driver {
 	case "sqlite":
-		filePath := cf.form.GetFormItemByLabel("File path").(*tview.InputField).GetText()
+		filePath := cf.form.GetFormItemByLabel("Path / URI").(*tview.InputField).GetText()
 		if filePath == "" {
-			showError(cf.App.Pages, "File path is required", fmt.Errorf("please enter a SQLite database file path"))
+			showError(cf.App.Pages, "Path / URI is required", fmt.Errorf("please enter a SQLite database path, URI or :memory:"))
 			return
 		}
 		if name == "" {
