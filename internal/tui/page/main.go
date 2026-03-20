@@ -136,6 +136,9 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.content.UpdateDriver(driver)
 	m.structure.UpdateDriver(driver)
 	m.indexes.UpdateDriver(driver)
+
+	m.content.Reset()
+	m.tabBar.ResetRendered()
 }
 
 func (m *Main) JumpToTable(schema, table string) error {

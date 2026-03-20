@@ -89,7 +89,7 @@ func (cf *ConnectionForm) Render() {
 	cf.buildForm(cf.currentDriver)
 
 	cf.AddItem(tview.NewBox(), 0, 1, false)
-	cf.AddItem(cf.form, 0, 3, true)
+	cf.AddItem(cf.form, 0, 4, true)
 	cf.AddItem(tview.NewBox(), 0, 1, false)
 
 	cf.App.SetFocus(cf.form)
@@ -100,7 +100,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.currentDriver = driver
 	cf.form.Clear(false)
 
-	// --- Driver selector ---
+	// --- Driver selector (add mode only; locked in edit mode) ---
 	drivers := []string{"postgres", "sqlite"}
 	driverIdx := 0
 	for i, d := range drivers {
@@ -109,21 +109,25 @@ func (cf *ConnectionForm) buildForm(driver string) {
 			break
 		}
 	}
-	cf.form.AddDropDown("Driver", drivers, driverIdx, func(option string, _ int) {
-		if option != cf.currentDriver {
-			cf.App.QueueUpdateDraw(func() {
+	if cf.editConn != nil {
+		// Show driver as read-only text in edit mode — changing driver on an
+		// existing connection would invalidate all saved fields.
+		cf.form.AddTextView("Driver", driver, 0, 1, true, false)
+	} else {
+		cf.form.AddDropDown("Driver", drivers, driverIdx, func(option string, _ int) {
+			if option != cf.currentDriver {
 				cf.buildForm(option)
 				cf.App.SetFocus(cf.form)
-			})
-		}
-	})
+			}
+		})
+	}
 
 	// --- Name ---
 	nameVal := ""
 	if cf.editConn != nil {
 		nameVal = cf.editConn.Name
 	}
-	cf.form.AddInputField("Name", nameVal, 40, nil, nil)
+	cf.form.AddInputField("Name", nameVal, 0, nil, nil)
 
 	// --- Driver-specific connection fields ---
 	switch driver {
@@ -132,7 +136,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		if cf.editConn != nil {
 			fileVal = cf.editConn.DSN
 		}
-		cf.form.AddInputField("File path", fileVal, 60, nil, nil)
+		cf.form.AddInputField("File path", fileVal, 0, nil, nil)
 		cf.form.GetFormItemByLabel("File path").(*tview.InputField).SetClipboard(util.GetClipboard())
 
 	default: // postgres
@@ -140,12 +144,12 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		if cf.editConn != nil && cf.editConn.DSN != "" {
 			dsnVal = cf.editConn.DSN
 		}
-		cf.form.AddTextArea("DSN", dsnVal, 40, 3, 0, nil)
+		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
 		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
-		cf.form.AddTextView("Example", "postgresql://user:pass@host:5432/db?...", 40, 1, true, false)
+		cf.form.AddTextView("Example", "postgresql://user:pass@host:5432/db?...", 0, 1, true, false)
 		pasteKey := cf.App.GetKeys().InputBar.Paste.String()
-		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste(%s) DSN, $ENV or use form", pasteKey), 40, 1, true, false)
-		cf.form.AddTextView(" ", "----------------------------------------", 40, 1, true, false)
+		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste(%s) DSN, $ENV or use form", pasteKey), 0, 1, true, false)
+		cf.form.AddTextView(" ", "----------------------------------------", 0, 1, true, false)
 
 		hostVal, portVal, userVal, passVal, dbVal := "", "5432", "", "", ""
 		sslIdx := 0
@@ -166,11 +170,11 @@ func (cf *ConnectionForm) buildForm(driver string) {
 			}
 		}
 
-		cf.form.AddInputField("Host", hostVal, 40, nil, nil)
-		cf.form.AddInputField("Port", portVal, 10, nil, nil)
-		cf.form.AddInputField("Username", userVal, 40, nil, nil)
-		cf.form.AddPasswordField("Password", passVal, 40, '*', nil)
-		cf.form.AddInputField("Database", dbVal, 40, nil, nil)
+		cf.form.AddInputField("Host", hostVal, 0, nil, nil)
+		cf.form.AddInputField("Port", portVal, 0, nil, nil)
+		cf.form.AddInputField("Username", userVal, 0, nil, nil)
+		cf.form.AddPasswordField("Password", passVal, 0, '*', nil)
+		cf.form.AddInputField("Database", dbVal, 0, nil, nil)
 		cf.form.AddDropDown("SSL Mode", []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}, sslIdx, nil)
 
 		cf.form.GetFormItemByLabel("Host").(*tview.InputField).SetClipboard(util.GetClipboard())
@@ -186,7 +190,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		if cf.editConn != nil && cf.editConn.Timeout > 0 {
 			timeoutVal = fmt.Sprintf("%d", cf.editConn.Timeout)
 		}
-		cf.form.AddInputField("Timeout", timeoutVal, 10, nil, nil)
+		cf.form.AddInputField("Timeout", timeoutVal, 0, nil, nil)
 	}
 
 	// --- Options (always shown) ---
@@ -202,9 +206,9 @@ func (cf *ConnectionForm) buildForm(driver string) {
 			confirmActionsIdx = 1
 		}
 	}
-	cf.form.AddTextView("─── Options", "", 40, 1, true, false)
-	cf.form.AddInputField("Default schema", defaultSchema, 40, nil, nil)
-	cf.form.AddInputField("Row limit", rowLimit, 10, nil, nil)
+	cf.form.AddTextView("─── Options", "", 0, 1, true, false)
+	cf.form.AddInputField("Default schema", defaultSchema, 0, nil, nil)
+	cf.form.AddInputField("Row limit", rowLimit, 0, nil, nil)
 	cf.form.AddDropDown("Confirm actions", []string{"yes", "no"}, confirmActionsIdx, nil)
 
 	// --- Buttons ---
@@ -213,7 +217,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		saveLabel = "Update"
 	}
 	saveKey := cf.App.GetKeys().Connection.ConnectionForm.SaveConnection.String()
-	cf.form.AddTextView("Save with:", fmt.Sprintf("%s or click", saveKey), 30, 1, true, false)
+	cf.form.AddTextView("Save with:", fmt.Sprintf("%s or click", saveKey), 0, 1, true, false)
 	cf.form.AddButton(saveLabel, cf.save)
 	cf.form.AddButton("Cancel", cf.cancel)
 

@@ -127,3 +127,11 @@ func (t *TabBar) GetActiveComponentAndRender() TabBarPrimitive {
 func (t *TabBar) GetActiveTabIndex() int {
 	return t.active
 }
+
+// ResetRendered clears the rendered flag on all tabs so each tab's Render()
+// is called again on the next GetActiveComponentAndRender invocation.
+func (t *TabBar) ResetRendered() {
+	for _, tab := range t.tabs {
+		tab.rendered = false
+	}
+}

@@ -29,7 +29,6 @@ func NewError(message string, err error) *tview.Modal {
 	errModal.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	errModal.SetTextColor(tcell.ColorRed)
 	errModal.SetText(taggedMessage)
-	errModal.AddButtons([]string{"Ok"})
 
 	return errModal
 }
@@ -38,6 +37,7 @@ func NewError(message string, err error) *tview.Modal {
 func ShowError(page *core.Pages, message string, err error) {
 	log.Error().Err(err).Msg(message)
 	errModal := NewError(message, err)
+	errModal.AddButtons([]string{"Ok"})
 
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		if buttonLabel == "Ok" {
@@ -51,10 +51,26 @@ func ShowError(page *core.Pages, message string, err error) {
 func ShowErrorAndSetFocus(page *core.Pages, message string, err error, setFocus func()) {
 	log.Error().Err(err).Msg(message)
 	errModal := NewError(message, err)
+	errModal.AddButtons([]string{"Ok"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		if buttonLabel == "Ok" {
 			page.RemovePage(ErrorModalId)
 			setFocus()
+		}
+	})
+	page.AddPage(ErrorModalId, errModal, true, true)
+}
+
+// ShowErrorWithRetry shows an error modal with Fix and Cancel buttons.
+// fixFunc is called when the user chooses Fix, allowing them to correct the mistake.
+func ShowErrorWithRetry(page *core.Pages, message string, err error, fixFunc func()) {
+	log.Error().Err(err).Msg(message)
+	errModal := NewError(message, err)
+	errModal.AddButtons([]string{"Fix", "Cancel"})
+	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		page.RemovePage(ErrorModalId)
+		if buttonLabel == "Fix" {
+			fixFunc()
 		}
 	})
 	page.AddPage(ErrorModalId, errModal, true, true)

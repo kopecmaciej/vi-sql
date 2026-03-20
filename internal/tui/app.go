@@ -11,6 +11,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
+	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
@@ -102,8 +103,9 @@ func (a *App) shouldHandleRune(event *tcell.EventKey) bool {
 	_, isInputField := focus.(*tview.InputField)
 	_, isCustomInputField := focus.(*core.InputField)
 	_, isFormItem := focus.(tview.FormItem)
+	_, isInputModal := focus.(*primitives.InputModal)
 
-	return isInputField || isCustomInputField || isFormItem
+	return isInputField || isCustomInputField || isFormItem || isInputModal
 }
 
 func (a *App) connectToDatabase() error {

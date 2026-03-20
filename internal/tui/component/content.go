@@ -259,6 +259,16 @@ func (c *Content) HandleTableSelection(ctx context.Context, schema, table string
 	return nil
 }
 
+// Reset clears stale table data and state from a previous connection so a
+// fresh table selection starts from a clean slate.
+func (c *Content) Reset() {
+	c.table.Clear()
+	c.tableHeader.Clear()
+	c.state = &database.TableState{}
+	c.stateMap = database.NewStateMap()
+	c.columns = nil
+}
+
 func (c *Content) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()
@@ -928,25 +938,31 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 
 // handleAddRow opens the external editor pre-filled with an INSERT SQL template.
 // The user fills in values and saves; the statement is executed immediately.
+// On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
 func (c *Content) handleAddRow(ctx context.Context) {
 	if len(c.columns) == 0 {
 		return
 	}
-	insertSQL := c.buildInsertSQL()
-	sql, err := c.sqlEditor.Open(insertSQL)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Editor error", err)
-		return
+	var openEditor func(sql string)
+	openEditor = func(sql string) {
+		edited, err := c.sqlEditor.Open(sql)
+		if err != nil {
+			modal.ShowError(c.App.Pages, "Editor error", err)
+			return
+		}
+		if edited == "" {
+			return
+		}
+		_, err = c.Driver.ExecuteStatement(ctx, edited)
+		if err != nil {
+			modal.ShowErrorWithRetry(c.App.Pages, "Insert error", err, func() {
+				openEditor(edited)
+			})
+			return
+		}
+		c.updateContent(ctx, false)
 	}
-	if sql == "" || sql == strings.TrimSpace(insertSQL) {
-		return
-	}
-	_, err = c.Driver.ExecuteStatement(ctx, sql)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Insert error", err)
-		return
-	}
-	c.updateContent(ctx, false)
+	openEditor(c.buildInsertSQL())
 }
 
 func (c *Content) buildInsertSQL() string {
@@ -968,6 +984,7 @@ func (c *Content) buildDuplicateInsertSQL(row database.Row) string {
 // handleDuplicateRow opens the external editor pre-filled with an INSERT
 // statement containing all values from the selected row (auto-generated
 // columns omitted). On save the statement is executed and the table refreshes.
+// On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
 func (c *Content) handleDuplicateRow(ctx context.Context, row int) {
 	if row < 1 {
 		return
@@ -978,25 +995,31 @@ func (c *Content) handleDuplicateRow(ctx context.Context, row int) {
 		return
 	}
 
-	insertSQL := c.buildDuplicateInsertSQL(rows[dataRow])
-	sql, err := c.sqlEditor.Open(insertSQL)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Editor error", err)
-		return
+	var openEditor func(sql string)
+	openEditor = func(sql string) {
+		edited, err := c.sqlEditor.Open(sql)
+		if err != nil {
+			modal.ShowError(c.App.Pages, "Editor error", err)
+			return
+		}
+		if edited == "" {
+			return
+		}
+		_, err = c.Driver.ExecuteStatement(ctx, edited)
+		if err != nil {
+			modal.ShowErrorWithRetry(c.App.Pages, "Insert error", err, func() {
+				openEditor(edited)
+			})
+			return
+		}
+		c.updateContent(ctx, false)
 	}
-	if sql == "" || sql == strings.TrimSpace(insertSQL) {
-		return
-	}
-	_, err = c.Driver.ExecuteStatement(ctx, sql)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Insert error", err)
-		return
-	}
-	c.updateContent(ctx, false)
+	openEditor(c.buildDuplicateInsertSQL(rows[dataRow]))
 }
 
 // handleEditRow opens the external editor pre-filled with an UPDATE SQL template
 // for the current row. The edited statement is executed on save.
+// On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
 func (c *Content) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 	if row < 1 {
 		return nil
@@ -1013,22 +1036,26 @@ func (c *Content) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 		return nil
 	}
 
-	updateSQL := c.buildUpdateSQL(rows[dataRow], pk)
-	sql, err := c.sqlEditor.Open(updateSQL)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Editor error", err)
-		return nil
+	var openEditor func(sql string)
+	openEditor = func(sql string) {
+		edited, err := c.sqlEditor.Open(sql)
+		if err != nil {
+			modal.ShowError(c.App.Pages, "Editor error", err)
+			return
+		}
+		if edited == "" {
+			return
+		}
+		_, err = c.Driver.ExecuteStatement(ctx, edited)
+		if err != nil {
+			modal.ShowErrorWithRetry(c.App.Pages, "Update error", err, func() {
+				openEditor(edited)
+			})
+			return
+		}
+		c.updateContent(ctx, false)
 	}
-	if sql == "" || sql == strings.TrimSpace(updateSQL) {
-		return nil
-	}
-
-	_, err = c.Driver.ExecuteStatement(ctx, sql)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Update error", err)
-		return nil
-	}
-	c.updateContent(ctx, false)
+	openEditor(c.buildUpdateSQL(rows[dataRow], pk))
 	return nil
 }
 
