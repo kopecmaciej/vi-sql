@@ -2,7 +2,6 @@ package page
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -10,7 +9,6 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -21,22 +19,17 @@ type Connection struct {
 	*core.BaseElement
 	*core.Flex
 
-	form *core.Form
 	list *core.List
 
 	style *config.ConnectionStyle
 
 	onSubmit func()
-
-	isEditMode      bool
-	editingConnName string
 }
 
 func NewConnection() *Connection {
 	c := &Connection{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
-		form:        core.NewForm(),
 		list:        core.NewList(),
 	}
 
@@ -68,50 +61,19 @@ func (c *Connection) handleEvents() {
 }
 
 func (c *Connection) setLayout() {
-	c.updateFormTitle()
-	c.form.SetBorder(true)
-
 	c.list.SetTitle(" Saved connections ")
 	c.list.SetBorder(true)
 	c.list.ShowSecondaryText(true)
 	c.list.SetWrapText(true)
 	c.list.SetBorderPadding(1, 1, 1, 1)
 	c.list.SetItemGap(1)
-
-	c.updateFormButtons()
-}
-
-func (c *Connection) updateFormTitle() {
-	if c.isEditMode {
-		c.form.SetTitle(" Edit connection ")
-	} else {
-		c.form.SetTitle(" Add new connection ")
-	}
-}
-
-func (c *Connection) updateFormButtons() {
-	c.form.ClearButtons()
-	var buttonTxt string
-	if c.isEditMode {
-		buttonTxt = "Update"
-	} else {
-		buttonTxt = "Save"
-	}
-
-	c.form.AddButton(buttonTxt, c.saveButtonFunc)
-	c.form.AddButton("Cancel", c.cancelButtonFunc)
 }
 
 func (c *Connection) setStyle() {
 	c.SetStyle(c.App.GetStyles())
-	c.form.SetStyle(c.App.GetStyles())
 	c.list.SetStyle(c.App.GetStyles())
 
 	c.style = &c.App.GetStyles().Connection
-
-	c.form.SetFieldTextColor(c.style.FormInputColor.Color())
-	c.form.SetFieldBackgroundColor(c.style.FormInputBackgroundColor.Color())
-	c.form.SetLabelColor(c.style.FormLabelColor.Color())
 
 	globalBackground := c.App.GetStyles().Global.BackgroundColor.Color()
 	mainStyle := tcell.StyleDefault.
@@ -131,43 +93,65 @@ func (c *Connection) setStyle() {
 
 func (c *Connection) setKeybindings() {
 	k := c.App.GetKeys()
-	c.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case event.Key() == tcell.KeyEscape:
-			c.cancelButtonFunc()
-			return nil
-		case k.Contains(k.Connection.ConnectionForm.SaveConnection, event.Name()):
-			_, buttonIdx := c.form.GetFocusedItemIndex()
-			if buttonIdx >= 0 && buttonIdx < c.form.GetButtonCount() {
-				b := c.form.GetButton(buttonIdx)
-				if b.GetLabel() == "Cancel" {
-					return event
-				}
-			}
-			c.saveButtonFunc()
-			return nil
-		case k.Contains(k.Navigation.FocusLeft, event.Name()):
-			c.App.SetFocus(c.list)
-			return nil
-		}
-		return event
-	})
-	c.form.ApplyFormNavKeys(c.App.GetKeys())
-
 	c.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusRight, event.Name()):
-			c.App.SetFocus(c.form)
+		case k.Contains(k.Connection.ConnectionList.AddConnection, event.Name()):
+			c.openAddForm()
 			return nil
 		case k.Contains(k.Connection.ConnectionList.DeleteConnection, event.Name()):
 			c.deleteCurrConnection()
 			return nil
 		case k.Contains(k.Connection.ConnectionList.EditConnection, event.Name()):
-			c.editCurrConnection()
+			c.openEditForm()
 			return nil
 		}
 		return event
 	})
+}
+
+func (c *Connection) openAddForm() {
+	form := NewConnectionForm(nil)
+	form.Init(c.App)
+	form.SetOnSaveFunc(func() {
+		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.Render()
+		c.list.SetCurrentItem(c.list.GetItemCount() - 2)
+		c.App.SetFocus(c.list)
+	})
+	form.SetOnCancelFunc(func() {
+		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.SetFocus(c.list)
+	})
+	form.Render()
+	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+}
+
+func (c *Connection) openEditForm() {
+	currItem := c.list.GetCurrentItem()
+	if currItem >= c.list.GetItemCount()-1 {
+		return
+	}
+	connName, _ := c.list.GetItemText(currItem)
+	conn, err := c.App.GetConfig().GetConnectionByName(connName)
+	if err != nil {
+		showError(c.App.Pages, "Failed to load connection for editing", err)
+		return
+	}
+
+	form := NewConnectionForm(conn)
+	form.Init(c.App)
+	form.SetOnSaveFunc(func() {
+		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.Render()
+		c.list.SetCurrentItem(currItem)
+		c.App.SetFocus(c.list)
+	})
+	form.SetOnCancelFunc(func() {
+		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.SetFocus(c.list)
+	})
+	form.Render()
+	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
 }
 
 func (c *Connection) Render() {
@@ -176,52 +160,16 @@ func (c *Connection) Render() {
 	c.AddItem(tview.NewBox(), 0, 1, false)
 
 	if page, _ := c.App.Pages.GetFrontPage(); page == ConnectionPageId {
-		if len(c.App.GetConfig().Connections) > 0 {
-			c.renderList()
+		c.renderList()
+		if c.list.GetItemCount() > 1 {
 			defer c.App.SetFocus(c.list)
 		} else {
-			defer c.App.SetFocus(c.form)
+			// No saved connections — open add form immediately
+			defer c.openAddForm()
 		}
 	}
 
-	c.renderForm()
-
 	c.AddItem(tview.NewBox(), 0, 1, false)
-}
-
-func (c *Connection) renderForm() *core.Form {
-	c.form.Clear(true)
-
-	c.updateFormButtons()
-
-	c.form.AddInputField("Name", "", 40, nil, nil)
-
-	c.form.AddTextArea("DSN", "postgresql://", 40, 3, 0, nil)
-	c.form.AddTextView("Example", "postgresql://user:pass@host:5432/db?...", 40, 1, true, false)
-	paste := fmt.Sprintf("Type/paste(%s) DNS, $ENV or use form", c.App.GetKeys().InputBar.Paste.String())
-	c.form.AddTextView("Info", paste, 40, 1, true, false)
-	c.form.AddTextView(" ", "----------------------------------------", 40, 1, true, false)
-	c.form.AddInputField("Host", "", 40, nil, nil)
-	c.form.AddInputField("Port", "5432", 10, nil, nil)
-	c.form.AddInputField("Username", "", 40, nil, nil)
-	c.form.AddPasswordField("Password", "", 40, '*', nil)
-	c.form.AddInputField("Database", "", 40, nil, nil)
-	c.form.AddDropDown("SSL Mode", []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}, 0, nil)
-	c.form.AddInputField("Timeout", "5", 10, nil, nil)
-	key := fmt.Sprintf("%s or click", c.App.GetKeys().Connection.ConnectionForm.SaveConnection.String())
-	c.form.AddTextView("Save with:", key, 30, 1, true, false)
-
-	c.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
-	c.form.GetFormItemByLabel("Host").(*tview.InputField).SetClipboard(util.GetClipboard())
-	c.form.GetFormItemByLabel("Port").(*tview.InputField).SetClipboard(util.GetClipboard())
-	c.form.GetFormItemByLabel("Username").(*tview.InputField).SetClipboard(util.GetClipboard())
-	c.form.GetFormItemByLabel("Password").(*tview.InputField).SetClipboard(util.GetClipboard())
-	c.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
-
-	c.form.ApplyDropdownNavKeys(c.App.GetKeys())
-	c.AddItem(c.form, 60, 0, true)
-
-	return c.form
 }
 
 func (c *Connection) renderList() {
@@ -240,16 +188,16 @@ func (c *Connection) renderList() {
 		})
 	}
 
+	addKey := c.App.GetKeys().Connection.ConnectionList.AddConnection.String()
 	editKey := c.App.GetKeys().Connection.ConnectionList.EditConnection.String()
 	deleteKey := c.App.GetKeys().Connection.ConnectionList.DeleteConnection.String()
-	focusFormKey := c.App.GetKeys().Navigation.FocusRight.String()
 
-	helpText := fmt.Sprintf("Edit (%s) | Delete (%s) | Add new (%s)", editKey, deleteKey, focusFormKey)
-	c.list.AddItem("Click to add new connection", helpText, 0, func() {
-		c.App.SetFocus(c.form)
+	helpText := fmt.Sprintf("Add (%s) | Edit (%s) | Delete (%s)", addKey, editKey, deleteKey)
+	c.list.AddItem("[Add new connection]", helpText, 0, func() {
+		c.openAddForm()
 	})
 
-	c.AddItem(c.list, 50, 0, true)
+	c.AddItem(c.list, 0, 3, true)
 }
 
 func (c *Connection) setConnection() {
@@ -270,6 +218,9 @@ func (c *Connection) setConnection() {
 
 func (c *Connection) deleteCurrConnection() {
 	currItem := c.list.GetCurrentItem()
+	if currItem >= c.list.GetItemCount()-1 {
+		return
+	}
 	currConn, _ := c.list.GetItemText(currItem)
 	err := c.App.GetConfig().DeleteConnection(currConn)
 	if err != nil {
@@ -278,162 +229,9 @@ func (c *Connection) deleteCurrConnection() {
 	}
 
 	c.Render()
-	c.list.SetCurrentItem(currItem)
-}
-
-func (c *Connection) editCurrConnection() {
-	currItem := c.list.GetCurrentItem()
-	if currItem == c.list.GetItemCount()-1 {
-		return
+	if currItem > 0 {
+		c.list.SetCurrentItem(currItem - 1)
 	}
-
-	connName, _ := c.list.GetItemText(currItem)
-	conn, err := c.App.GetConfig().GetConnectionByName(connName)
-	if err != nil {
-		showError(c.App.Pages, "Failed to load connection for editing", err)
-		return
-	}
-
-	c.isEditMode = true
-	c.editingConnName = connName
-	c.updateFormTitle()
-	c.updateFormButtons()
-
-	c.populateFormWithConnection(conn)
-
-	c.App.SetFocus(c.form)
-}
-
-func (c *Connection) populateFormWithConnection(conn *config.SQLConfig) {
-	c.form.GetFormItemByLabel("Name").(*tview.InputField).SetText(conn.Name)
-
-	if conn.DSN != "" {
-		c.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetText(conn.DSN, true)
-	} else {
-		c.form.GetFormItemByLabel("Host").(*tview.InputField).SetText(conn.Host)
-		if conn.Port > 0 {
-			c.form.GetFormItemByLabel("Port").(*tview.InputField).SetText(fmt.Sprintf("%d", conn.Port))
-		}
-		c.form.GetFormItemByLabel("Username").(*tview.InputField).SetText(conn.Username)
-		c.form.GetFormItemByLabel("Password").(*tview.InputField).SetText(conn.Password)
-		c.form.GetFormItemByLabel("Database").(*tview.InputField).SetText(conn.Database)
-	}
-
-	if conn.Timeout > 0 {
-		c.form.GetFormItemByLabel("Timeout").(*tview.InputField).SetText(fmt.Sprintf("%d", conn.Timeout))
-	}
-}
-
-func (c *Connection) saveButtonFunc() {
-	name := c.form.GetFormItemByLabel("Name").(*tview.InputField).GetText()
-	dsn := c.form.GetFormItemByLabel("DSN").(*tview.TextArea).GetText()
-	timeout := c.form.GetFormItemByLabel("Timeout").(*tview.InputField).GetText()
-	intTimeout, err := strconv.Atoi(timeout)
-	if err != nil {
-		showError(c.App.Pages, "Timeout must be a number", err)
-		return
-	}
-
-	var saveErr error
-
-	trimmedDSN := strings.TrimSpace(dsn)
-	if trimmedDSN != "postgresql://" && trimmedDSN != "postgres://" && trimmedDSN != "" {
-		if name == "" {
-			name = trimmedDSN
-		}
-		sqlConfig := &config.SQLConfig{
-			Name:    name,
-			DSN:     trimmedDSN,
-			Timeout: intTimeout,
-		}
-
-		if strings.HasPrefix(trimmedDSN, "$") {
-			// Env var reference — store as-is, skip parsing
-			if c.isEditMode {
-				saveErr = c.App.GetConfig().UpdateConnection(c.editingConnName, sqlConfig)
-			} else {
-				saveErr = c.App.GetConfig().AddConnection(sqlConfig)
-			}
-		} else {
-			if !strings.HasPrefix(trimmedDSN, "postgres://") && !strings.HasPrefix(trimmedDSN, "postgresql://") {
-				showError(c.App.Pages, "Invalid DSN", fmt.Errorf("DSN must start with postgres:// or postgresql://"))
-				return
-			}
-			parsed, err := util.ParsePostgresDSN(trimmedDSN)
-			if err != nil || parsed.Host == "" {
-				showError(c.App.Pages, "Invalid DSN", fmt.Errorf("could not parse host from DSN — check format: postgresql://user:pass@host:5432/db"))
-				return
-			}
-			if c.isEditMode {
-				saveErr = c.App.GetConfig().UpdateConnectionFromDSN(c.editingConnName, sqlConfig)
-			} else {
-				saveErr = c.App.GetConfig().AddConnectionFromDSN(sqlConfig)
-			}
-		}
-	} else {
-		host := c.form.GetFormItemByLabel("Host").(*tview.InputField).GetText()
-		port := c.form.GetFormItemByLabel("Port").(*tview.InputField).GetText()
-		intPort, err := strconv.Atoi(port)
-		if err != nil {
-			showError(c.App.Pages, "Port must be a number", err)
-			return
-		}
-		username := c.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
-		password := c.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
-		database := c.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()
-		_, sslMode := c.form.GetFormItemByLabel("SSL Mode").(*tview.DropDown).GetCurrentOption()
-
-		if name == "" {
-			name = host + ":" + port
-		}
-		sqlConfig := &config.SQLConfig{
-			Name:     name,
-			Host:     host,
-			Port:     intPort,
-			Username: username,
-			Password: password,
-			Database: database,
-			SSLMode:  sslMode,
-			Timeout:  intTimeout,
-		}
-
-		if c.isEditMode {
-			saveErr = c.App.GetConfig().UpdateConnection(c.editingConnName, sqlConfig)
-		} else {
-			saveErr = c.App.GetConfig().AddConnection(sqlConfig)
-		}
-	}
-
-	if saveErr != nil {
-		action := "save"
-		if c.isEditMode {
-			action = "update"
-		}
-		showError(c.App.Pages, fmt.Sprintf("Failed to %s connection", action), saveErr)
-		if !c.isEditMode {
-			c.form.GetFormItemByLabel("Name").(*tview.InputField).SetText("")
-		}
-		return
-	}
-
-	if c.isEditMode {
-		c.isEditMode = false
-		c.editingConnName = ""
-		c.updateFormTitle()
-		c.updateFormButtons()
-	}
-
-	c.Render()
-	c.list.SetCurrentItem(c.list.GetItemCount())
-}
-
-func (c *Connection) cancelButtonFunc() {
-	c.isEditMode = false
-	c.editingConnName = ""
-	c.updateFormTitle()
-	c.updateFormButtons()
-	c.Render()
-	c.App.SetFocus(c.list)
 }
 
 func (c *Connection) SetOnSubmitFunc(onSubmit func()) {

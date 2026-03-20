@@ -244,6 +244,10 @@ func (k *KeyBindings) loadDefaults() {
 	}
 
 	k.Connection.ConnectionList = ConnectionListKeys{
+		AddConnection: Key{
+			Runes:       []string{"n"},
+			Description: "Add new connection",
+		},
 		DeleteConnection: Key{
 			Keys:        []string{"Ctrl+d"},
 			Description: "Delete selected connection",

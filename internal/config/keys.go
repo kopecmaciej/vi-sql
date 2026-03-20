@@ -123,6 +123,7 @@ type (
 	}
 
 	ConnectionListKeys struct {
+		AddConnection    Key `yaml:"addConnection"`
 		DeleteConnection Key `yaml:"deleteConnection"`
 		EditConnection   Key `yaml:"editConnection"`
 		SetConnection    Key `yaml:"setConnection"`
