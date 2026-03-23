@@ -11,8 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// writePartialKeybindings writes a keybindings file with only Navigation keys set,
-// simulating an old config created before other sections existed.
 func writePartialKeybindings(t *testing.T, path string) {
 	t.Helper()
 	partial := KeyBindings{}
@@ -31,8 +29,6 @@ func defaultKB() *KeyBindings {
 	return kb
 }
 
-// TestMissingKeysFilledInMemory verifies that keys absent from the file are
-// filled from defaults in the returned struct. This should pass today.
 func TestMissingKeysFilledInMemory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings.yaml")
 	writePartialKeybindings(t, path)
@@ -41,24 +37,40 @@ func TestMissingKeysFilledInMemory(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, loaded.Global.CloseApp.Keys,
-		"Global.CloseApp should be filled from defaults in memory")
+		"Global.CloseApp should be filled from defaults")
 	assert.NotEmpty(t, loaded.Content.PeekRow.Runes,
-		"Content.PeekRow should be filled from defaults in memory")
+		"Content.PeekRow should be filled from defaults")
 	assert.NotEmpty(t, loaded.Schema.FilterBar.Runes,
-		"Schema.FilterBar should be filled from defaults in memory")
+		"Schema.FilterBar should be filled from defaults")
 }
 
-// TestNewKeyInExistingStructFilledInMemory simulates adding a new field to an
-// existing struct (e.g. a new ContentKeys entry). The loaded struct should get
-// the default value. This should pass today.
+func TestMissingKeysWrittenBackToFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.yaml")
+	writePartialKeybindings(t, path)
+
+	_, err := util.LoadConfigFile(defaultKB(), path)
+	require.NoError(t, err)
+
+	fileBytes, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var onDisk KeyBindings
+	require.NoError(t, yaml.Unmarshal(fileBytes, &onDisk))
+
+	assert.NotEmpty(t, onDisk.Global.CloseApp.Keys,
+		"Global.CloseApp.Keys should be written back to disk")
+	assert.NotEmpty(t, onDisk.Content.PeekRow.Runes,
+		"Content.PeekRow.Runes should be written back to disk")
+	assert.NotEmpty(t, onDisk.Schema.FilterBar.Runes,
+		"Schema.FilterBar.Runes should be written back to disk")
+}
+
 func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings.yaml")
 
-	// Write a file that has content keys but is missing ToggleFilterOptions
-	// (as if the user's file predates that key being added).
 	partial := KeyBindings{}
 	partial.loadDefaults()
-	partial.Content.ToggleFilterOptions = Key{} // clear it to simulate missing key
+	partial.Content.ToggleFilterOptions = Key{}
 	data, err := yaml.Marshal(&partial)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0644))
@@ -67,40 +79,9 @@ func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, loaded.Content.ToggleFilterOptions.Keys,
-		"Content.ToggleFilterOptions should be filled from defaults in memory")
+		"Content.ToggleFilterOptions should be filled from defaults")
 }
 
-// TestMissingKeysWrittenBackToFile verifies that after loading an old keybindings
-// file, new default keys are written back to disk so users can see and edit them.
-//
-// THIS TEST EXPOSES THE BUG: currently the file is never updated after a merge,
-// so new keys added to the Go structs remain invisible to users until they delete
-// their keybindings.yaml.
-func TestMissingKeysWrittenBackToFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "keybindings.yaml")
-	writePartialKeybindings(t, path)
-
-	_, err := util.LoadConfigFile(defaultKB(), path)
-	require.NoError(t, err)
-
-	// Re-read the file from disk.
-	fileBytes, err := os.ReadFile(path)
-	require.NoError(t, err)
-
-	var onDisk KeyBindings
-	require.NoError(t, yaml.Unmarshal(fileBytes, &onDisk))
-
-	assert.NotEmpty(t, onDisk.Global.CloseApp.Keys,
-		"Global.CloseApp.Keys should be present in keybindings.yaml after merge, but the file was not updated")
-	assert.NotEmpty(t, onDisk.Content.PeekRow.Runes,
-		"Content.PeekRow.Runes should be present in keybindings.yaml after merge, but the file was not updated")
-	assert.NotEmpty(t, onDisk.Schema.FilterBar.Runes,
-		"Schema.FilterBar.Runes should be present in keybindings.yaml after merge, but the file was not updated")
-}
-
-// TestNewKeyInExistingStructWrittenBackToFile is the file-persistence counterpart
-// of TestNewKeyInExistingStructFilledInMemory. It fails for the same reason as
-// TestMissingKeysWrittenBackToFile.
 func TestNewKeyInExistingStructWrittenBackToFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings.yaml")
 
@@ -121,5 +102,45 @@ func TestNewKeyInExistingStructWrittenBackToFile(t *testing.T) {
 	require.NoError(t, yaml.Unmarshal(fileBytes, &onDisk))
 
 	assert.NotEmpty(t, onDisk.Content.ToggleFilterOptions.Keys,
-		"Content.ToggleFilterOptions.Keys should be written back to the file after merge, but the file was not updated")
+		"Content.ToggleFilterOptions.Keys should be written back to disk")
+}
+
+func TestUserOverridesPreservedAfterMerge(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.yaml")
+
+	custom := defaultKB()
+	custom.Navigation.MoveDown = Key{Runes: []string{"x"}, Keys: []string{"F1"}, Description: "custom move down"}
+	data, err := yaml.Marshal(custom)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, data, 0644))
+
+	loaded, err := util.LoadConfigFile(defaultKB(), path)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"x"}, loaded.Navigation.MoveDown.Runes,
+		"user-set runes must not be overwritten by defaults")
+	assert.Equal(t, []string{"F1"}, loaded.Navigation.MoveDown.Keys,
+		"user-set keys must not be overwritten by defaults")
+}
+
+func TestFileCreatedFromDefaultsWhenMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings.yaml")
+
+	loaded, err := util.LoadConfigFile(defaultKB(), path)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, loaded.Global.CloseApp.Keys,
+		"returned config should have defaults")
+
+	_, err = os.Stat(path)
+	assert.NoError(t, err, "file should be created on disk")
+
+	fileBytes, err := os.ReadFile(path)
+	require.NoError(t, err)
+
+	var onDisk KeyBindings
+	require.NoError(t, yaml.Unmarshal(fileBytes, &onDisk))
+
+	assert.NotEmpty(t, onDisk.Global.CloseApp.Keys,
+		"created file should contain default keys")
 }

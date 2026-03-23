@@ -351,6 +351,22 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 	return nil
 }
 
+func (d *Dao) CommonDataTypes() []string {
+	return []string{
+		"INTEGER",
+		"REAL",
+		"TEXT",
+		"BLOB",
+		"NUMERIC",
+		"BOOLEAN",
+		"DATE",
+		"DATETIME",
+		"TIMESTAMP",
+		"VARCHAR(255)",
+		"CHAR(1)",
+	}
+}
+
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 	return fmt.Sprintf("CREATE TABLE %s (id INTEGER PRIMARY KEY AUTOINCREMENT)", quoteSQLiteIdent(tableName))
 }

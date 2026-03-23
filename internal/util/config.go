@@ -15,6 +15,7 @@ import (
 
 const (
 	ConfigDir = "vi-sql"
+	FileMode  = 0600
 )
 
 func MergeConfigs(loaded, defaultConfig any) {
@@ -87,7 +88,7 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 				log.Error().Err(err).Str("path", configPath).Msg("Failed to marshal default config")
 				return nil, fmt.Errorf("failed to marshal default config: %w", err)
 			}
-			err = os.WriteFile(configPath, bytes, 0644)
+			err = os.WriteFile(configPath, bytes, FileMode)
 			if err != nil {
 				log.Error().Err(err).Str("path", configPath).Msg("Failed to write default config file")
 				return nil, fmt.Errorf("failed to write default config file: %w", err)
@@ -114,7 +115,7 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal merged config: %w", err)
 	}
-	if err = os.WriteFile(configPath, mergedBytes, 0644); err != nil {
+	if err = os.WriteFile(configPath, mergedBytes, FileMode); err != nil {
 		return nil, fmt.Errorf("failed to write merged config: %w", err)
 	}
 

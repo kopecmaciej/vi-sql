@@ -460,6 +460,32 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 	return nil
 }
 
+func (d *Dao) CommonDataTypes() []string {
+	return []string{
+		"INTEGER",
+		"BIGINT",
+		"SMALLINT",
+		"SERIAL",
+		"BIGSERIAL",
+		"BOOLEAN",
+		"TEXT",
+		"VARCHAR(255)",
+		"CHAR(1)",
+		"UUID",
+		"DATE",
+		"TIME",
+		"TIMESTAMP",
+		"TIMESTAMPTZ",
+		"NUMERIC",
+		"DECIMAL",
+		"REAL",
+		"DOUBLE PRECISION",
+		"JSON",
+		"JSONB",
+		"BYTEA",
+	}
+}
+
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 	return fmt.Sprintf("CREATE TABLE %s (id serial PRIMARY KEY)",
 		pgx.Identifier{schema, tableName}.Sanitize())

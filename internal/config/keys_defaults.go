@@ -359,4 +359,23 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Refresh structure",
 		},
 	}
+
+	k.CreateTable = CreateTableKeys{
+		AddColumn: Key{
+			Runes:       []string{"a"},
+			Description: "Add column",
+		},
+		DeleteColumn: Key{
+			Runes:       []string{"d"},
+			Description: "Delete column",
+		},
+		Execute: Key{
+			Keys:        []string{"Ctrl+s"},
+			Description: "Create table",
+		},
+		Cancel: Key{
+			Keys:        []string{"Esc"},
+			Description: "Cancel",
+		},
+	}
 }

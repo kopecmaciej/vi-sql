@@ -35,8 +35,9 @@ type SchemaTree struct {
 	filterBar *InputBar
 	style     *config.SchemasStyle
 
-	inputModal  *primitives.InputModal
-	deleteModal *modal.Confirm
+	inputModal       *primitives.InputModal
+	deleteModal      *modal.Confirm
+	createTableModal *modal.CreateTableModal
 
 	mutex             sync.Mutex
 	schemasWithTables []database.SchemaWithTables
@@ -49,8 +50,9 @@ func NewSchemaTree() *SchemaTree {
 		Flex:        core.NewFlex(),
 		tree:        core.NewTreeView(),
 		filterBar:   NewInputBar(SchemaFilterBarId, "Filter"),
-		inputModal:  primitives.NewInputModal(),
-		deleteModal: modal.NewConfirm(SchemaDeleteModalId),
+		inputModal:       primitives.NewInputModal(),
+		deleteModal:      modal.NewConfirm(SchemaDeleteModalId),
+		createTableModal: modal.NewCreateTableModal(),
 	}
 
 	s.SetIdentifier(SchemaTreeId)
@@ -77,6 +79,10 @@ func (s *SchemaTree) init() error {
 		return err
 	}
 
+	if err := s.createTableModal.Init(s.App); err != nil {
+		return err
+	}
+
 	s.handleEvents()
 
 	return nil
@@ -91,7 +97,7 @@ func (s *SchemaTree) setLayout() {
 	s.Flex.SetDirection(tview.FlexRow)
 
 	s.inputModal.SetBorder(true)
-	s.inputModal.SetTitle("Add table")
+	s.inputModal.SetTitle("Rename table")
 }
 
 func (s *SchemaTree) setStyle() {
@@ -448,28 +454,21 @@ func (s *SchemaTree) showAddTableModal(ctx context.Context) {
 	}
 	schemaName, _ := s.removeSymbols(parent.GetText(), "")
 
-	s.inputModal.SetLabel(fmt.Sprintf("Add table to [%s][::b]%s", s.style.NodeTextColor.Color(), schemaName))
-	s.inputModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEnter:
-			tableName := s.inputModal.GetText()
-			if tableName == "" {
-				return event
-			}
-			ddl := s.Driver.DefaultCreateTableDDL(schemaName, tableName)
-			err := s.Driver.CreateTable(ctx, schemaName, ddl)
-			if err != nil {
-				modal.ShowError(s.App.Pages, "Error creating table", err)
-				return event
-			}
-			s.addTableNode(ctx, parent, schemaName, tableName, true)
-			s.closeInputModal()
-		case tcell.KeyEscape:
-			s.closeInputModal()
+	s.createTableModal.SetSchema(schemaName)
+	s.createTableModal.SetApplyCallback(func(ddl string) error {
+		if err := s.Driver.CreateTable(ctx, schemaName, ddl); err != nil {
+			return err
 		}
-		return event
+		s.closeCreateTableModal()
+		s.Render()
+		return nil
 	})
-	s.App.Pages.AddPage(SchemaInputModalId, s.inputModal, true, true)
+	s.createTableModal.SetCancelCallback(s.closeCreateTableModal)
+	s.createTableModal.Render("")
+}
+
+func (s *SchemaTree) closeCreateTableModal() {
+	s.createTableModal.Hide()
 }
 
 func (s *SchemaTree) closeInputModal() {

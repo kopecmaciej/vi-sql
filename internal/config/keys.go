@@ -38,6 +38,7 @@ type (
 		IndexAddForm IndexAddFormKeys `yaml:"indexAddForm"`
 		Structure    StructureKeys    `yaml:"structure"`
 		History      HistoryKeys      `yaml:"history"`
+		CreateTable  CreateTableKeys  `yaml:"createTable"`
 	}
 
 	NavigationKeys struct {
@@ -165,6 +166,13 @@ type (
 
 	StructureKeys struct {
 		Refresh Key `yaml:"refresh"`
+	}
+
+	CreateTableKeys struct {
+		AddColumn    Key `yaml:"addColumn"`
+		DeleteColumn Key `yaml:"deleteColumn"`
+		Execute      Key `yaml:"execute"`
+		Cancel       Key `yaml:"cancel"`
 	}
 )
 

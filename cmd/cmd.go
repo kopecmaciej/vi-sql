@@ -9,10 +9,10 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/build"
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	"github.com/kopecmaciej/vi-sql/internal/tui"
-	"github.com/kopecmaciej/vi-sql/internal/util"
 	_ "github.com/kopecmaciej/vi-sql/internal/postgres"
 	_ "github.com/kopecmaciej/vi-sql/internal/sqlite"
+	"github.com/kopecmaciej/vi-sql/internal/tui"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -29,7 +29,7 @@ var (
 	listConnections   bool
 	encryptionKeyPath string
 	jumpInto          string
-	rootCmd = &cobra.Command{
+	rootCmd           = &cobra.Command{
 		Use:   "vi-sql",
 		Short: "SQL TUI client",
 		Long:  `A Terminal User Interface (TUI) client for SQL databases (PostgreSQL)`,
