@@ -74,7 +74,7 @@ func (m *CreateTableModal) init() error {
 
 func (m *CreateTableModal) setStyle() {
 	styles := m.App.GetStyles()
-	m.Flex.SetStyle(styles)
+	m.SetStyle(styles)
 	m.columnsTable.SetStyle(styles)
 	m.preview.SetStyle(styles)
 
@@ -89,8 +89,8 @@ func (m *CreateTableModal) setStyle() {
 func (m *CreateTableModal) setLayout() {
 	m.Flex.SetDirection(tview.FlexRow)
 	m.Flex.SetBorder(true)
-	m.Flex.SetBorderPadding(1, 1, 2, 2)
 
+	m.SetTitle(" Create Table ")
 	m.tableNameInput.SetLabel(" Table Name: ")
 	m.tableNameInput.SetFieldWidth(40)
 
@@ -504,21 +504,16 @@ func (m *CreateTableModal) rebuildLayout(editSection tview.Primitive) {
 
 	titleBar := tview.NewFlex()
 	titleBar.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
-	title := tview.NewTextView().SetText(" CREATE NEW TABLE").
-		SetTextColor(m.App.GetStyles().Global.TitleColor.Color())
-	title.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
-
 	schemaLabel := tview.NewTextView().
 		SetText(fmt.Sprintf("SCHEMA: %s ", strings.ToUpper(m.schema))).
 		SetTextAlign(tview.AlignRight).
 		SetTextColor(m.App.GetStyles().Global.SecondaryTextColor.Color())
 	schemaLabel.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
 
-	titleBar.AddItem(title, 0, 1, false)
+	titleBar.AddItem(m.tableNameInput, 0, 1, false)
 	titleBar.AddItem(schemaLabel, 0, 1, false)
 
 	m.Flex.AddItem(titleBar, 1, 0, false)
-	m.Flex.AddItem(m.tableNameInput, 1, 0, false)
 	m.Flex.AddItem(core.NewTextView(), 1, 0, false) // spacer
 
 	if editSection != nil {
@@ -568,13 +563,17 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 	m.rebuildLayout(nil)
 
 	// Center the modal
+	bgColor := m.App.GetStyles().Global.BackgroundColor.Color()
+	inner := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(nil, 0, 1, false).
+		AddItem(m.Flex, 0, 4, true).
+		AddItem(nil, 0, 1, false)
+	inner.SetBackgroundColor(bgColor)
 	modal := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 0, 1, false).
-			AddItem(m.Flex, 0, 4, true).
-			AddItem(nil, 0, 1, false), 0, 4, true).
+		AddItem(inner, 0, 4, true).
 		AddItem(nil, 0, 1, false)
+	modal.SetBackgroundColor(bgColor)
 
 	m.App.Pages.AddPage(CreateTableModalId, modal, true, true)
 	m.App.SetFocusInternal(m.tableNameInput)
