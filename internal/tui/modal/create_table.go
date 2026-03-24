@@ -87,7 +87,7 @@ func (m *CreateTableModal) setStyle() {
 }
 
 func (m *CreateTableModal) setLayout() {
-	m.Flex.SetDirection(tview.FlexRow)
+	m.Flex.SetDirection(tview.FlexColumn)
 	m.Flex.SetBorder(true)
 
 	m.SetTitle(" Create Table ")
@@ -502,28 +502,36 @@ func (m *CreateTableModal) handleCancel() {
 func (m *CreateTableModal) rebuildLayout(editSection tview.Primitive) {
 	m.Flex.Clear()
 
+	bg := m.App.GetStyles().Global.BackgroundColor.Color()
+	pad := func() *tview.Box { return tview.NewBox().SetBackgroundColor(bg) }
+
 	titleBar := tview.NewFlex()
-	titleBar.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
+	titleBar.SetBackgroundColor(bg)
 	schemaLabel := tview.NewTextView().
 		SetText(fmt.Sprintf("SCHEMA: %s ", strings.ToUpper(m.schema))).
 		SetTextAlign(tview.AlignRight).
 		SetTextColor(m.App.GetStyles().Global.SecondaryTextColor.Color())
-	schemaLabel.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
+	schemaLabel.SetBackgroundColor(bg)
 
 	titleBar.AddItem(m.tableNameInput, 0, 1, false)
 	titleBar.AddItem(schemaLabel, 0, 1, false)
 
-	m.Flex.AddItem(titleBar, 1, 0, false)
-	m.Flex.AddItem(core.NewTextView(), 1, 0, false) // spacer
-
+	rows := tview.NewFlex().SetDirection(tview.FlexRow)
+	rows.AddItem(pad(), 1, 0, false) // top padding
+	rows.AddItem(titleBar, 1, 0, false)
+	rows.AddItem(pad(), 1, 0, false)
 	if editSection != nil {
-		m.Flex.AddItem(editSection, 0, 3, true)
+		rows.AddItem(editSection, 0, 3, true)
 	} else {
-		m.Flex.AddItem(m.columnsTable, 0, 3, false)
+		rows.AddItem(m.columnsTable, 0, 3, false)
 	}
+	rows.AddItem(pad(), 1, 0, false)
+	rows.AddItem(m.preview, 0, 2, false)
+	rows.AddItem(pad(), 1, 0, false) // bottom padding
 
-	m.Flex.AddItem(core.NewTextView(), 1, 0, false) // margin
-	m.Flex.AddItem(m.preview, 0, 2, false)
+	m.Flex.AddItem(pad(), 2, 0, false) // left padding
+	m.Flex.AddItem(rows, 0, 1, true)
+	m.Flex.AddItem(pad(), 2, 0, false) // right padding
 }
 
 // SetSchema sets the schema name for the new table.
@@ -563,17 +571,13 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 	m.rebuildLayout(nil)
 
 	// Center the modal
-	bgColor := m.App.GetStyles().Global.BackgroundColor.Color()
-	inner := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(nil, 0, 1, false).
-		AddItem(m.Flex, 0, 4, true).
-		AddItem(nil, 0, 1, false)
-	inner.SetBackgroundColor(bgColor)
 	modal := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(inner, 0, 4, true).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(m.Flex, 0, 4, true).
+			AddItem(nil, 0, 1, false), 0, 4, true).
 		AddItem(nil, 0, 1, false)
-	modal.SetBackgroundColor(bgColor)
 
 	m.App.Pages.AddPage(CreateTableModalId, modal, true, true)
 	m.App.SetFocusInternal(m.tableNameInput)
