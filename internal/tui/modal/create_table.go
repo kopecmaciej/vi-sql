@@ -2,6 +2,8 @@ package modal
 
 import (
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -12,41 +14,28 @@ import (
 
 const CreateTableModalId = "CreateTable"
 
-// ColumnDef represents a single column definition in the table creator.
-type ColumnDef struct {
-	Name     string
-	DataType string
-	IsPK     bool
-	IsNull   bool
+type columnDef struct {
+	name     string
+	dataType string
+	pk       bool
+	nullable bool
 }
 
-// focusArea tracks which section of the modal has focus.
-type focusArea int
-
-const (
-	focusTableName focusArea = iota
-	focusColumns
-)
-
-// CreateTableModal is a structured table creator modal.
-// It shows a table name input, a column definitions table with
-// name/type/pk/null fields, and a live SQL preview.
 type CreateTableModal struct {
 	*core.BaseElement
 	*core.Flex
 
-	tableNameInput *core.InputField
+	tableNameInput *tview.InputField
 	columnsTable   *core.Table
-	sqlPreview     *core.TextView
-	editField      *core.InputField
+	preview        *core.TextView
 
-	columns       []ColumnDef
-	schema        string
-	focus         focusArea
-	selectedCol   int
-	selectedField int // 0=name, 1=type, 2=pk, 3=null
-	editing       bool
-
+	schema         string
+	columns        []columnDef
+	focusedRow     int
+	focusedCol     int
+	editing        bool
+	editInput      *tview.InputField
+	dataTypes      []string
 	applyCallback  func(ddl string) error
 	cancelCallback func()
 }
@@ -55,202 +44,138 @@ func NewCreateTableModal() *CreateTableModal {
 	m := &CreateTableModal{
 		BaseElement:    core.NewBaseElement(),
 		Flex:           core.NewFlex(),
-		tableNameInput: core.NewInputField(),
+		tableNameInput: tview.NewInputField(),
 		columnsTable:   core.NewTable(),
-		sqlPreview:     core.NewTextView(),
-		editField:      core.NewInputField(),
-		columns: []ColumnDef{
-			{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
-		},
+		preview:        core.NewTextView(),
+		columns:        []columnDef{{name: "id", dataType: "SERIAL", pk: true, nullable: false}},
 	}
+
 	m.SetIdentifier(CreateTableModalId)
+	m.tableNameInput.SetIdentifier(CreateTableModalId)
+	m.columnsTable.SetIdentifier(CreateTableModalId)
+	m.preview.SetIdentifier(CreateTableModalId)
 	m.SetAfterInitFunc(m.init)
+
 	return m
 }
 
 func (m *CreateTableModal) init() error {
-	m.setLayout()
 	m.setStyle()
+	m.setLayout()
 	m.setKeybindings()
 	m.handleEvents()
+
+	if m.Driver != nil {
+		m.dataTypes = m.Driver.CommonDataTypes()
+	}
+
 	return nil
-}
-
-func (m *CreateTableModal) setLayout() {
-	m.Flex.SetBorder(true)
-	m.Flex.SetTitle(" Create New Table ")
-	m.Flex.SetTitleAlign(tview.AlignLeft)
-	m.Flex.SetDirection(tview.FlexRow)
-	m.Flex.SetBorderPadding(0, 0, 1, 1)
-
-	m.tableNameInput.SetLabel(" Table Name: ")
-	m.tableNameInput.SetFieldWidth(40)
-	m.tableNameInput.SetChangedFunc(func(text string) {
-		m.updatePreview()
-	})
-
-	m.columnsTable.SetSelectable(false, false)
-	m.columnsTable.SetBorders(false)
-	m.columnsTable.SetSeparator(' ')
-	m.columnsTable.SetFixed(1, 0)
-
-	m.sqlPreview.SetDynamicColors(true)
-	m.sqlPreview.SetScrollable(true)
-	m.sqlPreview.SetBorder(true)
-	m.sqlPreview.SetTitle(" SQL Preview ")
-
-	m.editField.SetFieldWidth(30)
-	m.editField.SetInputCapture(core.DropdownInputCapture(m.App.GetKeys(), nil))
 }
 
 func (m *CreateTableModal) setStyle() {
 	styles := m.App.GetStyles()
+	m.Flex.SetStyle(styles)
+	m.columnsTable.SetStyle(styles)
+	m.preview.SetStyle(styles)
 
-	bgColor := styles.Global.BackgroundColor.Color()
-	borderColor := styles.Global.BorderColor.Color()
-	textColor := styles.Global.TextColor.Color()
-	contrastBg := styles.Global.ContrastBackgroundColor.Color()
-	secondaryText := styles.Global.SecondaryTextColor.Color()
-	accentColor := styles.Global.MoreContrastBackgroundColor.Color()
-
-	m.Flex.SetBackgroundColor(bgColor)
-	m.Flex.SetBorderColor(borderColor)
-	m.Flex.SetTitleColor(styles.Global.TitleColor.Color())
-
-	m.tableNameInput.SetBackgroundColor(bgColor)
-	m.tableNameInput.SetFieldBackgroundColor(contrastBg)
-	m.tableNameInput.SetFieldTextColor(textColor)
-	m.tableNameInput.SetLabelColor(secondaryText)
-
-	m.columnsTable.SetBackgroundColor(bgColor)
-	m.columnsTable.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(textColor).
-		Background(accentColor))
-
-	m.sqlPreview.SetBackgroundColor(contrastBg)
-	m.sqlPreview.SetTextColor(textColor)
-	m.sqlPreview.SetBorderColor(borderColor)
-
-	m.editField.SetBackgroundColor(bgColor)
-	m.editField.SetFieldBackgroundColor(contrastBg)
-	m.editField.SetFieldTextColor(textColor)
+	m.tableNameInput.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+	m.tableNameInput.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	m.tableNameInput.SetFieldTextColor(styles.Global.TextColor.Color())
+	m.tableNameInput.SetLabelStyle(tcell.StyleDefault.
+		Foreground(styles.Global.TitleColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 }
 
-// rebuildFlex repopulates the Flex layout, adjusting the columns table height.
-func (m *CreateTableModal) rebuildFlex() {
-	m.Flex.Clear()
+func (m *CreateTableModal) setLayout() {
+	m.Flex.SetDirection(tview.FlexRow)
+	m.Flex.SetBorder(true)
+	m.Flex.SetBorderPadding(1, 1, 2, 2)
 
-	tableH := len(m.columns) + 1 // header row + data rows
-	if tableH < 2 {
-		tableH = 2
-	}
-	if tableH > 8 {
-		tableH = 8
-	}
+	m.tableNameInput.SetLabel(" Table Name: ")
+	m.tableNameInput.SetFieldWidth(40)
 
-	m.Flex.AddItem(m.tableNameInput, 1, 0, false)
-	m.Flex.AddItem(tview.NewBox(), 1, 0, false) // spacer
-	m.Flex.AddItem(m.columnsTable, tableH, 0, false)
-	m.Flex.AddItem(tview.NewBox(), 1, 0, false) // spacer
-	m.Flex.AddItem(m.sqlPreview, 0, 1, false)
+	m.columnsTable.SetBorder(true)
+	m.columnsTable.SetTitle(" Columns ")
+	m.columnsTable.SetBorderPadding(0, 0, 1, 1)
+	m.columnsTable.SetSelectable(true, true)
+	m.columnsTable.SetFixed(1, 0)
+
+	m.preview.SetBorder(true)
+	m.preview.SetTitle(" SQL Preview ")
+	m.preview.SetBorderPadding(0, 0, 1, 1)
+	m.preview.SetDynamicColors(true)
 }
 
-func (m *CreateTableModal) updateSelectable() {
-	m.columnsTable.SetSelectable(m.focus == focusColumns, m.focus == focusColumns)
+// focusableItems are: 0=tableNameInput, 1=columnsTable, 2=preview
+// We track which one is focused via focusIndex
+type focusTarget int
+
+const (
+	focusTableName focusTarget = iota
+	focusColumns
+	focusPreview
+)
+
+func (m *CreateTableModal) currentFocusTarget() focusTarget {
+	focus := m.App.GetFocus()
+	switch {
+	case focus == m.tableNameInput:
+		return focusTableName
+	case focus == m.columnsTable.Table:
+		return focusColumns
+	default:
+		return focusPreview
+	}
+}
+
+func (m *CreateTableModal) focusTarget(t focusTarget) {
+	switch t {
+	case focusTableName:
+		m.App.SetFocusInternal(m.tableNameInput)
+	case focusColumns:
+		m.App.SetFocusInternal(m.columnsTable)
+	case focusPreview:
+		m.App.SetFocusInternal(m.preview)
+	}
 }
 
 func (m *CreateTableModal) setKeybindings() {
 	k := m.App.GetKeys()
 
-	// Table name input: handle global and focus-switching keys; pass rest through.
 	m.tableNameInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
+		case k.Contains(k.Navigation.FocusDown, event.Name()):
+			m.focusTarget(focusColumns)
+			return nil
 		case k.Contains(k.CreateTable.Cancel, event.Name()):
-			if m.cancelCallback != nil {
-				m.cancelCallback()
-			}
-			return nil
-		case k.Contains(k.CreateTable.Execute, event.Name()):
-			m.handleApply()
-			return nil
-		case k.Contains(k.Navigation.FocusDown, event.Name()),
-			k.Contains(k.Navigation.FocusUp, event.Name()):
-			m.focus = focusColumns
-			m.updateSelectable()
-			m.App.SetFocusInternal(m)
+			m.handleCancel()
 			return nil
 		}
 		return event
 	})
 
-	// Flex capture: active when columns section has focus.
-	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// Inline edit mode — forward events to the edit field.
+	m.columnsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if m.editing {
-			if event.Key() == tcell.KeyEscape {
-				m.editing = false
-				m.rebuildColumnsTable()
-				return nil
-			}
-			if handler := m.editField.InputHandler(); handler != nil {
-				handler(event, func(p tview.Primitive) {})
-			}
-			return nil
+			return event
 		}
-
-		// Global keys
 		switch {
-		case k.Contains(k.CreateTable.Cancel, event.Name()):
-			if m.cancelCallback != nil {
-				m.cancelCallback()
-			}
+		case k.Contains(k.Navigation.FocusUp, event.Name()):
+			m.focusTarget(focusTableName)
 			return nil
-		case k.Contains(k.CreateTable.Execute, event.Name()):
-			m.handleApply()
+		case k.Contains(k.Navigation.FocusDown, event.Name()):
+			m.focusTarget(focusPreview)
 			return nil
-		case k.Contains(k.Navigation.FocusDown, event.Name()),
-			k.Contains(k.Navigation.FocusUp, event.Name()):
-			m.focus = focusTableName
-			m.updateSelectable()
-			m.App.SetFocusInternal(m)
-			return nil
-		}
-
-		// Column table: action keys
-		switch {
 		case k.Contains(k.CreateTable.AddColumn, event.Name()):
 			m.addColumn()
 			return nil
 		case k.Contains(k.CreateTable.DeleteColumn, event.Name()):
 			m.deleteColumn()
 			return nil
-		}
-
-		// Column table: navigation
-		switch {
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
-			if m.selectedCol > 0 {
-				m.selectedCol--
-				m.columnsTable.Select(m.selectedCol+1, m.selectedField)
-			}
+		case k.Contains(k.CreateTable.Execute, event.Name()):
+			m.handleExecute()
 			return nil
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
-			if m.selectedCol < len(m.columns)-1 {
-				m.selectedCol++
-				m.columnsTable.Select(m.selectedCol+1, m.selectedField)
-			}
-			return nil
-		case k.Contains(k.Navigation.MoveLeft, event.Name()):
-			if m.selectedField > 0 {
-				m.selectedField--
-				m.columnsTable.Select(m.selectedCol+1, m.selectedField)
-			}
-			return nil
-		case k.Contains(k.Navigation.MoveRight, event.Name()):
-			if m.selectedField < 3 {
-				m.selectedField++
-				m.columnsTable.Select(m.selectedCol+1, m.selectedField)
-			}
+		case k.Contains(k.CreateTable.Cancel, event.Name()):
+			m.handleCancel()
 			return nil
 		}
 
@@ -260,59 +185,173 @@ func (m *CreateTableModal) setKeybindings() {
 			return nil
 		}
 
-		if event.Rune() == ' ' && (m.selectedField == 2 || m.selectedField == 3) {
-			m.startEditing()
+		return event
+	})
+
+	m.preview.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Contains(k.Navigation.FocusUp, event.Name()):
+			m.focusTarget(focusColumns)
+			return nil
+		case k.Contains(k.CreateTable.Execute, event.Name()):
+			m.handleExecute()
+			return nil
+		case k.Contains(k.CreateTable.Cancel, event.Name()):
+			m.handleCancel()
 			return nil
 		}
-
 		return event
+	})
+
+	m.columnsTable.SetSelectionChangedFunc(func(row, col int) {
+		if row >= 1 {
+			m.focusedRow = row - 1
+			m.focusedCol = col
+		}
 	})
 }
 
 func (m *CreateTableModal) handleEvents() {
-	go m.HandleEvents(m.GetIdentifier(), func(event manager.EventMsg) {
+	go m.HandleEvents(CreateTableModalId, func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			m.setStyle()
+			m.App.QueueUpdateDraw(func() {
+				m.renderColumns()
+				m.updatePreview()
+			})
 		}
 	})
 }
 
-// SetApplyCallback sets the function called when the user executes the DDL.
-func (m *CreateTableModal) SetApplyCallback(callback func(ddl string) error) {
-	m.applyCallback = callback
-}
-
-// SetCancelCallback sets the function called when the user cancels.
-func (m *CreateTableModal) SetCancelCallback(callback func()) {
-	m.cancelCallback = callback
-}
-
-func (m *CreateTableModal) handleApply() {
-	ddl := m.generateDDL()
-	if ddl == "" {
+func (m *CreateTableModal) startEditing() {
+	row, col := m.columnsTable.GetSelection()
+	if row < 1 || row-1 >= len(m.columns) {
 		return
 	}
-	if m.applyCallback != nil {
-		if err := m.applyCallback(ddl); err != nil {
-			ShowError(m.App.Pages, "Error creating table", err)
+	colIdx := row - 1
+
+	switch col {
+	case 0: // name
+		m.editCell(colIdx, col, m.columns[colIdx].name)
+	case 1: // type
+		m.editCell(colIdx, col, m.columns[colIdx].dataType)
+	case 2: // PK toggle
+		m.columns[colIdx].pk = !m.columns[colIdx].pk
+		m.renderColumns()
+		m.updatePreview()
+	case 3: // Nullable toggle
+		m.columns[colIdx].nullable = !m.columns[colIdx].nullable
+		m.renderColumns()
+		m.updatePreview()
+	}
+}
+
+func (m *CreateTableModal) editCell(colIdx, tableCol int, currentValue string) {
+	m.editing = true
+
+	input := tview.NewInputField()
+	input.SetText(currentValue)
+	input.SetFieldWidth(0)
+
+	styles := m.App.GetStyles()
+	input.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	input.SetFieldTextColor(styles.Global.TextColor.Color())
+	input.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+
+	if tableCol == 1 {
+		input.SetAutocompleteFunc(m.autocompleteTypes)
+		input.SetInputCapture(core.DropdownInputCapture(m.App.GetKeys(), func(event *tcell.EventKey) *tcell.EventKey {
+			switch event.Key() {
+			case tcell.KeyEnter:
+				m.finishEditing(colIdx, tableCol, input.GetText())
+				return nil
+			case tcell.KeyEscape:
+				m.cancelEditing()
+				return nil
+			}
+			return event
+		}))
+	} else {
+		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			switch event.Key() {
+			case tcell.KeyEnter:
+				m.finishEditing(colIdx, tableCol, input.GetText())
+				return nil
+			case tcell.KeyEscape:
+				m.cancelEditing()
+				return nil
+			}
+			return event
+		})
+	}
+
+	m.editInput = input
+	m.columnsTable.SetCell(colIdx+1, tableCol, tview.NewTableCell("").
+		SetReference(input))
+
+	// We need to overlay the input on the cell. Use a trick: replace the flex
+	// temporarily with a layout that includes the input.
+	m.renderWithEditInput(colIdx, tableCol)
+}
+
+func (m *CreateTableModal) renderWithEditInput(colIdx, tableCol int) {
+	// Instead of complex overlay, put the input field in front of the table
+	// by replacing the columns section temporarily
+	editFlex := tview.NewFlex().SetDirection(tview.FlexRow)
+	editFlex.AddItem(m.columnsTable, 0, 1, false)
+	editFlex.AddItem(m.editInput, 1, 0, true)
+
+	m.rebuildLayout(editFlex)
+	m.App.SetFocusInternal(m.editInput)
+}
+
+func (m *CreateTableModal) finishEditing(colIdx, tableCol int, value string) {
+	switch tableCol {
+	case 0:
+		m.columns[colIdx].name = value
+	case 1:
+		m.columns[colIdx].dataType = strings.ToUpper(value)
+	}
+	m.editing = false
+	m.editInput = nil
+	m.renderColumns()
+	m.updatePreview()
+	m.rebuildLayout(nil)
+	m.App.SetFocusInternal(m.columnsTable)
+	m.columnsTable.Select(colIdx+1, tableCol)
+}
+
+func (m *CreateTableModal) cancelEditing() {
+	m.editing = false
+	m.editInput = nil
+	m.renderColumns()
+	m.rebuildLayout(nil)
+	m.App.SetFocusInternal(m.columnsTable)
+}
+
+func (m *CreateTableModal) autocompleteTypes(currentText string) []tview.AutocompleteItem {
+	if len(m.dataTypes) == 0 {
+		return nil
+	}
+	var entries []tview.AutocompleteItem
+	for _, dt := range m.dataTypes {
+		if matched, _ := regexp.MatchString("(?i)^"+regexp.QuoteMeta(currentText), dt); matched {
+			entries = append(entries, tview.AutocompleteItem{Main: dt})
 		}
 	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Main < entries[j].Main
+	})
+	return entries
 }
 
 func (m *CreateTableModal) addColumn() {
-	m.columns = append(m.columns, ColumnDef{
-		Name:     "",
-		DataType: "TEXT",
-		IsPK:     false,
-		IsNull:   true,
-	})
-	m.selectedCol = len(m.columns) - 1
-	m.selectedField = 0
-	m.focus = focusColumns
-	m.updateSelectable()
-	m.rebuildColumnsTable()
+	m.columns = append(m.columns, columnDef{name: "", dataType: "TEXT", nullable: true})
+	m.renderColumns()
 	m.updatePreview()
+	// Focus the new row's name cell
+	m.columnsTable.Select(len(m.columns), 0)
 	m.startEditing()
 }
 
@@ -320,276 +359,233 @@ func (m *CreateTableModal) deleteColumn() {
 	if len(m.columns) <= 1 {
 		return
 	}
-	m.columns = append(m.columns[:m.selectedCol], m.columns[m.selectedCol+1:]...)
-	if m.selectedCol >= len(m.columns) {
-		m.selectedCol = len(m.columns) - 1
-	}
-	m.rebuildColumnsTable()
-	m.updatePreview()
-}
-
-func (m *CreateTableModal) startEditing() {
-	if m.selectedCol < 0 || m.selectedCol >= len(m.columns) {
+	row, _ := m.columnsTable.GetSelection()
+	idx := row - 1
+	if idx < 0 || idx >= len(m.columns) {
 		return
 	}
-
-	col := m.columns[m.selectedCol]
-	switch m.selectedField {
-	case 0: // name
-		m.editing = true
-		m.editField.SetText(col.Name)
-		m.editField.SetLabel("")
-		m.editField.SetAutocompleteFunc(nil)
-		m.editField.SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEnter {
-				m.columns[m.selectedCol].Name = m.editField.GetText()
-			}
-			m.editing = false
-			m.rebuildColumnsTable()
-			m.updatePreview()
-		})
-	case 1: // data type — input with autocomplete
-		m.editing = true
-		m.editField.SetText(col.DataType)
-		m.editField.SetLabel("")
-		m.editField.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
-			var items []tview.AutocompleteItem
-			for _, dt := range m.Driver.CommonDataTypes() {
-				if currentText == "" || strings.HasPrefix(strings.ToUpper(dt), strings.ToUpper(currentText)) {
-					items = append(items, tview.AutocompleteItem{Main: dt})
-				}
-			}
-			return items
-		})
-		m.editField.SetDoneFunc(func(key tcell.Key) {
-			if key == tcell.KeyEnter {
-				m.columns[m.selectedCol].DataType = m.editField.GetText()
-			}
-			m.editing = false
-			m.editField.SetAutocompleteFunc(nil)
-			m.rebuildColumnsTable()
-			m.updatePreview()
-		})
-	case 2: // PK toggle
-		m.columns[m.selectedCol].IsPK = !m.columns[m.selectedCol].IsPK
-		if m.columns[m.selectedCol].IsPK {
-			m.columns[m.selectedCol].IsNull = false
-		}
-		m.rebuildColumnsTable()
-		m.updatePreview()
-	case 3: // NULL toggle
-		if !m.columns[m.selectedCol].IsPK {
-			m.columns[m.selectedCol].IsNull = !m.columns[m.selectedCol].IsNull
-		}
-		m.rebuildColumnsTable()
-		m.updatePreview()
+	m.columns = append(m.columns[:idx], m.columns[idx+1:]...)
+	m.renderColumns()
+	m.updatePreview()
+	if row > len(m.columns) {
+		row = len(m.columns)
 	}
+	m.columnsTable.Select(row, 0)
 }
 
-func (m *CreateTableModal) rebuildColumnsTable() {
+func (m *CreateTableModal) renderColumns() {
+	styles := m.App.GetStyles()
 	m.columnsTable.Clear()
 
-	styles := m.App.GetStyles()
-	headerColor := styles.Global.SecondaryTextColor.Color()
-
-	headers := []string{"  NAME", "DATA TYPE", "PK", "NULL"}
+	headers := []string{"NAME", "DATA TYPE", "PK", "NULL"}
 	for i, h := range headers {
-		cell := tview.NewTableCell(h).
-			SetTextColor(headerColor).
-			SetSelectable(false)
-		if i < 2 {
-			cell.SetExpansion(1)
-		} else {
-			cell.SetMaxWidth(6)
-		}
-		m.columnsTable.SetCell(0, i, cell)
+		m.columnsTable.SetCell(0, i, tview.NewTableCell(" "+h+" ").
+			SetSelectable(false).
+			SetTextColor(styles.Content.ColumnKeyColor.Color()).
+			SetBackgroundColor(styles.Content.HeaderRowBackgroundColor.Color()).
+			SetAlign(tview.AlignCenter))
 	}
 
-	textColor := styles.Global.TextColor.Color()
-	accentColor := styles.Global.MoreContrastBackgroundColor.Color()
+	checkmark := "✓"
+	empty := " "
 
-	for i, col := range m.columns {
-		row := i + 1
+	for r, col := range m.columns {
+		m.columnsTable.SetCell(r+1, 0, tview.NewTableCell(" "+col.name+" ").
+			SetTextColor(styles.Global.TextColor.Color()))
 
-		nameCell := tview.NewTableCell("  " + col.Name).
-			SetTextColor(textColor).
-			SetExpansion(1)
-		m.columnsTable.SetCell(row, 0, nameCell)
+		m.columnsTable.SetCell(r+1, 1, tview.NewTableCell(" "+col.dataType+" ").
+			SetTextColor(styles.Content.ColumnTypeColor.Color()))
 
-		typeCell := tview.NewTableCell(col.DataType).
-			SetTextColor(accentColor).
-			SetExpansion(1)
-		m.columnsTable.SetCell(row, 1, typeCell)
-
-		pkText := "[ ]"
-		if col.IsPK {
-			pkText = "[x]"
+		pkText := empty
+		if col.pk {
+			pkText = checkmark
 		}
-		pkCell := tview.NewTableCell(pkText).
-			SetTextColor(textColor).
+		m.columnsTable.SetCell(r+1, 2, tview.NewTableCell(pkText).
 			SetAlign(tview.AlignCenter).
-			SetMaxWidth(6)
-		m.columnsTable.SetCell(row, 2, pkCell)
+			SetTextColor(styles.Content.ColumnTypeColor.Color()))
 
-		nullText := "[ ]"
-		if col.IsNull {
-			nullText = "[x]"
+		nullText := empty
+		if col.nullable {
+			nullText = checkmark
 		}
-		nullCell := tview.NewTableCell(nullText).
-			SetTextColor(textColor).
+		m.columnsTable.SetCell(r+1, 3, tview.NewTableCell(nullText).
 			SetAlign(tview.AlignCenter).
-			SetMaxWidth(6)
-		m.columnsTable.SetCell(row, 3, nullCell)
+			SetTextColor(styles.Content.ColumnTypeColor.Color()))
 	}
 
-	m.columnsTable.Select(m.selectedCol+1, m.selectedField)
-	m.columnsTable.ScrollToEnd()
-	m.rebuildFlex()
+	if len(m.columns) > 0 {
+		sel := m.focusedRow + 1
+		if sel > len(m.columns) {
+			sel = len(m.columns)
+		}
+		m.columnsTable.Select(sel, m.focusedCol)
+	}
 }
 
 func (m *CreateTableModal) updatePreview() {
-	m.sqlPreview.SetText(m.generateDDL())
+	tableName := m.tableNameInput.GetText()
+	if tableName == "" {
+		tableName = "<table_name>"
+	}
+
+	var qualifiedName string
+	if m.schema != "" {
+		qualifiedName = fmt.Sprintf("%s.%s", m.schema, tableName)
+	} else {
+		qualifiedName = tableName
+	}
+
+	var lines []string
+	for _, col := range m.columns {
+		parts := []string{fmt.Sprintf("  %s %s", col.name, col.dataType)}
+		if col.pk {
+			parts = append(parts, "PRIMARY KEY")
+		}
+		if !col.nullable && !col.pk {
+			parts = append(parts, "NOT NULL")
+		}
+		lines = append(lines, strings.Join(parts, " "))
+	}
+
+	ddl := fmt.Sprintf("[orange]CREATE TABLE[white] %s (\n%s\n);", qualifiedName, strings.Join(lines, ",\n"))
+	m.preview.SetText(ddl)
 }
 
-func (m *CreateTableModal) generateDDL() string {
+func (m *CreateTableModal) buildDDL() string {
 	tableName := m.tableNameInput.GetText()
 	if tableName == "" {
 		return ""
 	}
 
-	var b strings.Builder
-	fqName := tableName
+	var qualifiedName string
 	if m.schema != "" {
-		fqName = m.schema + "." + tableName
+		qualifiedName = fmt.Sprintf("%s.%s", m.schema, tableName)
+	} else {
+		qualifiedName = tableName
 	}
 
-	fmt.Fprintf(&b, "CREATE TABLE %s (\n", fqName)
-
-	var pkCols []string
+	var lines []string
 	for _, col := range m.columns {
-		if col.IsPK {
-			pkCols = append(pkCols, col.Name)
+		parts := []string{fmt.Sprintf("  %s %s", col.name, col.dataType)}
+		if col.pk {
+			parts = append(parts, "PRIMARY KEY")
 		}
+		if !col.nullable && !col.pk {
+			parts = append(parts, "NOT NULL")
+		}
+		lines = append(lines, strings.Join(parts, " "))
 	}
 
-	for i, col := range m.columns {
-		b.WriteString("    ")
-		b.WriteString(col.Name)
-		b.WriteString(" ")
-		b.WriteString(col.DataType)
-
-		if !col.IsNull && !col.IsPK {
-			b.WriteString(" NOT NULL")
-		}
-
-		isLast := i == len(m.columns)-1
-		if !isLast || len(pkCols) > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString("\n")
-	}
-
-	if len(pkCols) > 0 {
-		b.WriteString("    PRIMARY KEY (")
-		b.WriteString(strings.Join(pkCols, ", "))
-		b.WriteString(")\n")
-	}
-
-	b.WriteString(");")
-	return b.String()
+	return fmt.Sprintf("CREATE TABLE %s (\n%s\n)", qualifiedName, strings.Join(lines, ",\n"))
 }
 
-// GetTableName returns the current value of the table name input.
+func (m *CreateTableModal) handleExecute() {
+	if m.applyCallback == nil {
+		return
+	}
+	ddl := m.buildDDL()
+	if ddl == "" {
+		ShowError(m.App.Pages, "Validation error", fmt.Errorf("table name is required"))
+		return
+	}
+	if err := m.applyCallback(ddl); err != nil {
+		ShowError(m.App.Pages, "Error creating table", err)
+	}
+}
+
+func (m *CreateTableModal) handleCancel() {
+	if m.cancelCallback != nil {
+		m.cancelCallback()
+	}
+}
+
+func (m *CreateTableModal) rebuildLayout(editSection tview.Primitive) {
+	m.Flex.Clear()
+
+	titleBar := tview.NewFlex()
+	titleBar.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
+	title := tview.NewTextView().SetText(" CREATE NEW TABLE").
+		SetTextColor(m.App.GetStyles().Global.TitleColor.Color())
+	title.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
+
+	schemaLabel := tview.NewTextView().
+		SetText(fmt.Sprintf("SCHEMA: %s ", strings.ToUpper(m.schema))).
+		SetTextAlign(tview.AlignRight).
+		SetTextColor(m.App.GetStyles().Global.SecondaryTextColor.Color())
+	schemaLabel.SetBackgroundColor(m.App.GetStyles().Global.BackgroundColor.Color())
+
+	titleBar.AddItem(title, 0, 1, false)
+	titleBar.AddItem(schemaLabel, 0, 1, false)
+
+	m.Flex.AddItem(titleBar, 1, 0, false)
+	m.Flex.AddItem(m.tableNameInput, 1, 0, false)
+	m.Flex.AddItem(core.NewTextView(), 1, 0, false) // spacer
+
+	if editSection != nil {
+		m.Flex.AddItem(editSection, 0, 3, true)
+	} else {
+		m.Flex.AddItem(m.columnsTable, 0, 3, false)
+	}
+
+	m.Flex.AddItem(core.NewTextView(), 1, 0, false) // margin
+	m.Flex.AddItem(m.preview, 0, 2, false)
+}
+
+// SetSchema sets the schema name for the new table.
+func (m *CreateTableModal) SetSchema(schema string) {
+	m.schema = schema
+	if m.Driver != nil {
+		m.dataTypes = m.Driver.CommonDataTypes()
+	}
+}
+
+// SetApplyCallback sets the function called when the user executes.
+func (m *CreateTableModal) SetApplyCallback(cb func(ddl string) error) {
+	m.applyCallback = cb
+}
+
+// SetCancelCallback sets the function called when the user cancels.
+func (m *CreateTableModal) SetCancelCallback(cb func()) {
+	m.cancelCallback = cb
+}
+
+// GetTableName returns the current table name input value.
 func (m *CreateTableModal) GetTableName() string {
 	return m.tableNameInput.GetText()
 }
 
-// SetSchema sets the schema context for DDL generation.
-func (m *CreateTableModal) SetSchema(schema string) {
-	m.schema = schema
-}
-
-// Render shows the modal with the given schema context.
+// Render builds the modal layout and shows it as a page overlay.
+// The defaultDDL parameter is ignored; we build DDL from the column definitions.
 func (m *CreateTableModal) Render(defaultDDL string) {
-	m.focus = focusTableName
-	m.selectedCol = 0
-	m.selectedField = 0
+	m.columns = []columnDef{{name: "id", dataType: "SERIAL", pk: true, nullable: false}}
+	m.tableNameInput.SetText("")
+	m.focusedRow = 0
+	m.focusedCol = 0
 	m.editing = false
 
-	m.columns = []ColumnDef{
-		{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
-	}
-	m.tableNameInput.SetText("")
-
-	m.updateSelectable()
-	m.rebuildColumnsTable()
+	m.renderColumns()
 	m.updatePreview()
+	m.rebuildLayout(nil)
 
-	m.columnsTable.SetSelectionChangedFunc(func(row, col int) {
-		if row < 1 {
-			return
-		}
-		m.selectedCol = row - 1
-		m.selectedField = col
+	// Center the modal
+	modal := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(m.Flex, 0, 4, true).
+			AddItem(nil, 0, 1, false), 0, 4, true).
+		AddItem(nil, 0, 1, false)
+
+	m.App.Pages.AddPage(CreateTableModalId, modal, true, true)
+	m.App.SetFocusInternal(m.tableNameInput)
+
+	// Update preview when table name changes
+	m.tableNameInput.SetChangedFunc(func(text string) {
+		m.updatePreview()
 	})
-
-	m.App.Pages.AddPage(CreateTableModalId, m, true, true)
 }
 
-// Draw positions the modal and draws its content.
-// The Flex handles internal layout; we only overlay the edit field when active.
-func (m *CreateTableModal) Draw(screen tcell.Screen) {
-	screenW, screenH := screen.Size()
-	const maxW = 100
-	const padX = 4
-
-	width := screenW - padX*2
-	if width > maxW {
-		width = maxW
-	}
-	height := screenH * 6 / 10
-
-	x := (screenW - width) / 2
-	y := (screenH - height) / 2
-
-	m.Flex.SetRect(x, y, width, height)
-	m.Flex.Draw(screen)
-
-	styles := m.App.GetStyles()
-	labelColor := styles.Global.SecondaryTextColor.Color()
-	bgColor := styles.Global.BackgroundColor.Color()
-
-	// Schema info in top-right corner of the border
-	if m.schema != "" {
-		schemaLabel := fmt.Sprintf("Schema: %s", m.schema)
-		col := x + width - len(schemaLabel) - 3
-		for i, ch := range schemaLabel {
-			screen.SetContent(col+i, y, ch, nil, tcell.StyleDefault.
-				Foreground(labelColor).Background(bgColor))
-		}
-	}
-
-	// Edit field overlay positioned over the selected table row
-	if m.editing {
-		tx, ty, tw, _ := m.columnsTable.GetRect()
-		editY := ty + m.selectedCol + 1 // +1 to skip header row
-		if editY < ty+len(m.columns)+1 {
-			m.editField.SetRect(tx, editY, tw/2, 1)
-			m.editField.Draw(screen)
-		}
-	}
-}
-
-// Focus delegates to tableNameInput when in table-name mode,
-// otherwise to the Flex (which routes to its Box for our InputCapture).
-func (m *CreateTableModal) Focus(delegate func(p tview.Primitive)) {
-	if m.focus == focusTableName {
-		m.tableNameInput.Focus(delegate)
-	} else {
-		m.Flex.Focus(delegate)
-	}
-}
-
+// Hide removes the modal from the page stack.
 func (m *CreateTableModal) Hide() {
 	m.App.Pages.RemovePage(CreateTableModalId)
 }
