@@ -96,7 +96,8 @@ func (a *App) shouldHandleRune(event *tcell.EventKey) bool {
 	focus := a.GetFocus()
 	identifier := string(focus.GetIdentifier())
 
-	if strings.Contains(identifier, "Bar") || strings.Contains(identifier, "Input") {
+	// TODO: find better way of handling this focus problem in input fields
+	if strings.Contains(identifier, "Bar") || strings.Contains(identifier, "Input") || strings.Contains(identifier, "CreateTable") {
 		return true
 	}
 

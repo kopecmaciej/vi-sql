@@ -456,11 +456,21 @@ func (s *SchemaTree) showAddTableModal(ctx context.Context) {
 
 	s.createTableModal.SetSchema(schemaName)
 	s.createTableModal.SetApplyCallback(func(ddl string) error {
+		tableName := s.createTableModal.GetTableName()
 		if err := s.Driver.CreateTable(ctx, schemaName, ddl); err != nil {
 			return err
 		}
 		s.closeCreateTableModal()
-		s.Render()
+		// Add the new table node directly without collapsing the whole tree.
+		s.addTableNode(ctx, parent, schemaName, tableName, false)
+		parent.SetExpanded(true)
+		// Keep the in-memory cache consistent.
+		for i, st := range s.schemasWithTables {
+			if st.Schema == schemaName {
+				s.schemasWithTables[i].Tables = append(s.schemasWithTables[i].Tables, tableName)
+				break
+			}
+		}
 		return nil
 	})
 	s.createTableModal.SetCancelCallback(s.closeCreateTableModal)
@@ -487,7 +497,9 @@ func (s *SchemaTree) showDeleteTableModal(ctx context.Context) {
 	s.deleteModal.SetText(fmt.Sprintf("Are you sure you want to drop [%s]%s[-:-:-] [white]from [%s]%s[-:-:-]?",
 		s.style.LeafTextColor.Color(), tableName, s.style.NodeTextColor.Color(), schemaName))
 	s.deleteModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		defer s.App.Pages.RemovePage(SchemaDeleteModalId)
+		// Remove the delete modal first so GiveBackFocus restores focus to the
+		// tree before we potentially show an error modal on top.
+		s.App.Pages.RemovePage(SchemaDeleteModalId)
 		if buttonIndex == 0 {
 			err := s.Driver.DropTable(ctx, schemaName, tableName)
 			if err != nil {

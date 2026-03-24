@@ -35,11 +35,11 @@ type CreateTableModal struct {
 	*core.BaseElement
 	*tview.Box
 
-	tableNameInput *tview.InputField
-	columnsTable   *tview.Table
-	sqlPreview     *tview.TextView
-	editField      *tview.InputField
-	typeDropdown   *tview.List
+	tableNameInput *core.InputField
+	columnsTable   *core.Table
+	sqlPreview     *core.TextView
+	editField      *core.InputField
+	typeDropdown   *core.List
 
 	columns       []ColumnDef
 	schema        string
@@ -55,12 +55,13 @@ type CreateTableModal struct {
 
 func NewCreateTableModal() *CreateTableModal {
 	m := &CreateTableModal{
-		BaseElement:  core.NewBaseElement(),
-		Box:          tview.NewBox(),
-		columnsTable: tview.NewTable(),
-		sqlPreview:   tview.NewTextView(),
-		editField:    tview.NewInputField(),
-		typeDropdown: tview.NewList(),
+		BaseElement:    core.NewBaseElement(),
+		Box:            tview.NewBox(),
+		tableNameInput: core.NewInputField(),
+		columnsTable:   core.NewTable(),
+		sqlPreview:     core.NewTextView(),
+		editField:      core.NewInputField(),
+		typeDropdown:   core.NewList(),
 		columns: []ColumnDef{
 			{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
 		},
@@ -79,7 +80,6 @@ func (m *CreateTableModal) init() error {
 }
 
 func (m *CreateTableModal) setLayout() {
-	m.tableNameInput = tview.NewInputField()
 	m.tableNameInput.SetLabel(" Table Name: ")
 	m.tableNameInput.SetFieldWidth(40)
 	m.tableNameInput.SetText("")
@@ -493,6 +493,11 @@ func (m *CreateTableModal) generateDDL() string {
 	return b.String()
 }
 
+// GetTableName returns the current value of the table name input.
+func (m *CreateTableModal) GetTableName() string {
+	return m.tableNameInput.GetText()
+}
+
 // Render shows the modal with the given schema context.
 func (m *CreateTableModal) Render(defaultDDL string) {
 	m.focus = focusTableName
@@ -500,6 +505,12 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 	m.selectedField = 0
 	m.editing = false
 	m.showDropdown = false
+
+	// Reset to initial state every time the modal is opened.
+	m.columns = []ColumnDef{
+		{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
+	}
+	m.tableNameInput.SetText("")
 
 	m.updateSelectable()
 	m.rebuildColumnsTable()
@@ -514,12 +525,6 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 	})
 
 	m.App.Pages.AddPage(CreateTableModalId, m, true, true)
-	m.BroadcastEvent(manager.EventMsg{
-		Message: manager.Message{
-			Type: manager.FocusChanged,
-			Data: tview.Identifier(CreateTableModalId),
-		},
-	})
 }
 
 // SetSchema sets the schema context for DDL generation.
