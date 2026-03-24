@@ -33,13 +33,12 @@ const (
 // name/type/pk/null fields, and a live SQL preview.
 type CreateTableModal struct {
 	*core.BaseElement
-	*tview.Box
+	*core.Flex
 
 	tableNameInput *core.InputField
 	columnsTable   *core.Table
 	sqlPreview     *core.TextView
 	editField      *core.InputField
-	typeDropdown   *core.List
 
 	columns       []ColumnDef
 	schema        string
@@ -47,7 +46,6 @@ type CreateTableModal struct {
 	selectedCol   int
 	selectedField int // 0=name, 1=type, 2=pk, 3=null
 	editing       bool
-	showDropdown  bool
 
 	applyCallback  func(ddl string) error
 	cancelCallback func()
@@ -56,12 +54,11 @@ type CreateTableModal struct {
 func NewCreateTableModal() *CreateTableModal {
 	m := &CreateTableModal{
 		BaseElement:    core.NewBaseElement(),
-		Box:            tview.NewBox(),
+		Flex:           core.NewFlex(),
 		tableNameInput: core.NewInputField(),
 		columnsTable:   core.NewTable(),
 		sqlPreview:     core.NewTextView(),
 		editField:      core.NewInputField(),
-		typeDropdown:   core.NewList(),
 		columns: []ColumnDef{
 			{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
 		},
@@ -80,9 +77,17 @@ func (m *CreateTableModal) init() error {
 }
 
 func (m *CreateTableModal) setLayout() {
+	m.Flex.SetBorder(true)
+	m.Flex.SetTitle(" Create New Table ")
+	m.Flex.SetTitleAlign(tview.AlignLeft)
+	m.Flex.SetDirection(tview.FlexRow)
+	m.Flex.SetBorderPadding(0, 0, 1, 1)
+
 	m.tableNameInput.SetLabel(" Table Name: ")
 	m.tableNameInput.SetFieldWidth(40)
-	m.tableNameInput.SetText("")
+	m.tableNameInput.SetChangedFunc(func(text string) {
+		m.updatePreview()
+	})
 
 	m.columnsTable.SetSelectable(false, false)
 	m.columnsTable.SetBorders(false)
@@ -91,11 +96,11 @@ func (m *CreateTableModal) setLayout() {
 
 	m.sqlPreview.SetDynamicColors(true)
 	m.sqlPreview.SetScrollable(true)
-
-	m.typeDropdown.ShowSecondaryText(false)
-	m.typeDropdown.SetHighlightFullLine(true)
+	m.sqlPreview.SetBorder(true)
+	m.sqlPreview.SetTitle(" SQL Preview ")
 
 	m.editField.SetFieldWidth(30)
+	m.editField.SetInputCapture(core.DropdownInputCapture(m.App.GetKeys(), nil))
 }
 
 func (m *CreateTableModal) setStyle() {
@@ -108,9 +113,9 @@ func (m *CreateTableModal) setStyle() {
 	secondaryText := styles.Global.SecondaryTextColor.Color()
 	accentColor := styles.Global.MoreContrastBackgroundColor.Color()
 
-	m.Box.SetBackgroundColor(bgColor)
-	m.Box.SetBorderColor(borderColor)
-	m.Box.SetTitleColor(styles.Global.TitleColor.Color())
+	m.Flex.SetBackgroundColor(bgColor)
+	m.Flex.SetBorderColor(borderColor)
+	m.Flex.SetTitleColor(styles.Global.TitleColor.Color())
 
 	m.tableNameInput.SetBackgroundColor(bgColor)
 	m.tableNameInput.SetFieldBackgroundColor(contrastBg)
@@ -124,17 +129,30 @@ func (m *CreateTableModal) setStyle() {
 
 	m.sqlPreview.SetBackgroundColor(contrastBg)
 	m.sqlPreview.SetTextColor(textColor)
+	m.sqlPreview.SetBorderColor(borderColor)
 
 	m.editField.SetBackgroundColor(bgColor)
 	m.editField.SetFieldBackgroundColor(contrastBg)
 	m.editField.SetFieldTextColor(textColor)
+}
 
-	m.typeDropdown.SetBackgroundColor(accentColor)
-	m.typeDropdown.SetMainTextColor(textColor)
-	m.typeDropdown.SetSelectedStyle(tcell.StyleDefault.
-		Foreground(bgColor).
-		Background(secondaryText))
-	m.typeDropdown.SetBorderColor(secondaryText)
+// rebuildFlex repopulates the Flex layout, adjusting the columns table height.
+func (m *CreateTableModal) rebuildFlex() {
+	m.Flex.Clear()
+
+	tableH := len(m.columns) + 1 // header row + data rows
+	if tableH < 2 {
+		tableH = 2
+	}
+	if tableH > 8 {
+		tableH = 8
+	}
+
+	m.Flex.AddItem(m.tableNameInput, 1, 0, false)
+	m.Flex.AddItem(tview.NewBox(), 1, 0, false) // spacer
+	m.Flex.AddItem(m.columnsTable, tableH, 0, false)
+	m.Flex.AddItem(tview.NewBox(), 1, 0, false) // spacer
+	m.Flex.AddItem(m.sqlPreview, 0, 1, false)
 }
 
 func (m *CreateTableModal) updateSelectable() {
@@ -142,41 +160,32 @@ func (m *CreateTableModal) updateSelectable() {
 }
 
 func (m *CreateTableModal) setKeybindings() {
-	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := m.App.GetKeys()
+	k := m.App.GetKeys()
 
-		// Type dropdown mode
-		if m.showDropdown {
-			switch {
-			case event.Key() == tcell.KeyEscape:
-				m.showDropdown = false
-				return nil
-			case event.Key() == tcell.KeyEnter:
-				if handler := m.typeDropdown.InputHandler(); handler != nil {
-					handler(event, func(p tview.Primitive) {})
-				}
-				return nil
-			case k.Contains(k.Navigation.MoveUp, event.Name()):
-				synth := tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-				if handler := m.typeDropdown.InputHandler(); handler != nil {
-					handler(synth, func(p tview.Primitive) {})
-				}
-				return nil
-			case k.Contains(k.Navigation.MoveDown, event.Name()):
-				synth := tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-				if handler := m.typeDropdown.InputHandler(); handler != nil {
-					handler(synth, func(p tview.Primitive) {})
-				}
-				return nil
-			default:
-				if handler := m.typeDropdown.InputHandler(); handler != nil {
-					handler(event, func(p tview.Primitive) {})
-				}
-				return nil
+	// Table name input: handle global and focus-switching keys; pass rest through.
+	m.tableNameInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Contains(k.CreateTable.Cancel, event.Name()):
+			if m.cancelCallback != nil {
+				m.cancelCallback()
 			}
+			return nil
+		case k.Contains(k.CreateTable.Execute, event.Name()):
+			m.handleApply()
+			return nil
+		case k.Contains(k.Navigation.FocusDown, event.Name()),
+			k.Contains(k.Navigation.FocusUp, event.Name()):
+			m.focus = focusColumns
+			m.updateSelectable()
+			m.App.SetFocusInternal(m)
+			return nil
 		}
+		return event
+	})
 
-		// Inline edit mode
+	// Flex capture: active when columns section has focus.
+	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Inline edit mode — forward events to the edit field.
 		if m.editing {
 			if event.Key() == tcell.KeyEscape {
 				m.editing = false
@@ -201,21 +210,9 @@ func (m *CreateTableModal) setKeybindings() {
 			return nil
 		case k.Contains(k.Navigation.FocusDown, event.Name()),
 			k.Contains(k.Navigation.FocusUp, event.Name()):
-			if m.focus == focusTableName {
-				m.focus = focusColumns
-			} else {
-				m.focus = focusTableName
-			}
+			m.focus = focusTableName
 			m.updateSelectable()
-			return nil
-		}
-
-		// Route to focused component
-		if m.focus == focusTableName {
-			if handler := m.tableNameInput.InputHandler(); handler != nil {
-				handler(event, func(p tview.Primitive) {})
-			}
-			m.updatePreview()
+			m.App.SetFocusInternal(m)
 			return nil
 		}
 
@@ -312,8 +309,11 @@ func (m *CreateTableModal) addColumn() {
 	})
 	m.selectedCol = len(m.columns) - 1
 	m.selectedField = 0
+	m.focus = focusColumns
+	m.updateSelectable()
 	m.rebuildColumnsTable()
 	m.updatePreview()
+	m.startEditing()
 }
 
 func (m *CreateTableModal) deleteColumn() {
@@ -339,6 +339,7 @@ func (m *CreateTableModal) startEditing() {
 		m.editing = true
 		m.editField.SetText(col.Name)
 		m.editField.SetLabel("")
+		m.editField.SetAutocompleteFunc(nil)
 		m.editField.SetDoneFunc(func(key tcell.Key) {
 			if key == tcell.KeyEnter {
 				m.columns[m.selectedCol].Name = m.editField.GetText()
@@ -347,24 +348,28 @@ func (m *CreateTableModal) startEditing() {
 			m.rebuildColumnsTable()
 			m.updatePreview()
 		})
-	case 1: // data type - show dropdown
-		m.showDropdown = true
-		m.typeDropdown.Clear()
-		for _, dt := range m.Driver.CommonDataTypes() {
-			dt := dt
-			m.typeDropdown.AddItem(dt, "", 0, func() {
-				m.columns[m.selectedCol].DataType = dt
-				m.showDropdown = false
-				m.rebuildColumnsTable()
-				m.updatePreview()
-			})
-		}
-		for i, dt := range m.Driver.CommonDataTypes() {
-			if dt == col.DataType {
-				m.typeDropdown.SetCurrentItem(i)
-				break
+	case 1: // data type — input with autocomplete
+		m.editing = true
+		m.editField.SetText(col.DataType)
+		m.editField.SetLabel("")
+		m.editField.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
+			var items []tview.AutocompleteItem
+			for _, dt := range m.Driver.CommonDataTypes() {
+				if currentText == "" || strings.HasPrefix(strings.ToUpper(dt), strings.ToUpper(currentText)) {
+					items = append(items, tview.AutocompleteItem{Main: dt})
+				}
 			}
-		}
+			return items
+		})
+		m.editField.SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEnter {
+				m.columns[m.selectedCol].DataType = m.editField.GetText()
+			}
+			m.editing = false
+			m.editField.SetAutocompleteFunc(nil)
+			m.rebuildColumnsTable()
+			m.updatePreview()
+		})
 	case 2: // PK toggle
 		m.columns[m.selectedCol].IsPK = !m.columns[m.selectedCol].IsPK
 		if m.columns[m.selectedCol].IsPK {
@@ -439,6 +444,7 @@ func (m *CreateTableModal) rebuildColumnsTable() {
 
 	m.columnsTable.Select(m.selectedCol+1, m.selectedField)
 	m.columnsTable.ScrollToEnd()
+	m.rebuildFlex()
 }
 
 func (m *CreateTableModal) updatePreview() {
@@ -498,15 +504,18 @@ func (m *CreateTableModal) GetTableName() string {
 	return m.tableNameInput.GetText()
 }
 
+// SetSchema sets the schema context for DDL generation.
+func (m *CreateTableModal) SetSchema(schema string) {
+	m.schema = schema
+}
+
 // Render shows the modal with the given schema context.
 func (m *CreateTableModal) Render(defaultDDL string) {
 	m.focus = focusTableName
 	m.selectedCol = 0
 	m.selectedField = 0
 	m.editing = false
-	m.showDropdown = false
 
-	// Reset to initial state every time the modal is opened.
 	m.columns = []ColumnDef{
 		{Name: "id", DataType: "SERIAL", IsPK: true, IsNull: false},
 	}
@@ -527,12 +536,8 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 	m.App.Pages.AddPage(CreateTableModalId, m, true, true)
 }
 
-// SetSchema sets the schema context for DDL generation.
-func (m *CreateTableModal) SetSchema(schema string) {
-	m.schema = schema
-}
-
-// Draw renders the entire modal with custom layout.
+// Draw positions the modal and draws its content.
+// The Flex handles internal layout; we only overlay the edit field when active.
 func (m *CreateTableModal) Draw(screen tcell.Screen) {
 	screenW, screenH := screen.Size()
 	const maxW = 100
@@ -547,22 +552,14 @@ func (m *CreateTableModal) Draw(screen tcell.Screen) {
 	x := (screenW - width) / 2
 	y := (screenH - height) / 2
 
-	m.SetRect(x, y, width, height)
-	m.Box.SetBorder(true)
-	m.Box.SetTitle(" Create New Table ")
-	m.Box.SetTitleAlign(tview.AlignLeft)
-	m.Box.DrawForSubclass(screen, m)
-
-	innerX := x + 2
-	innerY := y + 1
-	innerW := width - 4
-	innerH := height - 2
+	m.Flex.SetRect(x, y, width, height)
+	m.Flex.Draw(screen)
 
 	styles := m.App.GetStyles()
 	labelColor := styles.Global.SecondaryTextColor.Color()
 	bgColor := styles.Global.BackgroundColor.Color()
 
-	// Schema info in top-right
+	// Schema info in top-right corner of the border
 	if m.schema != "" {
 		schemaLabel := fmt.Sprintf("Schema: %s", m.schema)
 		col := x + width - len(schemaLabel) - 3
@@ -572,99 +569,25 @@ func (m *CreateTableModal) Draw(screen tcell.Screen) {
 		}
 	}
 
-	currentY := innerY + 1
-
-	// Section: TABLE NAME
-	m.drawLabel(screen, innerX, currentY, "TABLE NAME", labelColor, bgColor)
-	currentY++
-
-	m.tableNameInput.SetRect(innerX, currentY, innerW, 1)
-	m.tableNameInput.Draw(screen)
-	currentY += 2
-
-	// Section: COLUMN DEFINITIONS
-	m.drawLabel(screen, innerX, currentY, "COLUMN DEFINITIONS", labelColor, bgColor)
-	currentY++
-
-	// Column table height: header + rows, capped
-	tableRows := len(m.columns) + 1
-	remainingH := innerH - (currentY - innerY) - 6
-	tableH := tableRows
-	if tableH > remainingH/2 {
-		tableH = remainingH / 2
-	}
-	if tableH < 3 {
-		tableH = 3
-	}
-
-	columnsTableY := currentY
-	m.columnsTable.SetRect(innerX, columnsTableY, innerW, tableH)
-	m.columnsTable.Draw(screen)
-
-	// Draw edit field overlay if editing
+	// Edit field overlay positioned over the selected table row
 	if m.editing {
-		editRow := m.selectedCol + 1
-		editY := columnsTableY + editRow
-		if editY < columnsTableY+tableH {
-			m.editField.SetRect(innerX, editY, innerW/2, 1)
+		tx, ty, tw, _ := m.columnsTable.GetRect()
+		editY := ty + m.selectedCol + 1 // +1 to skip header row
+		if editY < ty+len(m.columns)+1 {
+			m.editField.SetRect(tx, editY, tw/2, 1)
 			m.editField.Draw(screen)
 		}
 	}
-
-	currentY += tableH + 1
-
-	// Section: SQL PREVIEW
-	m.drawLabel(screen, innerX, currentY, "SQL PREVIEW", labelColor, bgColor)
-	currentY++
-
-	previewH := innerH - (currentY - innerY) - 1
-	if previewH < 3 {
-		previewH = 3
-	}
-	m.sqlPreview.SetRect(innerX, currentY, innerW, previewH)
-	m.sqlPreview.SetBorder(true)
-	m.sqlPreview.SetBorderColor(styles.Global.BorderColor.Color())
-	m.sqlPreview.Draw(screen)
-
-	// Draw type dropdown as last overlay so it renders on top of everything
-	if m.showDropdown {
-		editRow := m.selectedCol + 1
-		dropX := innerX + innerW/3
-		dropY := columnsTableY + editRow
-		dropW := innerW / 3
-		if dropW < 22 {
-			dropW = 22
-		}
-		dropH := len(m.Driver.CommonDataTypes()) + 2 // +2 for border
-		maxDropH := screenH - dropY - 1
-		if dropH > maxDropH {
-			dropH = maxDropH
-		}
-		if dropH < 5 {
-			dropH = 5
-		}
-		m.typeDropdown.SetRect(dropX, dropY, dropW, dropH)
-		m.typeDropdown.SetBorder(true)
-		m.typeDropdown.Draw(screen)
-	}
 }
 
-func (m *CreateTableModal) drawLabel(screen tcell.Screen, x, y int, text string, fg, bg tcell.Color) {
-	style := tcell.StyleDefault.Foreground(fg).Background(bg)
-	for i, ch := range text {
-		screen.SetContent(x+i, y, ch, nil, style)
-	}
-}
-
-// Focus delegates focus to the appropriate sub-component.
+// Focus delegates to tableNameInput when in table-name mode,
+// otherwise to the Flex (which routes to its Box for our InputCapture).
 func (m *CreateTableModal) Focus(delegate func(p tview.Primitive)) {
-	// Always focus self so SetInputCapture receives events
-	m.Box.Focus(delegate)
-}
-
-// HasFocus returns true if the modal has focus.
-func (m *CreateTableModal) HasFocus() bool {
-	return m.Box.HasFocus()
+	if m.focus == focusTableName {
+		m.tableNameInput.Focus(delegate)
+	} else {
+		m.Flex.Focus(delegate)
+	}
 }
 
 func (m *CreateTableModal) Hide() {

@@ -46,10 +46,10 @@ type SchemaTree struct {
 
 func NewSchemaTree() *SchemaTree {
 	s := &SchemaTree{
-		BaseElement: core.NewBaseElement(),
-		Flex:        core.NewFlex(),
-		tree:        core.NewTreeView(),
-		filterBar:   NewInputBar(SchemaFilterBarId, "Filter"),
+		BaseElement:      core.NewBaseElement(),
+		Flex:             core.NewFlex(),
+		tree:             core.NewTreeView(),
+		filterBar:        NewInputBar(SchemaFilterBarId, "Filter"),
 		inputModal:       primitives.NewInputModal(),
 		deleteModal:      modal.NewConfirm(SchemaDeleteModalId),
 		createTableModal: modal.NewCreateTableModal(),
