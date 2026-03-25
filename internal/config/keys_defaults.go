@@ -23,19 +23,19 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Move right",
 		},
 		FocusUp: Key{
-			Keys:        []string{"Ctrl+k", "Alt+up"},
+			Keys:        []string{"Ctrl+k", "Ctrl+Up"},
 			Description: "Focus up component/form field",
 		},
 		FocusDown: Key{
-			Keys:        []string{"Ctrl+j", "Alt+down"},
+			Keys:        []string{"Ctrl+j", "Ctrl+Down"},
 			Description: "Focus down component/form field",
 		},
 		FocusLeft: Key{
-			Keys:        []string{"Ctrl+h", "Alt+Left"},
+			Keys:        []string{"Ctrl+h", "Ctrl+Left"},
 			Description: "Focus left component",
 		},
 		FocusRight: Key{
-			Keys:        []string{"Ctrl+l", "Alt+Right"},
+			Keys:        []string{"Ctrl+l", "Ctrl+Right"},
 			Description: "Focus right component",
 		},
 		AutocompleteUp: Key{

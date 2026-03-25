@@ -157,7 +157,6 @@ func (a *App) initAndRenderMain() {
 	}
 
 	a.main.Render()
-	a.Pages.AddPage(a.main.GetIdentifier(), a.main, true, true)
 
 	if jumpInto := a.GetConfig().JumpInto; jumpInto != "" {
 		if err := a.jumpToTable(jumpInto); err != nil {

@@ -1,7 +1,6 @@
 package database
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -47,38 +46,6 @@ func (t *TableState) GetAllRows() []Row {
 	return copies
 }
 
-func (t *TableState) GetRowByPK(pk PrimaryKey) Row {
-	for _, row := range t.rows {
-		if matchesPK(row, pk) {
-			return deepCopyRow(row)
-		}
-	}
-	return nil
-}
-
-func (t *TableState) GetJsonRowByPK(pk PrimaryKey) (string, error) {
-	row := t.GetRowByPK(pk)
-	if row == nil {
-		return "", fmt.Errorf("row not found")
-	}
-	b, err := json.MarshalIndent(row, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-func (t *TableState) GetValueByPKAndColumn(pk PrimaryKey, column string) string {
-	row := t.GetRowByPK(pk)
-	if row == nil {
-		return ""
-	}
-	val, ok := row[column]
-	if !ok {
-		return ""
-	}
-	return StringifyValue(val)
-}
 
 func (t *TableState) SetOffset(offset int64) {
 	if offset < 0 {

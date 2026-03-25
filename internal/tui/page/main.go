@@ -169,7 +169,7 @@ func (m *Main) render() {
 	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
 
 	m.App.Pages.AddPage(m.GetIdentifier(), m, true, true)
-	m.App.SetFocus(m)
+	m.App.SetFocus(m.schemas)
 }
 
 func (m *Main) ToggleHeader() {

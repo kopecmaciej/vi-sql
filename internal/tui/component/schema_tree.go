@@ -202,16 +202,13 @@ func (s *SchemaTree) renderTree(schemas []database.SchemaWithTables, expand bool
 func (s *SchemaTree) renderLayout() {
 	s.Flex.Clear()
 
-	var primitive tview.Primitive
-	primitive = s.tree
-
+	var focusTarget tview.Primitive = s
 	if s.filterBar.IsEnabled() {
 		s.Flex.AddItem(s.filterBar, 3, 0, false)
-		primitive = s.filterBar
+		focusTarget = s.filterBar
 	}
-	defer s.App.SetFocus(primitive)
-
 	s.Flex.AddItem(s.tree, 0, 1, true)
+	s.App.SetFocus(focusTarget)
 }
 
 func (s *SchemaTree) IsFocused() bool {
@@ -383,6 +380,7 @@ func (s *SchemaTree) updateLeafSymbol(node *tview.TreeNode) {
 
 func (s *SchemaTree) filterBarHandler() {
 	acceptFunc := func(text string) {
+		s.filterBar.Disable()
 		s.filter(text)
 	}
 	rejectFunc := func() {

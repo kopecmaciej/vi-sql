@@ -562,14 +562,12 @@ func (c *Content) rowPrimaryKey(row int) *database.PrimaryKey {
 		return nil
 	}
 
-	allCols := c.getVisibleColumns()
 	rows := c.state.GetAllRows()
 	dataRow := row - 1 // account for header
 	if dataRow < 0 || dataRow >= len(rows) {
 		return nil
 	}
 
-	_ = allCols
 	rowData := rows[dataRow]
 	pk := database.PrimaryKey{Columns: make(map[string]any)}
 	for _, col := range pkCols {
@@ -610,11 +608,23 @@ func (c *Content) orderedColumnNames(row database.Row) []string {
 }
 
 func (c *Content) handleCopyCell(row, col int) *tcell.EventKey {
-	cell := c.table.GetCell(row, col)
-	if cell == nil {
+	if row < 1 {
 		return nil
 	}
-	clipboard.WriteAll(cell.Text)
+	headerCell := c.table.GetCell(0, col)
+	if headerCell == nil {
+		return nil
+	}
+	colName, ok := headerCell.GetReference().(string)
+	if !ok {
+		return nil
+	}
+	rows := c.state.GetAllRows()
+	dataRow := row - 1
+	if dataRow < 0 || dataRow >= len(rows) {
+		return nil
+	}
+	clipboard.WriteAll(database.StringifyValue(rows[dataRow][colName]))
 	return nil
 }
 

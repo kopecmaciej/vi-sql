@@ -286,8 +286,11 @@ func (h *Header) UpdateKeys() ([]config.Key, error) {
 	}
 
 	focus := h.currentFocus
-	if focus == SchemaTreeId {
+	switch focus {
+	case SchemaTreeId:
 		focus = "Schema"
+	case "FilterBar", "SortBar":
+		focus = "InputBar"
 	}
 
 	orderedKeys, err := h.App.GetKeys().GetKeysForElement(string(focus))
