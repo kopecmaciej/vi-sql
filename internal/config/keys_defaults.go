@@ -23,19 +23,19 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Move right",
 		},
 		FocusUp: Key{
-			Keys:        []string{"Ctrl+k", "Ctrl+Up"},
+			Keys:        []string{"Ctrl+k", "Backtab"},
 			Description: "Focus up component/form field",
 		},
 		FocusDown: Key{
-			Keys:        []string{"Ctrl+j", "Ctrl+Down"},
+			Keys:        []string{"Ctrl+j", "Tab"},
 			Description: "Focus down component/form field",
 		},
 		FocusLeft: Key{
-			Keys:        []string{"Ctrl+h", "Ctrl+Left"},
+			Keys:        []string{"Ctrl+h", "Backtab"},
 			Description: "Focus left component",
 		},
 		FocusRight: Key{
-			Keys:        []string{"Ctrl+l", "Ctrl+Right"},
+			Keys:        []string{"Ctrl+l", "Tab"},
 			Description: "Focus right component",
 		},
 		AutocompleteUp: Key{
@@ -71,7 +71,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Toggle style change modal",
 		},
 		ToggleHeader: Key{
-			Runes:       []string{"Ctrl+t"},
+			Keys:        []string{"Ctrl+t"},
 			Description: "Expand/collapse header",
 		},
 		HideSchema: Key{
