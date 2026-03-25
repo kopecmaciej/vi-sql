@@ -258,20 +258,34 @@ func (m *CreateTableModal) editCell(colIdx, tableCol int, currentValue string) {
 	input.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
 	input.SetFieldTextColor(styles.Global.TextColor.Color())
 	input.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+	input.SetBorder(true)
+	input.SetBorderColor(styles.Global.BorderColor.Color())
+	input.SetFocusStyle(tcell.StyleDefault.
+		Foreground(styles.Global.FocusColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 
 	if tableCol == 1 {
 		input.SetAutocompleteFunc(m.autocompleteTypes)
-		input.SetInputCapture(core.DropdownInputCapture(m.App.GetKeys(), func(event *tcell.EventKey) *tcell.EventKey {
-			switch event.Key() {
+		// SetAutocompletedFunc handles Enter on the autocomplete list; SetDoneFunc handles
+		// Enter/Escape when autocomplete is closed. This order is required because
+		// SetInputCapture fires before InputHandler, so intercepting Enter there would
+		// call finishEditing with the typed prefix instead of the highlighted item.
+		input.SetAutocompletedFunc(func(text string, index int, source int) bool {
+			if source == tview.AutocompletedEnter {
+				m.finishEditing(colIdx, tableCol, text)
+				return true
+			}
+			return false
+		})
+		input.SetDoneFunc(func(key tcell.Key) {
+			switch key {
 			case tcell.KeyEnter:
 				m.finishEditing(colIdx, tableCol, input.GetText())
-				return nil
 			case tcell.KeyEscape:
 				m.cancelEditing()
-				return nil
 			}
-			return event
-		}))
+		})
+		input.SetInputCapture(core.DropdownInputCapture(m.App.GetKeys(), nil))
 	} else {
 		input.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 			switch event.Key() {
@@ -300,7 +314,7 @@ func (m *CreateTableModal) renderWithEditInput(colIdx, tableCol int) {
 	// by replacing the columns section temporarily
 	editFlex := tview.NewFlex().SetDirection(tview.FlexRow)
 	editFlex.AddItem(m.columnsTable, 0, 1, false)
-	editFlex.AddItem(m.editInput, 1, 0, true)
+	editFlex.AddItem(m.editInput, 3, 0, true)
 
 	m.rebuildLayout(editFlex)
 	m.App.SetFocusInternal(m.editInput)
@@ -517,7 +531,7 @@ func (m *CreateTableModal) rebuildLayout(editSection tview.Primitive) {
 	titleBar.AddItem(schemaLabel, 0, 1, false)
 
 	rows := tview.NewFlex().SetDirection(tview.FlexRow)
-	rows.AddItem(pad(), 1, 0, false) // top padding
+	rows.AddItem(pad(), 1, 0, false)
 	rows.AddItem(titleBar, 1, 0, false)
 	rows.AddItem(pad(), 1, 0, false)
 	if editSection != nil {
@@ -525,13 +539,11 @@ func (m *CreateTableModal) rebuildLayout(editSection tview.Primitive) {
 	} else {
 		rows.AddItem(m.columnsTable, 0, 3, false)
 	}
-	rows.AddItem(pad(), 1, 0, false)
 	rows.AddItem(m.preview, 0, 2, false)
-	rows.AddItem(pad(), 1, 0, false) // bottom padding
 
-	m.Flex.AddItem(pad(), 2, 0, false) // left padding
+	m.Flex.AddItem(pad(), 2, 0, false)
 	m.Flex.AddItem(rows, 0, 1, true)
-	m.Flex.AddItem(pad(), 2, 0, false) // right padding
+	m.Flex.AddItem(pad(), 2, 0, false)
 }
 
 // SetSchema sets the schema name for the new table.

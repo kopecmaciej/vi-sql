@@ -218,7 +218,7 @@ func (m *Main) setKeybindings() {
 				m.App.SetFocus(m.tabBar.GetActiveComponent())
 			}
 			return nil
-		case k.Contains(k.Main.HideSchema, event.Name()):
+		case k.Contains(k.Global.HideSchema, event.Name()):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
 				m.RemoveItem(m.schemas)
 				m.App.SetFocus(m.tabBar.GetActiveComponent())
@@ -227,7 +227,7 @@ func (m *Main) setKeybindings() {
 				m.render()
 			}
 			return nil
-		case k.Contains(k.Main.ShowServerInfo, event.Name()):
+		case k.Contains(k.Global.ServerInfo, event.Name()):
 			m.showServerInfo()
 			return nil
 		}

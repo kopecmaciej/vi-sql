@@ -23,11 +23,11 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Move right",
 		},
 		FocusUp: Key{
-			Keys:        []string{"Ctrl+k", "Backtab"},
+			Keys:        []string{"Ctrl+k", "Alt+up"},
 			Description: "Focus up component/form field",
 		},
 		FocusDown: Key{
-			Keys:        []string{"Ctrl+j", "Tab"},
+			Keys:        []string{"Ctrl+j", "Alt+down"},
 			Description: "Focus down component/form field",
 		},
 		FocusLeft: Key{
@@ -58,7 +58,7 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"q"},
 			Description: "Close application",
 		},
-		ToggleFullScreenHelp: Key{
+		FullScreenHelp: Key{
 			Runes:       []string{"?"},
 			Description: "Toggle full screen help",
 		},
@@ -66,22 +66,19 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+o"},
 			Description: "Open connection page",
 		},
-		ShowStyleModal: Key{
-			Keys:        []string{"Ctrl+t"},
+		ChangeStyle: Key{
+			Keys:        []string{"Alt+t"},
 			Description: "Toggle style change modal",
 		},
 		ToggleHeader: Key{
-			Runes:       []string{"t"},
+			Runes:       []string{"Ctrl+t"},
 			Description: "Expand/collapse header",
 		},
-	}
-
-	k.Main = MainKeys{
 		HideSchema: Key{
 			Runes:       []string{"|"},
 			Description: "Hide schema panel",
 		},
-		ShowServerInfo: Key{
+		ServerInfo: Key{
 			Keys:        []string{"Alt+s"},
 			Description: "Show server info",
 		},

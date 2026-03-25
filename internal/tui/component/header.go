@@ -232,7 +232,7 @@ func (h *Header) Render() {
 	if err != nil {
 		currCol += 2
 		h.Table.SetCell(0, currCol, h.keyCell("no keys for this element"))
-		h.Table.SetCell(1, currCol, h.valueCell("press <"+h.App.GetKeys().Global.ToggleFullScreenHelp.String()+"> for all keybindings"))
+		h.Table.SetCell(1, currCol, h.valueCell("press <"+h.App.GetKeys().Global.FullScreenHelp.String()+"> for all keybindings"))
 		return
 	}
 
