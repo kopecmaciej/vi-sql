@@ -18,6 +18,7 @@ type TableState struct {
 	Where      string
 	OrderBy    string
 	Columns    string
+	LastQuery  string
 	primaryKey []string
 	rows       []Row
 }

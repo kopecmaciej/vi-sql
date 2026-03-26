@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
@@ -45,6 +46,8 @@ type Content struct {
 	columns      []database.ColumnInfo
 	state        *database.TableState
 	stateMap     *database.StateMap
+	lastExecTime time.Duration
+	countPending bool
 }
 
 func NewContent() *Content {
@@ -154,7 +157,7 @@ func (c *Content) setLayout() {
 	c.tableFlex.SetTitleAlign(tview.AlignCenter)
 	c.tableFlex.SetBorderPadding(0, 0, 1, 1)
 
-	c.tableHeader.SetText("Rows: 0, Page: 0/0, Limit: 0")
+	c.tableHeader.SetDynamicColors(true)
 
 	c.Flex.SetDirection(tview.FlexRow)
 }
@@ -298,17 +301,24 @@ func (c *Content) Render() {
 }
 
 func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
+	start := time.Now()
+	c.countPending = c.state.Count == 0
+
 	countCallback := func(count int64) {
 		c.state.Count = count
+		c.countPending = false
 		c.App.QueueUpdateDraw(func() {
 			c.tableHeader.SetText(c.buildHeaderInfo())
 		})
 	}
 
-	rows, err := c.Driver.ListRows(ctx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
+	query, rows, err := c.Driver.ListRows(ctx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
 	if err != nil {
 		return nil, err
 	}
+	c.lastExecTime = time.Since(start)
+	c.state.LastQuery = query
+
 	if len(rows) == 0 {
 		return nil, nil
 	}
@@ -427,17 +437,78 @@ func (c *Content) renderTableView(rows []database.Row) {
 }
 
 func (c *Content) buildHeaderInfo() string {
-	headerInfo := fmt.Sprintf("Rows: %d, Page: %d/%d, Limit: %d",
-		c.state.Count, c.state.GetCurrentPage(), c.state.GetTotalPages(), c.state.Limit)
+	styles := c.App.GetStyles()
+	textColor := styles.Global.TextColor.String()
+	accentColor := styles.Global.SecondaryTextColor.String()
+	blueColor := styles.Global.FocusColor.String()
+	dimColor := "#64748B"
+	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
 
+	execColor := "#4ADE80"
+	switch {
+	case c.lastExecTime >= 500*time.Millisecond:
+		execColor = "#F87171"
+	case c.lastExecTime >= 100*time.Millisecond:
+		execColor = accentColor
+	}
+
+	rowPrefix := ""
+	if c.countPending {
+		rowPrefix = "~"
+	}
+
+	line1 := fmt.Sprintf("[%s]%s.%s[-]%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]limit %d[-]%s[%s]⏱ %s[-]",
+		dimColor, c.state.Schema, c.state.Table,
+		sep,
+		textColor, rowPrefix, formatNumber(c.state.Count),
+		sep,
+		dimColor, c.state.GetCurrentPage(), c.state.GetTotalPages(),
+		sep,
+		dimColor, c.state.Limit,
+		sep,
+		execColor, formatDuration(c.lastExecTime),
+	)
+
+	var filters []string
 	if c.state.Where != "" {
-		headerInfo += fmt.Sprintf(" | WHERE: %s", c.state.Where)
+		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, c.state.Where))
 	}
 	if c.state.OrderBy != "" {
-		headerInfo += fmt.Sprintf(" | ORDER BY: %s", c.state.OrderBy)
+		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, c.state.OrderBy))
 	}
 
-	return headerInfo
+	if len(filters) == 0 {
+		return line1
+	}
+	return line1 + "\n" + strings.Join(filters, sep)
+}
+
+func formatNumber(n int64) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	s := fmt.Sprintf("%d", n)
+	result := make([]byte, 0, len(s)+(len(s)-1)/3)
+	for i, ch := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result = append(result, ',')
+		}
+		result = append(result, byte(ch))
+	}
+	return string(result)
+}
+
+func formatDuration(d time.Duration) string {
+	if d == 0 {
+		return "-"
+	}
+	if d < time.Millisecond {
+		return fmt.Sprintf("%dμs", d.Microseconds())
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // --- Filter / Sort bar handlers ---
@@ -751,7 +822,7 @@ func (c *Content) handleClearSelection() *tcell.EventKey {
 }
 
 func (c *Content) handleToggleQueryBar() *tcell.EventKey {
-	c.queryBar.Toggle("")
+	c.queryBar.Toggle(c.state.LastQuery)
 	c.Render()
 	return nil
 }

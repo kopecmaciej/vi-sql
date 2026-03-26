@@ -220,13 +220,14 @@ func (i *InputBar) LoadAutocompleteKeys(keys []string) {
 func (i *InputBar) Toggle(text string) {
 	if i.enabled {
 		i.enabled = false
-	} else {
-		i.enabled = true
+		return
 	}
-	if text == "" {
-		text = i.GetText()
-	}
-	if text == "" && i.defaultText != "" {
+	i.enabled = true
+	if text != "" {
+		go i.App.QueueUpdateDraw(func() {
+			i.SetText(text)
+		})
+	} else if i.GetText() == "" && i.defaultText != "" {
 		go i.App.QueueUpdateDraw(func() {
 			i.SetWordAtCursor(i.defaultText)
 		})

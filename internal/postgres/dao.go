@@ -254,7 +254,7 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 }
 
 func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
-	columns []string, countCallback func(int64)) ([]database.Row, error) {
+	columns []string, countCallback func(int64)) (string, []database.Row, error) {
 
 	colExpr := "*"
 	if len(columns) > 0 {
@@ -270,7 +270,7 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 
 	if where != "" {
 		if err := database.SanitizeWhereClause(where); err != nil {
-			return nil, err
+			return "", nil, err
 		}
 		query += " WHERE " + where
 	}
@@ -281,13 +281,13 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 
 	rows, err := d.client.Pool.Query(ctx, query, pgx.QueryResultFormats{pgx.TextFormatCode})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list rows: %w", err)
+		return "", nil, fmt.Errorf("failed to list rows: %w", err)
 	}
 	defer rows.Close()
 
 	result, err := scanTextRows(rows)
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 
 	// Count rows asynchronously
@@ -307,7 +307,7 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 		}()
 	}
 
-	return result, nil
+	return query, result, nil
 }
 
 func (d *Dao) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {

@@ -24,7 +24,7 @@ type Driver interface {
 
 	// Row CRUD
 	ListRows(ctx context.Context, state *TableState, where, orderBy string,
-		columns []string, countCallback func(int64)) ([]Row, error)
+		columns []string, countCallback func(int64)) (string, []Row, error)
 	GetRow(ctx context.Context, schema, table string, pk PrimaryKey) (Row, error)
 	InsertRow(ctx context.Context, schema, table string, row Row) (PrimaryKey, error)
 	UpdateRow(ctx context.Context, schema, table string, pk PrimaryKey, original, updated Row) error
