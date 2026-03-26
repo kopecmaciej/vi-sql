@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -32,9 +33,9 @@ type Content struct {
 	*core.BaseElement
 	*core.Flex
 
-	tableFlex    *core.Flex
-	tableHeader  *core.TextView
-	table        *core.Table
+	tableFlex  *core.Flex
+	resultsBar *widget.ResultsBar
+	table      *core.Table
 	style        *config.ContentStyle
 	filterBar    *InputBar
 	sortBar      *InputBar
@@ -55,9 +56,9 @@ func NewContent() *Content {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 
-		tableFlex:    core.NewFlex(),
-		tableHeader:  core.NewTextView(),
-		table:        core.NewTable(),
+		tableFlex:  core.NewFlex(),
+		resultsBar: widget.NewResultsBar(),
+		table:      core.NewTable(),
 		filterBar:    NewInputBar(FilterBarId, "WHERE"),
 		sortBar:      NewInputBar(SortBarId, "ORDER BY"),
 		queryBar:     NewInputBar(QueryBarId, "SQL"),
@@ -134,12 +135,11 @@ func (c *Content) setStyle() {
 	styles := c.App.GetStyles()
 
 	c.tableFlex.SetStyle(styles)
-	c.tableHeader.SetStyle(styles)
+	c.resultsBar.SetStyle(styles)
 	c.Flex.SetStyle(styles)
 	c.table.SetStyle(styles)
 
 	c.tableFlex.SetBorderColor(styles.Others.SeparatorColor.Color())
-	c.tableHeader.SetTextColor(c.style.StatusTextColor.Color())
 
 	c.table.SetBordersColor(styles.Others.SeparatorColor.Color())
 	c.table.SetSeparator(styles.Others.SeparatorSymbol.Rune())
@@ -156,8 +156,6 @@ func (c *Content) setLayout() {
 	c.tableFlex.SetTitle(" Content ")
 	c.tableFlex.SetTitleAlign(tview.AlignCenter)
 	c.tableFlex.SetBorderPadding(0, 0, 1, 1)
-
-	c.tableHeader.SetDynamicColors(true)
 
 	c.Flex.SetDirection(tview.FlexRow)
 }
@@ -266,7 +264,7 @@ func (c *Content) HandleTableSelection(ctx context.Context, schema, table string
 // fresh table selection starts from a clean slate.
 func (c *Content) Reset() {
 	c.table.Clear()
-	c.tableHeader.Clear()
+	c.resultsBar.Clear()
 	c.state = &database.TableState{}
 	c.stateMap = database.NewStateMap()
 	c.columns = nil
@@ -292,7 +290,7 @@ func (c *Content) Render() {
 		focusPrimitive = c.queryBar
 	}
 
-	c.tableFlex.AddItem(c.tableHeader, 2, 0, false)
+	c.tableFlex.AddItem(c.resultsBar, 2, 0, false)
 	c.tableFlex.AddItem(c.table, 0, 1, true)
 
 	c.Flex.AddItem(c.tableFlex, 0, 1, true)
@@ -308,7 +306,7 @@ func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
 		c.state.Count = count
 		c.countPending = false
 		c.App.QueueUpdateDraw(func() {
-			c.tableHeader.SetText(c.buildHeaderInfo())
+			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
 		})
 	}
 
@@ -358,7 +356,7 @@ func (c *Content) updateContent(ctx context.Context, useState bool) error {
 	}
 
 	c.table.Clear()
-	c.tableHeader.SetText(c.buildHeaderInfo())
+	c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
 
 	if len(rows) == 0 {
@@ -434,81 +432,6 @@ func (c *Content) renderTableView(rows []database.Row) {
 		}
 	}
 	c.table.Select(1, 0)
-}
-
-func (c *Content) buildHeaderInfo() string {
-	styles := c.App.GetStyles()
-	textColor := styles.Global.TextColor.String()
-	accentColor := styles.Global.SecondaryTextColor.String()
-	blueColor := styles.Global.FocusColor.String()
-	dimColor := "#64748B"
-	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
-
-	execColor := "#4ADE80"
-	switch {
-	case c.lastExecTime >= 500*time.Millisecond:
-		execColor = "#F87171"
-	case c.lastExecTime >= 100*time.Millisecond:
-		execColor = accentColor
-	}
-
-	rowPrefix := ""
-	if c.countPending {
-		rowPrefix = "~"
-	}
-
-	line1 := fmt.Sprintf("[%s]%s.%s[-]%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]limit %d[-]%s[%s]⏱ %s[-]",
-		dimColor, c.state.Schema, c.state.Table,
-		sep,
-		textColor, rowPrefix, formatNumber(c.state.Count),
-		sep,
-		dimColor, c.state.GetCurrentPage(), c.state.GetTotalPages(),
-		sep,
-		dimColor, c.state.Limit,
-		sep,
-		execColor, formatDuration(c.lastExecTime),
-	)
-
-	var filters []string
-	if c.state.Where != "" {
-		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, c.state.Where))
-	}
-	if c.state.OrderBy != "" {
-		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, c.state.OrderBy))
-	}
-
-	if len(filters) == 0 {
-		return line1
-	}
-	return line1 + "\n" + strings.Join(filters, sep)
-}
-
-func formatNumber(n int64) string {
-	if n < 1000 {
-		return fmt.Sprintf("%d", n)
-	}
-	s := fmt.Sprintf("%d", n)
-	result := make([]byte, 0, len(s)+(len(s)-1)/3)
-	for i, ch := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			result = append(result, ',')
-		}
-		result = append(result, byte(ch))
-	}
-	return string(result)
-}
-
-func formatDuration(d time.Duration) string {
-	if d == 0 {
-		return "-"
-	}
-	if d < time.Millisecond {
-		return fmt.Sprintf("%dμs", d.Microseconds())
-	}
-	if d < time.Second {
-		return fmt.Sprintf("%dms", d.Milliseconds())
-	}
-	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // --- Filter / Sort bar handlers ---
@@ -911,12 +834,12 @@ func (c *Content) renderQueryResults(rows []database.Row, cols []database.Column
 	c.table.SetSelectable(true, true)
 
 	if len(rows) == 0 {
-		c.tableHeader.SetText("Query returned 0 rows")
+		c.resultsBar.SetText("Query returned 0 rows")
 		c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
 		return
 	}
 
-	c.tableHeader.SetText(fmt.Sprintf("Query result: %d rows", len(rows)))
+	c.resultsBar.SetText(fmt.Sprintf("Query result: %d rows", len(rows)))
 
 	for i, col := range cols {
 		headerText := fmt.Sprintf("[%s]%s", c.style.ColumnKeyColor.String(), col.Name)
@@ -951,7 +874,7 @@ func (c *Content) showStatementResult(affected int64) {
 	c.table.Clear()
 	c.table.SetFixed(0, 0)
 	c.table.SetSelectable(false, false)
-	c.tableHeader.SetText(fmt.Sprintf("Statement executed: %d rows affected", affected))
+	c.resultsBar.SetText(fmt.Sprintf("Statement executed: %d rows affected", affected))
 	c.table.SetCell(0, 0, tview.NewTableCell(
 		fmt.Sprintf("%d rows affected", affected)))
 }

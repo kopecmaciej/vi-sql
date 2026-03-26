@@ -9,7 +9,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -21,7 +21,7 @@ type Welcome struct {
 	*core.Flex
 
 	form    *core.Form
-	hintBar *primitives.HintBar
+	hintBar *widget.HintBar
 
 	style *config.WelcomeStyle
 
@@ -33,7 +33,7 @@ func NewWelcome() *Welcome {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		form:        core.NewForm(),
-		hintBar:     primitives.NewHintBar(),
+		hintBar:     widget.NewHintBar(),
 	}
 
 	w.SetIdentifier(WelcomePageId)
@@ -136,7 +136,7 @@ func (w *Welcome) Render() {
 
 func (w *Welcome) renderHints() {
 	k := w.App.GetKeys()
-	w.hintBar.SetHints([]primitives.Hint{
+	w.hintBar.SetHints([]widget.Hint{
 		{Key: k.Navigation.FocusUp.String(), Desc: "form up"},
 		{Key: k.Navigation.FocusDown.String(), Desc: "form down"},
 		{Key: k.Connection.ConnectionForm.SaveConnection.String(), Desc: "save"},

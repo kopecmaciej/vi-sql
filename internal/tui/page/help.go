@@ -8,7 +8,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -34,7 +34,7 @@ type Help struct {
 
 	sectionList *core.List
 	keysTable   *core.Table
-	hintBar     *primitives.HintBar
+	hintBar     *widget.HintBar
 	searchInput *core.InputField
 	keysInput   *core.InputField
 	runesInput  *core.InputField
@@ -56,7 +56,7 @@ func NewHelp() *Help {
 		editFlex:    core.NewFlex(),
 		sectionList: core.NewList(),
 		keysTable:   core.NewTable(),
-		hintBar:     primitives.NewHintBar(),
+		hintBar:     widget.NewHintBar(),
 		searchInput: core.NewInputField(),
 		keysInput:   core.NewInputField(),
 		runesInput:  core.NewInputField(),
@@ -394,7 +394,7 @@ func (h *Help) Render() {
 
 func (h *Help) renderHints() {
 	k := h.App.GetKeys()
-	h.hintBar.SetHints([]primitives.Hint{
+	h.hintBar.SetHints([]widget.Hint{
 		{Key: k.Navigation.FocusRight.String(), Desc: "→ panel"},
 		{Key: k.Navigation.FocusLeft.String(), Desc: "← panel"},
 		{Key: k.Help.Search.String(), Desc: "search"},

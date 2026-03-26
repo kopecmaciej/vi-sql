@@ -9,7 +9,7 @@ import (
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
@@ -24,7 +24,7 @@ type ConnectionForm struct {
 	*core.Flex
 
 	form    *core.Form
-	hintBar *primitives.HintBar
+	hintBar *widget.HintBar
 
 	editConn      *config.SQLConfig // nil == add mode
 	editOrigName  string
@@ -39,7 +39,7 @@ func NewConnectionForm(conn *config.SQLConfig) *ConnectionForm {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		form:        core.NewForm(),
-		hintBar:     primitives.NewHintBar(),
+		hintBar:     widget.NewHintBar(),
 	}
 
 	cf.SetIdentifier(ConnectionFormPageId)
@@ -109,7 +109,7 @@ func (cf *ConnectionForm) Render() {
 
 func (cf *ConnectionForm) renderHints() {
 	k := cf.App.GetKeys()
-	cf.hintBar.SetHints([]primitives.Hint{
+	cf.hintBar.SetHints([]widget.Hint{
 		{Key: k.Navigation.FocusUp.String(), Desc: "field up"},
 		{Key: k.Navigation.FocusDown.String(), Desc: "field down"},
 		{Key: k.Connection.ConnectionForm.SaveConnection.String(), Desc: "save"},

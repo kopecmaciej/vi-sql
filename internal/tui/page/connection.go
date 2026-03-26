@@ -8,7 +8,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -20,7 +20,7 @@ type Connection struct {
 	*core.Flex
 
 	list    *core.List
-	hintBar *primitives.HintBar
+	hintBar *widget.HintBar
 
 	style *config.ConnectionStyle
 
@@ -32,7 +32,7 @@ func NewConnection() *Connection {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		list:        core.NewList(),
-		hintBar:     primitives.NewHintBar(),
+		hintBar:     widget.NewHintBar(),
 	}
 
 	c.SetIdentifier(ConnectionPageId)
@@ -184,7 +184,7 @@ func (c *Connection) Render() {
 
 func (c *Connection) renderHints() {
 	k := c.App.GetKeys()
-	c.hintBar.SetHints([]primitives.Hint{
+	c.hintBar.SetHints([]widget.Hint{
 		{Key: k.Connection.ConnectionList.SetConnection.String(), Desc: "connect"},
 		{Key: k.Connection.ConnectionList.AddConnection.String(), Desc: "add"},
 		{Key: k.Connection.ConnectionList.EditConnection.String(), Desc: "edit"},

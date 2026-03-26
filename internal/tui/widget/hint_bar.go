@@ -1,4 +1,4 @@
-package primitives
+package widget
 
 import (
 	"fmt"
