@@ -33,9 +33,9 @@ type Content struct {
 	*core.BaseElement
 	*core.Flex
 
-	tableFlex  *core.Flex
-	resultsBar *widget.ResultsBar
-	table      *core.Table
+	tableFlex    *core.Flex
+	resultsBar   *widget.ResultsBar
+	table        *core.Table
 	style        *config.ContentStyle
 	filterBar    *InputBar
 	sortBar      *InputBar
@@ -56,9 +56,9 @@ func NewContent() *Content {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 
-		tableFlex:  core.NewFlex(),
-		resultsBar: widget.NewResultsBar(),
-		table:      core.NewTable(),
+		tableFlex:    core.NewFlex(),
+		resultsBar:   widget.NewResultsBar(),
+		table:        core.NewTable(),
 		filterBar:    NewInputBar(FilterBarId, "WHERE"),
 		sortBar:      NewInputBar(SortBarId, "ORDER BY"),
 		queryBar:     NewInputBar(QueryBarId, "SQL"),
@@ -434,8 +434,6 @@ func (c *Content) renderTableView(rows []database.Row) {
 	c.table.Select(1, 0)
 }
 
-// --- Filter / Sort bar handlers ---
-
 func (c *Content) filterBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		c.state.SetWhere(text)
@@ -475,8 +473,6 @@ func (c *Content) sortBarHandler(ctx context.Context) {
 	}
 	c.sortBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
-
-// --- Keybinding handlers ---
 
 func (c *Content) handlePeekRow(_ context.Context, row int, fullScreen bool) *tcell.EventKey {
 	if row < 1 {
@@ -761,22 +757,26 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 	}
 
 	if isSelectQuery(sql) {
+		start := time.Now()
 		rows, cols, err := c.Driver.ExecuteQuery(ctx, sql)
 		if err != nil {
 			modal.ShowError(c.App.Pages, "Query error", err)
 			return
 		}
+		execTime := time.Since(start)
 		c.App.QueueUpdateDraw(func() {
-			c.renderQueryResults(rows, cols)
+			c.renderQueryResults(rows, cols, execTime)
 		})
 	} else {
+		start := time.Now()
 		affected, err := c.Driver.ExecuteStatement(ctx, sql)
 		if err != nil {
 			modal.ShowError(c.App.Pages, "Statement error", err)
 			return
 		}
+		execTime := time.Since(start)
 		c.App.QueueUpdateDraw(func() {
-			c.showStatementResult(affected)
+			c.showStatementResult(affected, execTime)
 		})
 	}
 }
@@ -795,21 +795,23 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 		}
 
 		if isSelectQuery(text) {
+			start := time.Now()
 			rows, cols, err := c.Driver.ExecuteQuery(ctx, text)
 			if err != nil {
 				// Keep the bar open so the user can fix the query.
 				modal.ShowError(c.App.Pages, "Query error", err)
 				return
 			}
-			c.renderQueryResults(rows, cols)
+			c.renderQueryResults(rows, cols, time.Since(start))
 		} else {
+			start := time.Now()
 			affected, err := c.Driver.ExecuteStatement(ctx, text)
 			if err != nil {
 				// Keep the bar open so the user can fix the statement.
 				modal.ShowError(c.App.Pages, "Statement error", err)
 				return
 			}
-			c.showStatementResult(affected)
+			c.showStatementResult(affected, time.Since(start))
 		}
 
 		c.queryBar.Disable()
@@ -828,18 +830,18 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 }
 
 // renderQueryResults displays the rows returned by an ad-hoc SQL query.
-func (c *Content) renderQueryResults(rows []database.Row, cols []database.ColumnInfo) {
+func (c *Content) renderQueryResults(rows []database.Row, cols []database.ColumnInfo, execTime time.Duration) {
 	c.table.Clear()
 	c.table.SetFixed(1, 0)
 	c.table.SetSelectable(true, true)
 
 	if len(rows) == 0 {
-		c.resultsBar.SetText("Query returned 0 rows")
+		c.resultsBar.RenderQueryResult(0, execTime)
 		c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
 		return
 	}
 
-	c.resultsBar.SetText(fmt.Sprintf("Query result: %d rows", len(rows)))
+	c.resultsBar.RenderQueryResult(int64(len(rows)), execTime)
 
 	for i, col := range cols {
 		headerText := fmt.Sprintf("[%s]%s", c.style.ColumnKeyColor.String(), col.Name)
@@ -870,11 +872,11 @@ func (c *Content) renderQueryResults(rows []database.Row, cols []database.Column
 }
 
 // showStatementResult updates the table area after a non-SELECT statement.
-func (c *Content) showStatementResult(affected int64) {
+func (c *Content) showStatementResult(affected int64, execTime time.Duration) {
 	c.table.Clear()
 	c.table.SetFixed(0, 0)
 	c.table.SetSelectable(false, false)
-	c.resultsBar.SetText(fmt.Sprintf("Statement executed: %d rows affected", affected))
+	c.resultsBar.RenderStatementResult(affected, execTime)
 	c.table.SetCell(0, 0, tview.NewTableCell(
 		fmt.Sprintf("%d rows affected", affected)))
 }

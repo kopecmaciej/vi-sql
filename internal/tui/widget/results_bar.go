@@ -37,6 +37,61 @@ func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration, 
 	r.SetText(r.build(state, execTime, countPending))
 }
 
+// RenderQueryResult displays a compact status line for an ad-hoc SQL result
+// (no schema/table context, no pagination).
+func (r *ResultsBar) RenderQueryResult(count int64, execTime time.Duration) {
+	if r.styles == nil {
+		return
+	}
+	styles := r.styles
+	textColor := styles.Global.TextColor.String()
+	dimColor := "#64748B"
+	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
+
+	execColor := "#4ADE80"
+	switch {
+	case execTime >= 500*time.Millisecond:
+		execColor = "#F87171"
+	case execTime >= 100*time.Millisecond:
+		execColor = styles.Global.SecondaryTextColor.String()
+	}
+
+	r.SetText(fmt.Sprintf("[%s]sql[-]%s[%s]%s rows[-]%s[%s]⏱ %s[-]",
+		dimColor,
+		sep,
+		textColor, formatNumber(count),
+		sep,
+		execColor, formatDuration(execTime),
+	))
+}
+
+// RenderStatementResult displays the result of a non-SELECT statement.
+func (r *ResultsBar) RenderStatementResult(affected int64, execTime time.Duration) {
+	if r.styles == nil {
+		return
+	}
+	styles := r.styles
+	textColor := styles.Global.TextColor.String()
+	dimColor := "#64748B"
+	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
+
+	execColor := "#4ADE80"
+	switch {
+	case execTime >= 500*time.Millisecond:
+		execColor = "#F87171"
+	case execTime >= 100*time.Millisecond:
+		execColor = styles.Global.SecondaryTextColor.String()
+	}
+
+	r.SetText(fmt.Sprintf("[%s]sql[-]%s[%s]%s rows affected[-]%s[%s]⏱ %s[-]",
+		dimColor,
+		sep,
+		textColor, formatNumber(affected),
+		sep,
+		execColor, formatDuration(execTime),
+	))
+}
+
 func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, countPending bool) string {
 	styles := r.styles
 	textColor := styles.Global.TextColor.String()
