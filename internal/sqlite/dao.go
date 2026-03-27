@@ -502,6 +502,47 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	return nil
 }
 
+func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64,
+	countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
+
+	displayQuery := fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT %d OFFSET %d", rawSQL, limit, offset)
+	paramQuery := fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT ? OFFSET ?", rawSQL)
+
+	rows, err := d.client.DB.QueryContext(ctx, paramQuery, limit, offset)
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	colNames, err := rows.Columns()
+	if err != nil {
+		return "", nil, nil, err
+	}
+	cols := make([]database.ColumnInfo, len(colNames))
+	for i, c := range colNames {
+		cols[i] = database.ColumnInfo{Name: c, Ordinal: i + 1}
+	}
+
+	result, err := scanRows(rows)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	if countCallback != nil {
+		go func() {
+			countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) AS _q", rawSQL)
+			var count int64
+			if err := d.client.DB.QueryRowContext(ctx, countQuery).Scan(&count); err != nil {
+				log.Error().Err(err).Msg("Failed to count query rows")
+				return
+			}
+			countCallback(count)
+		}()
+	}
+
+	return displayQuery, result, cols, nil
+}
+
 func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, []database.ColumnInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx, query)
 	if err != nil {

@@ -44,6 +44,11 @@ type Driver interface {
 	DropIndex(ctx context.Context, schema, indexName string) error
 
 	// Raw SQL
+	// ListQueryRows wraps rawSQL in a subquery and applies LIMIT/OFFSET for
+	// pagination, mirroring the behaviour of ListRows for regular tables.
+	// countCallback is fired asynchronously with the total result-set size.
+	ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64,
+		countCallback func(int64)) (query string, rows []Row, cols []ColumnInfo, err error)
 	ExecuteQuery(ctx context.Context, query string) ([]Row, []ColumnInfo, error)
 	ExecuteStatement(ctx context.Context, stmt string) (int64, error)
 

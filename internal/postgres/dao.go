@@ -612,6 +612,43 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	return nil
 }
 
+func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64,
+	countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
+
+	paged := fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT %d OFFSET %d", rawSQL, limit, offset)
+
+	rows, err := d.client.Pool.Query(ctx, paged, pgx.QueryResultFormats{pgx.TextFormatCode})
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	fieldDescs := rows.FieldDescriptions()
+	cols := make([]database.ColumnInfo, len(fieldDescs))
+	for i, fd := range fieldDescs {
+		cols[i] = database.ColumnInfo{Name: fd.Name, Ordinal: i + 1}
+	}
+
+	result, err := scanTextRows(rows)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	if countCallback != nil {
+		go func() {
+			countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) AS _q", rawSQL)
+			var count int64
+			if err := d.client.Pool.QueryRow(ctx, countQuery).Scan(&count); err != nil {
+				log.Error().Err(err).Msg("Failed to count query rows")
+				return
+			}
+			countCallback(count)
+		}()
+	}
+
+	return paged, result, cols, nil
+}
+
 func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, []database.ColumnInfo, error) {
 	rows, err := d.client.Pool.Query(ctx, query, pgx.QueryResultFormats{pgx.TextFormatCode})
 	if err != nil {

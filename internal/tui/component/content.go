@@ -310,10 +310,26 @@ func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
 		})
 	}
 
-	query, rows, err := c.Driver.ListRows(ctx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
-	if err != nil {
-		return nil, err
+	var (
+		query string
+		rows  []database.Row
+		err   error
+	)
+
+	if c.state.RawSQL != "" {
+		var cols []database.ColumnInfo
+		query, rows, cols, err = c.Driver.ListQueryRows(ctx, c.state.RawSQL, c.state.Limit, c.state.Offset, countCallback)
+		if err != nil {
+			return nil, err
+		}
+		c.columns = cols
+	} else {
+		query, rows, err = c.Driver.ListRows(ctx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	c.lastExecTime = time.Since(start)
 	c.state.LastQuery = query
 
@@ -322,7 +338,9 @@ func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
 	}
 
 	c.state.PopulateRows(rows)
-	c.loadAutocompleteKeys(ctx)
+	if c.state.RawSQL == "" {
+		c.loadAutocompleteKeys(ctx)
+	}
 
 	return rows, nil
 }
@@ -741,7 +759,11 @@ func (c *Content) handleClearSelection() *tcell.EventKey {
 }
 
 func (c *Content) handleToggleQueryBar() *tcell.EventKey {
-	c.queryBar.Toggle(c.state.LastQuery)
+	text := c.state.LastQuery
+	if c.state.RawSQL != "" {
+		text = c.state.RawSQL
+	}
+	c.queryBar.Toggle(text)
 	c.Render()
 	return nil
 }
@@ -757,15 +779,41 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 	}
 
 	if isSelectQuery(sql) {
+		sqlState := database.NewTableState("", "")
+		sqlState.RawSQL = sql
+		sqlState.Limit = c.state.Limit
+
 		start := time.Now()
-		rows, cols, err := c.Driver.ExecuteQuery(ctx, sql)
+		query, rows, cols, err := c.Driver.ListQueryRows(ctx, sql, sqlState.Limit, 0, func(count int64) {
+			sqlState.Count = count
+			c.App.QueueUpdateDraw(func() {
+				c.resultsBar.Render(c.state, c.lastExecTime, false)
+			})
+		})
 		if err != nil {
 			modal.ShowError(c.App.Pages, "Query error", err)
 			return
 		}
 		execTime := time.Since(start)
+		sqlState.LastQuery = query
+		sqlState.PopulateRows(rows)
+
 		c.App.QueueUpdateDraw(func() {
-			c.renderQueryResults(rows, cols, execTime)
+			c.state = sqlState
+			c.columns = cols
+			c.lastExecTime = execTime
+			c.countPending = sqlState.Count == 0
+
+			c.table.Clear()
+			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+
+			if len(rows) == 0 {
+				c.table.SetFixed(0, 0)
+				c.table.SetSelectable(false, false)
+				c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
+				return
+			}
+			c.renderTableView(rows)
 		})
 	} else {
 		start := time.Now()
@@ -795,14 +843,15 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 		}
 
 		if isSelectQuery(text) {
-			start := time.Now()
-			rows, cols, err := c.Driver.ExecuteQuery(ctx, text)
-			if err != nil {
+			sqlState := database.NewTableState("", "")
+			sqlState.RawSQL = text
+			sqlState.Limit = c.state.Limit
+			c.state = sqlState
+			if err := c.updateContent(ctx, false); err != nil {
 				// Keep the bar open so the user can fix the query.
 				modal.ShowError(c.App.Pages, "Query error", err)
 				return
 			}
-			c.renderQueryResults(rows, cols, time.Since(start))
 		} else {
 			start := time.Now()
 			affected, err := c.Driver.ExecuteStatement(ctx, text)
@@ -827,48 +876,6 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 		c.App.SetFocus(c.table)
 	}
 	c.queryBar.DoneFuncHandler(acceptFunc, rejectFunc)
-}
-
-// renderQueryResults displays the rows returned by an ad-hoc SQL query.
-func (c *Content) renderQueryResults(rows []database.Row, cols []database.ColumnInfo, execTime time.Duration) {
-	c.table.Clear()
-	c.table.SetFixed(1, 0)
-	c.table.SetSelectable(true, true)
-
-	if len(rows) == 0 {
-		c.resultsBar.RenderQueryResult(0, execTime)
-		c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
-		return
-	}
-
-	c.resultsBar.RenderQueryResult(int64(len(rows)), execTime)
-
-	for i, col := range cols {
-		headerText := fmt.Sprintf("[%s]%s", c.style.ColumnKeyColor.String(), col.Name)
-		if col.DataType != "" {
-			headerText += fmt.Sprintf(" [%s]%s",
-				c.style.ColumnTypeColor.String(),
-				database.AbbreviateTypeName(col.DataType))
-		}
-		c.table.SetCell(0, i, tview.NewTableCell(headerText).
-			SetReference(col.Name).
-			SetSelectable(false).
-			SetBackgroundColor(c.style.HeaderRowBackgroundColor.Color()).
-			SetAlign(tview.AlignCenter))
-	}
-
-	for r, row := range rows {
-		for i, col := range cols {
-			cellText := database.StringifyValue(row[col.Name])
-			if len(cellText) > 35 {
-				cellText = cellText[:35] + "..."
-			}
-			c.table.SetCell(r+1, i, tview.NewTableCell(cellText).
-				SetAlign(tview.AlignLeft).
-				SetMaxWidth(30))
-		}
-	}
-	c.table.Select(1, 0)
 }
 
 // showStatementResult updates the table area after a non-SELECT statement.

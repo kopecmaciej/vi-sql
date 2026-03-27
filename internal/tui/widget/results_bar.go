@@ -30,39 +30,13 @@ func (r *ResultsBar) SetStyle(styles *config.Styles) {
 }
 
 // Render updates the bar text from the given table state and query metadata.
+// When state.RawSQL is set the bar shows "sql" as the label and omits
+// WHERE/ORDER BY (those are baked into the raw query).
 func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration, countPending bool) {
 	if r.styles == nil {
 		return
 	}
 	r.SetText(r.build(state, execTime, countPending))
-}
-
-// RenderQueryResult displays a compact status line for an ad-hoc SQL result
-// (no schema/table context, no pagination).
-func (r *ResultsBar) RenderQueryResult(count int64, execTime time.Duration) {
-	if r.styles == nil {
-		return
-	}
-	styles := r.styles
-	textColor := styles.Global.TextColor.String()
-	dimColor := "#64748B"
-	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
-
-	execColor := "#4ADE80"
-	switch {
-	case execTime >= 500*time.Millisecond:
-		execColor = "#F87171"
-	case execTime >= 100*time.Millisecond:
-		execColor = styles.Global.SecondaryTextColor.String()
-	}
-
-	r.SetText(fmt.Sprintf("[%s]sql[-]%s[%s]%s rows[-]%s[%s]⏱ %s[-]",
-		dimColor,
-		sep,
-		textColor, formatNumber(count),
-		sep,
-		execColor, formatDuration(execTime),
-	))
 }
 
 // RenderStatementResult displays the result of a non-SELECT statement.
@@ -113,8 +87,13 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 		rowPrefix = "~"
 	}
 
-	line1 := fmt.Sprintf("[%s]%s.%s[-]%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]limit %d[-]%s[%s]⏱ %s[-]",
-		dimColor, state.Schema, state.Table,
+	label := fmt.Sprintf("[%s]%s.%s[-]", dimColor, state.Schema, state.Table)
+	if state.RawSQL != "" {
+		label = fmt.Sprintf("[%s]sql[-]", dimColor)
+	}
+
+	line1 := fmt.Sprintf("%s%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]limit %d[-]%s[%s]⏱ %s[-]",
+		label,
 		sep,
 		textColor, rowPrefix, formatNumber(state.Count),
 		sep,
@@ -124,6 +103,11 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 		sep,
 		execColor, formatDuration(execTime),
 	)
+
+	// WHERE / ORDER BY are baked into raw SQL — skip second line in SQL mode.
+	if state.RawSQL != "" {
+		return line1
+	}
 
 	whereVal := state.Where
 	orderByVal := state.OrderBy

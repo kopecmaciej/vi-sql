@@ -19,6 +19,7 @@ type TableState struct {
 	OrderBy    string
 	Columns    string
 	LastQuery  string
+	RawSQL     string // non-empty when displaying an ad-hoc SQL query result
 	primaryKey []string
 	rows       []Row
 }
