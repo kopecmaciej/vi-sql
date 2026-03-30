@@ -216,7 +216,6 @@ func (c *Content) setKeybindings(ctx context.Context) {
 	})
 }
 
-// HandleTableSelection is called when a schema/table is selected in the SchemaTree.
 func (c *Content) HandleTableSelection(ctx context.Context, schema, table string) error {
 	c.filterBar.SetText("")
 	c.sortBar.SetText("")
@@ -454,6 +453,9 @@ func (c *Content) renderTableView(rows []database.Row) {
 
 func (c *Content) filterBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
+		if c.state.RawSQL != "" {
+			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, text, c.state.OrderBy)
+		}
 		c.state.SetWhere(text)
 		err := c.updateContent(ctx, false)
 		if err != nil {
@@ -474,6 +476,9 @@ func (c *Content) filterBarHandler(ctx context.Context) {
 
 func (c *Content) sortBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
+		if c.state.RawSQL != "" {
+			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, text)
+		}
 		c.state.SetOrderBy(text)
 		err := c.updateContent(ctx, false)
 		if err != nil {
@@ -787,7 +792,7 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 		query, rows, cols, err := c.Driver.ListQueryRows(ctx, sql, sqlState.Limit, 0, func(count int64) {
 			sqlState.Count = count
 			c.App.QueueUpdateDraw(func() {
-				c.resultsBar.Render(c.state, c.lastExecTime, false)
+				c.resultsBar.Render(sqlState, c.lastExecTime, false)
 			})
 		})
 		if err != nil {
@@ -846,6 +851,7 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 			sqlState := database.NewTableState("", "")
 			sqlState.RawSQL = text
 			sqlState.Limit = c.state.Limit
+			sqlState.Where, sqlState.OrderBy = database.ExtractSelectClauses(text)
 			c.state = sqlState
 			if err := c.updateContent(ctx, false); err != nil {
 				// Keep the bar open so the user can fix the query.
@@ -878,7 +884,6 @@ func (c *Content) queryBarHandler(ctx context.Context) {
 	c.queryBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-// showStatementResult updates the table area after a non-SELECT statement.
 func (c *Content) showStatementResult(affected int64, execTime time.Duration) {
 	c.table.Clear()
 	c.table.SetFixed(0, 0)
@@ -888,8 +893,6 @@ func (c *Content) showStatementResult(affected int64, execTime time.Duration) {
 		fmt.Sprintf("%d rows affected", affected)))
 }
 
-// handleInlineEdit opens the InlineEditModal pre-filled with the current cell value.
-// On confirm the cell's column is updated via Driver.UpdateRow.
 func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventKey {
 	if row < 1 {
 		return nil

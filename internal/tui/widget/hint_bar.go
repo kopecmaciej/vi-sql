@@ -8,14 +8,11 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 )
 
-// Hint is a key-description pair displayed in a HintBar.
 type Hint struct {
 	Key  string
 	Desc string
 }
 
-// HintBar is a single-line, centered, read-only text view that renders a row
-// of key-description hints with accent/dim coloring.
 type HintBar struct {
 	*tview.TextView
 	styles *config.Styles
