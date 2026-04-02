@@ -1,7 +1,6 @@
 package component
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -23,6 +22,7 @@ type InputBar struct {
 	enabled        bool
 	autocompleteOn bool
 	columnKeys     []string
+	schemas        []database.SchemaWithTables
 	defaultText    string
 	historyModal   *modal.History
 }
@@ -172,35 +172,50 @@ func (i *InputBar) DoneFuncHandler(accept func(string), reject func()) {
 }
 
 func (i *InputBar) EnableAutocomplete() {
-	sqlKeywords := database.SQLKeywords
-
-	i.SetAutocompleteFunc(func(currentText string) (entries []tview.AutocompleteItem) {
-		words := strings.Fields(currentText)
-		if len(words) == 0 {
-			return nil
+	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
+		cursorBytePos := len(i.GetTextBeforeCursor())
+		entries := database.BuildSQLAutocomplete(currentText, cursorBytePos, i.schemas, i.columnKeys)
+		items := make([]tview.AutocompleteItem, len(entries))
+		for j, e := range entries {
+			items[j] = tview.AutocompleteItem{Main: e.Main, Secondary: e.Secondary}
 		}
+		return items
+	})
 
-		currentWord := i.GetWordAtCursor()
-		if currentWord == "" {
-			return nil
+	i.SetAutocompletedFunc(func(text string, index, source int) bool {
+		if source == 0 {
+			return false
 		}
+		before := i.GetTextBeforeCursor()
+		after := i.GetText()[len(before):]
+		ctx := database.DetectContext(database.Tokenize(i.GetText()), len(before))
+		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
+		i.SetText(trimmed + text + after)
+		i.SetCursorPosition(len(trimmed + text))
+		return true
+	})
+}
 
-		escaped := regexp.QuoteMeta(currentWord)
-
-		for _, keyword := range sqlKeywords {
-			if matched, _ := regexp.MatchString("(?i)^"+escaped, keyword); matched {
-				entries = append(entries, tview.AutocompleteItem{Main: keyword})
+// EnableColumnAutocomplete sets up column + keyword autocomplete for simple bars
+// (filter, sort). It shows column names immediately and also suggests the provided
+// keywords when the current word matches their prefix. No full SQL context detection.
+func (i *InputBar) EnableColumnAutocomplete(keywords []string) {
+	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
+		partial := strings.ToLower(currentText)
+		if idx := strings.LastIndexAny(partial, " ,"); idx >= 0 {
+			partial = partial[idx+1:]
+		}
+		var entries []tview.AutocompleteItem
+		for _, col := range i.columnKeys {
+			if partial == "" || strings.HasPrefix(strings.ToLower(col), partial) {
+				entries = append(entries, tview.AutocompleteItem{Main: col})
 			}
 		}
-
-		if i.columnKeys != nil {
-			for _, col := range i.columnKeys {
-				if matched, _ := regexp.MatchString("(?i)^"+escaped, col); matched {
-					entries = append(entries, tview.AutocompleteItem{Main: col})
-				}
+		for _, kw := range keywords {
+			if partial != "" && strings.HasPrefix(strings.ToLower(kw), partial) {
+				entries = append(entries, tview.AutocompleteItem{Main: kw})
 			}
 		}
-
 		return entries
 	})
 
@@ -211,6 +226,30 @@ func (i *InputBar) EnableAutocomplete() {
 		i.SetWordAtCursor(text)
 		return true
 	})
+}
+
+// EnableHighlighting attaches a syntax-highlighting styleFunc to the underlying
+// TextArea. Call again (e.g. on StyleChanged) to update colors.
+func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
+	type cache struct {
+		text   string
+		tokens []database.Token
+	}
+	var c cache
+
+	i.SetStyleFunc(func(byteOffset int) tcell.Style {
+		text := i.GetText()
+		if c.text != text {
+			c.text = text
+			c.tokens = database.Tokenize(text)
+		}
+		return sqlTokenStyle(c.tokens, byteOffset, style)
+	})
+}
+
+// SetSchemas updates the table-name list used by context-aware autocomplete.
+func (i *InputBar) SetSchemas(schemas []database.SchemaWithTables) {
+	i.schemas = schemas
 }
 
 func (i *InputBar) LoadAutocompleteKeys(keys []string) {
@@ -244,6 +283,30 @@ func (i *InputBar) Enable() {
 
 func (i *InputBar) Disable() {
 	i.enabled = false
+}
+
+// sqlTokenStyle returns a tcell.Style for the token that contains byteOffset.
+// It performs a linear scan through tokens (they are sorted by Start).
+func sqlTokenStyle(tokens []database.Token, byteOffset int, s *config.SQLEditorStyle) tcell.Style {
+	for _, tok := range tokens {
+		if tok.Start <= byteOffset && byteOffset < tok.End {
+			switch tok.Type {
+			case database.TokenKeyword:
+				return tcell.StyleDefault.Foreground(s.KeywordColor.Color())
+			case database.TokenString:
+				return tcell.StyleDefault.Foreground(s.StringColor.Color())
+			case database.TokenNumber:
+				return tcell.StyleDefault.Foreground(s.NumberColor.Color())
+			case database.TokenComment:
+				return tcell.StyleDefault.Foreground(s.CommentColor.Color())
+			case database.TokenOperator, database.TokenTypecast:
+				return tcell.StyleDefault.Foreground(s.OperatorColor.Color())
+			default:
+				return tcell.StyleDefault.Foreground(s.IdentifierColor.Color())
+			}
+		}
+	}
+	return tcell.StyleDefault.Foreground(s.IdentifierColor.Color())
 }
 
 // Ctrl+letter names are normalized to uppercase to match tcell.KeyNames.

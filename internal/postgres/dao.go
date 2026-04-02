@@ -615,7 +615,12 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64,
 	countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
 
-	paged := fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT %d OFFSET %d", rawSQL, limit, offset)
+	var paged string
+	if database.HasLimitClause(rawSQL) {
+		paged = rawSQL
+	} else {
+		paged = fmt.Sprintf("SELECT * FROM (%s) AS _q LIMIT %d OFFSET %d", rawSQL, limit, offset)
+	}
 
 	rows, err := d.client.Pool.Query(ctx, paged, pgx.QueryResultFormats{pgx.TextFormatCode})
 	if err != nil {

@@ -142,7 +142,11 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		OpenEditor: Key{
 			Keys:        []string{"Ctrl+e"},
-			Description: "Open SQL editor",
+			Description: "Open SQL editor ($EDITOR)",
+		},
+		OpenTuiEditor: Key{
+			Keys:        []string{"Ctrl+p"},
+			Description: "Open TUI SQL editor",
 		},
 		AddRow: Key{
 			Runes:       []string{"A"},

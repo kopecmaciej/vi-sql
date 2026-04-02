@@ -37,10 +37,11 @@ type Content struct {
 	resultsBar   *widget.ResultsBar
 	table        *core.Table
 	style        *config.ContentStyle
-	filterBar    *InputBar
-	sortBar      *InputBar
-	queryBar     *InputBar
-	sqlEditor    *SQLEditor
+	filterBar      *InputBar
+	sortBar        *InputBar
+	queryBar       *InputBar
+	sqlEditor      *SQLEditor
+	sqlQueryEditor *SQLQueryEditor
 	inlineEdit   *modal.InlineEditModal
 	confirmModal *modal.Confirm
 	peeker       *Peeker
@@ -59,10 +60,11 @@ func NewContent() *Content {
 		tableFlex:    core.NewFlex(),
 		resultsBar:   widget.NewResultsBar(),
 		table:        core.NewTable(),
-		filterBar:    NewInputBar(FilterBarId, "WHERE"),
-		sortBar:      NewInputBar(SortBarId, "ORDER BY"),
-		queryBar:     NewInputBar(QueryBarId, "SQL"),
-		sqlEditor:    NewSQLEditor(),
+		filterBar:      NewInputBar(FilterBarId, "WHERE"),
+		sortBar:        NewInputBar(SortBarId, "ORDER BY"),
+		queryBar:       NewInputBar(QueryBarId, "SQL"),
+		sqlEditor:      NewSQLEditor(),
+		sqlQueryEditor: NewSQLQueryEditor(),
 		inlineEdit:   modal.NewInlineEditModal(),
 		confirmModal: modal.NewConfirm(ContentDeleteModalId),
 		peeker:       NewPeeker(),
@@ -87,6 +89,9 @@ func (c *Content) init() error {
 	if err := c.sqlEditor.Init(c.App); err != nil {
 		return err
 	}
+	if err := c.sqlQueryEditor.Init(c.App); err != nil {
+		return err
+	}
 	if err := c.inlineEdit.Init(c.App); err != nil {
 		return err
 	}
@@ -106,10 +111,15 @@ func (c *Content) init() error {
 		return err
 	}
 
-	c.filterBar.EnableAutocomplete()
-	c.sortBar.EnableAutocomplete()
+	c.filterBar.EnableColumnAutocomplete(database.OperatorKeywords)
+	c.sortBar.EnableColumnAutocomplete(database.OrderKeywords)
 	c.queryBar.EnableAutocomplete()
 	c.queryBar.EnableHistory()
+
+	sqlEditorStyle := &c.App.GetStyles().SQLEditor
+	c.filterBar.EnableHighlighting(sqlEditorStyle)
+	c.sortBar.EnableHighlighting(sqlEditorStyle)
+	c.queryBar.EnableHighlighting(sqlEditorStyle)
 
 	c.filterBarHandler(ctx)
 	c.sortBarHandler(ctx)
@@ -133,6 +143,10 @@ func (c *Content) handleEvents(ctx context.Context) {
 func (c *Content) setStyle() {
 	c.style = &c.App.GetStyles().Content
 	styles := c.App.GetStyles()
+	sqlEditorStyle := &styles.SQLEditor
+	c.filterBar.EnableHighlighting(sqlEditorStyle)
+	c.sortBar.EnableHighlighting(sqlEditorStyle)
+	c.queryBar.EnableHighlighting(sqlEditorStyle)
 
 	c.tableFlex.SetStyle(styles)
 	c.resultsBar.SetStyle(styles)
@@ -194,6 +208,9 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			return c.handleToggleQueryBar()
 		case k.Contains(k.Content.OpenEditor, event.Name()):
 			c.handleOpenEditor(ctx)
+			return nil
+		case k.Contains(k.Content.OpenTuiEditor, event.Name()):
+			c.handleOpenTuiEditor(ctx)
 			return nil
 		case k.Contains(k.Content.ToggleSortBar, event.Name()):
 			return c.handleToggleSort()
@@ -321,6 +338,9 @@ func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
 		if err != nil {
 			return nil, err
 		}
+		if database.HasLimitClause(c.state.RawSQL) {
+			c.state.Limit = int64(len(rows))
+		}
 		c.columns = cols
 	} else {
 		query, rows, err = c.Driver.ListRows(ctx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
@@ -351,11 +371,22 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	}
 	c.filterBar.LoadAutocompleteKeys(cols)
 	c.sortBar.LoadAutocompleteKeys(cols)
+	c.queryBar.LoadAutocompleteKeys(cols)
+	c.sqlQueryEditor.SetColumns(cols)
 
 	c.App.GetManager().Broadcast(manager.EventMsg{
 		Sender:  c.GetIdentifier(),
 		Message: manager.Message{Type: manager.UpdateAutocompleteKeys, Data: cols},
 	})
+
+	schemas, err := c.Driver.ListSchemasWithTables(ctx, "")
+	if err != nil {
+		return
+	}
+	c.filterBar.SetSchemas(schemas)
+	c.sortBar.SetSchemas(schemas)
+	c.queryBar.SetSchemas(schemas)
+	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
 func (c *Content) updateContent(ctx context.Context, useState bool) error {
@@ -801,6 +832,9 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 		}
 		execTime := time.Since(start)
 		sqlState.LastQuery = query
+		if database.HasLimitClause(sql) {
+			sqlState.Limit = int64(len(rows))
+		}
 		sqlState.PopulateRows(rows)
 
 		c.App.QueueUpdateDraw(func() {
@@ -832,6 +866,70 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 			c.showStatementResult(affected, execTime)
 		})
 	}
+}
+
+func (c *Content) handleOpenTuiEditor(ctx context.Context) {
+	c.sqlQueryEditor.SetLoadQuery(func() string {
+		return c.state.LastQuery
+	})
+	c.sqlQueryEditor.SetOnExecute(func(sql string) {
+		c.App.Pages.RemovePage(SQLQueryEditorId)
+		go func() {
+			if isSelectQuery(sql) {
+				sqlState := database.NewTableState("", "")
+				sqlState.RawSQL = sql
+				sqlState.Limit = c.state.Limit
+
+				start := time.Now()
+				query, rows, cols, err := c.Driver.ListQueryRows(ctx, sql, sqlState.Limit, 0, func(count int64) {
+					sqlState.Count = count
+					c.App.QueueUpdateDraw(func() {
+						c.resultsBar.Render(sqlState, c.lastExecTime, false)
+					})
+				})
+				if err != nil {
+					modal.ShowError(c.App.Pages, "Query error", err)
+					return
+				}
+				execTime := time.Since(start)
+				sqlState.LastQuery = query
+				if database.HasLimitClause(sql) {
+					sqlState.Limit = int64(len(rows))
+				}
+				sqlState.PopulateRows(rows)
+
+				c.App.QueueUpdateDraw(func() {
+					c.state = sqlState
+					c.columns = cols
+					c.lastExecTime = execTime
+					c.countPending = sqlState.Count == 0
+
+					c.table.Clear()
+					c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+
+					if len(rows) == 0 {
+						c.table.SetFixed(0, 0)
+						c.table.SetSelectable(false, false)
+						c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
+						return
+					}
+					c.renderTableView(rows)
+				})
+			} else {
+				start := time.Now()
+				affected, err := c.Driver.ExecuteStatement(ctx, sql)
+				if err != nil {
+					modal.ShowError(c.App.Pages, "Statement error", err)
+					return
+				}
+				execTime := time.Since(start)
+				c.App.QueueUpdateDraw(func() {
+					c.showStatementResult(affected, execTime)
+				})
+			}
+		}()
+	})
+	c.sqlQueryEditor.Open("")
 }
 
 // queryBarHandler wires the QueryBar's accept/reject callbacks.

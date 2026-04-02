@@ -103,6 +103,7 @@ type (
 		ToggleFilterOptions Key `yaml:"toggleFilterOptions"`
 		MultipleSelect      Key `yaml:"multipleSelect"`
 		ClearSelection      Key `yaml:"clearSelection"`
+		OpenTuiEditor       Key `yaml:"openTuiEditor"`
 	}
 
 	QueryBar struct {

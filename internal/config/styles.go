@@ -33,6 +33,7 @@ type (
 		Help        HelpStyle        `yaml:"help"`
 		Others      OthersStyle      `yaml:"others"`
 		StyleChange StyleChangeStyle `yaml:"styleChange"`
+		SQLEditor   SQLEditorStyle   `yaml:"sqlEditor"`
 	}
 
 	GlobalStyles struct {
@@ -154,6 +155,15 @@ type (
 		FormInputBackgroundColor Style `yaml:"formInputBackgroundColor"`
 		FormInputColor           Style `yaml:"formInputColor"`
 	}
+
+	SQLEditorStyle struct {
+		KeywordColor    Style `yaml:"keywordColor"`
+		StringColor     Style `yaml:"stringColor"`
+		NumberColor     Style `yaml:"numberColor"`
+		CommentColor    Style `yaml:"commentColor"`
+		OperatorColor   Style `yaml:"operatorColor"`
+		IdentifierColor Style `yaml:"identifierColor"`
+	}
 )
 
 func (s *Styles) loadDefaults() {
@@ -273,6 +283,15 @@ func (s *Styles) loadDefaults() {
 		FormLabelColor:           "#F1FA8C",
 		FormInputBackgroundColor: "#163694",
 		FormInputColor:           "#F1FA8C",
+	}
+
+	s.SQLEditor = SQLEditorStyle{
+		KeywordColor:    "#60A5FA",
+		StringColor:     "#4ADE80",
+		NumberColor:     "#FB923C",
+		CommentColor:    "#64748B",
+		OperatorColor:   "#FDE68A",
+		IdentifierColor: "#E2E8F0",
 	}
 }
 

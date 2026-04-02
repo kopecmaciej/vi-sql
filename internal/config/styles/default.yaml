@@ -85,3 +85,10 @@ aiPrompt:
   formLabelColor: "#FDE68A"
   formInputColor: "#E2E8F0"
   formInputBackgroundColor: "#1E293B"
+sqlEditor:
+  keywordColor: "#4ADE80"
+  stringColor: "#FDE68A"
+  numberColor: "#FB923C"
+  commentColor: "#64748B"
+  operatorColor: "#60A5FA"
+  identifierColor: "#E2E8F0"
