@@ -42,6 +42,7 @@ type SchemaTree struct {
 	mutex             sync.Mutex
 	schemasWithTables []database.SchemaWithTables
 	nodeSelectFunc    func(ctx context.Context, schema, table string) error
+	onSchemasLoaded   func([]database.SchemaWithTables)
 }
 
 func NewSchemaTree() *SchemaTree {
@@ -225,12 +226,19 @@ func (s *SchemaTree) SetSelectFunc(f func(ctx context.Context, schema, table str
 	s.nodeSelectFunc = f
 }
 
+func (s *SchemaTree) SetOnSchemasLoaded(fn func([]database.SchemaWithTables)) {
+	s.onSchemasLoaded = fn
+}
+
 func (s *SchemaTree) listSchemasWithTables(ctx context.Context) error {
 	schemas, err := s.Driver.ListSchemasWithTables(ctx, "")
 	if err != nil {
 		return err
 	}
 	s.schemasWithTables = schemas
+	if s.onSchemasLoaded != nil {
+		s.onSchemasLoaded(schemas)
+	}
 	return nil
 }
 

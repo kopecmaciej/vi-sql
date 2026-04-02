@@ -379,4 +379,19 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Cancel",
 		},
 	}
+
+	k.SQLQueryEditor = SQLQueryEditorKeys{
+		Execute: Key{
+			Keys:        []string{"F5", "Ctrl+Enter"},
+			Description: "Execute query",
+		},
+		LoadQuery: Key{
+			Keys:        []string{"Ctrl+L"},
+			Description: "Load last query",
+		},
+		Close: Key{
+			Keys:        []string{"Esc"},
+			Description: "Close editor",
+		},
+	}
 }

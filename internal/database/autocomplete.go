@@ -4,6 +4,55 @@ import (
 	"strings"
 )
 
+// TableRef holds a schema-qualified table reference parsed from a FROM/JOIN clause.
+// Schema may be empty for unqualified table names.
+type TableRef struct {
+	Schema string
+	Table  string
+}
+
+// ExtractFromTableRefs returns all table references found in FROM/JOIN clauses of sql.
+func ExtractFromTableRefs(sql string) []TableRef {
+	tokens := Tokenize(sql)
+	var refs []TableRef
+	fromKeywords := map[string]bool{
+		"FROM": true, "JOIN": true, "INTO": true,
+	}
+	i := 0
+	for i < len(tokens) {
+		tok := tokens[i]
+		if tok.Type == TokenKeyword && fromKeywords[strings.ToUpper(tok.Value)] {
+			// skip whitespace
+			j := i + 1
+			for j < len(tokens) && tokens[j].Type == TokenWhitespace {
+				j++
+			}
+			if j >= len(tokens) {
+				break
+			}
+			first := tokens[j]
+			if first.Type != TokenIdentifier && first.Type != TokenQuotedIdentifier {
+				i++
+				continue
+			}
+			// check for schema.table
+			if j+2 < len(tokens) && tokens[j+1].Type == TokenDot {
+				second := tokens[j+2]
+				if second.Type == TokenIdentifier || second.Type == TokenQuotedIdentifier {
+					refs = append(refs, TableRef{Schema: first.Value, Table: second.Value})
+					i = j + 3
+					continue
+				}
+			}
+			refs = append(refs, TableRef{Table: first.Value})
+			i = j + 1
+			continue
+		}
+		i++
+	}
+	return refs
+}
+
 // HasLimitClause reports whether sql contains a LIMIT keyword.
 func HasLimitClause(sql string) bool {
 	for _, tok := range Tokenize(sql) {

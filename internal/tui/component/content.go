@@ -42,6 +42,7 @@ type Content struct {
 	queryBar       *InputBar
 	sqlEditor      *SQLEditor
 	sqlQueryEditor *SQLQueryEditor
+	tuiEditorOpen  bool
 	inlineEdit   *modal.InlineEditModal
 	confirmModal *modal.Confirm
 	peeker       *Peeker
@@ -92,6 +93,14 @@ func (c *Content) init() error {
 	if err := c.sqlQueryEditor.Init(c.App); err != nil {
 		return err
 	}
+	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]string, error) {
+		return c.Driver.GetTableColumnNames(context.Background(), schema, table)
+	})
+	c.sqlQueryEditor.SetOnClose(func() {
+		c.tuiEditorOpen = false
+		c.Render()
+		c.App.SetFocus(c.table)
+	})
 	if err := c.inlineEdit.Init(c.App); err != nil {
 		return err
 	}
@@ -286,12 +295,26 @@ func (c *Content) Reset() {
 	c.columns = nil
 }
 
+// SetEditorSchemas propagates the already-loaded schema list to all bars and
+// the SQL query editor so autocomplete works before any table is selected.
+func (c *Content) SetEditorSchemas(schemas []database.SchemaWithTables) {
+	c.filterBar.SetSchemas(schemas)
+	c.sortBar.SetSchemas(schemas)
+	c.queryBar.SetSchemas(schemas)
+	c.sqlQueryEditor.SetSchemas(schemas)
+}
+
 func (c *Content) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()
 
 	var focusPrimitive tview.Primitive
 	focusPrimitive = c
+
+	if c.tuiEditorOpen {
+		c.Flex.AddItem(c.sqlQueryEditor, 10, 0, true)
+		focusPrimitive = c.sqlQueryEditor
+	}
 
 	if c.filterBar.IsEnabled() {
 		c.Flex.AddItem(c.filterBar, 3, 0, false)
@@ -372,7 +395,7 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	c.filterBar.LoadAutocompleteKeys(cols)
 	c.sortBar.LoadAutocompleteKeys(cols)
 	c.queryBar.LoadAutocompleteKeys(cols)
-	c.sqlQueryEditor.SetColumns(cols)
+	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, cols)
 
 	c.App.GetManager().Broadcast(manager.EventMsg{
 		Sender:  c.GetIdentifier(),
@@ -869,16 +892,29 @@ func (c *Content) handleOpenEditor(ctx context.Context) {
 }
 
 func (c *Content) handleOpenTuiEditor(ctx context.Context) {
+	if c.tuiEditorOpen {
+		c.tuiEditorOpen = false
+		c.Render()
+		c.App.SetFocus(c.table)
+		return
+	}
+	c.tuiEditorOpen = true
 	c.sqlQueryEditor.SetLoadQuery(func() string {
 		return c.state.LastQuery
 	})
 	c.sqlQueryEditor.SetOnExecute(func(sql string) {
-		c.App.Pages.RemovePage(SQLQueryEditorId)
 		go func() {
 			if isSelectQuery(sql) {
 				sqlState := database.NewTableState("", "")
 				sqlState.RawSQL = sql
 				sqlState.Limit = c.state.Limit
+				if sqlState.Limit <= 0 {
+					_, _, _, height := c.table.GetInnerRect()
+					sqlState.Limit = int64(height - 1)
+					if sqlState.Limit <= 0 {
+						sqlState.Limit = 50
+					}
+				}
 
 				start := time.Now()
 				query, rows, cols, err := c.Driver.ListQueryRows(ctx, sql, sqlState.Limit, 0, func(count int64) {
@@ -929,7 +965,7 @@ func (c *Content) handleOpenTuiEditor(ctx context.Context) {
 			}
 		}()
 	})
-	c.sqlQueryEditor.Open("")
+	c.Render()
 }
 
 // queryBarHandler wires the QueryBar's accept/reject callbacks.

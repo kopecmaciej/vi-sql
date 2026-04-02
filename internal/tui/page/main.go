@@ -95,6 +95,8 @@ func (m *Main) initComponents() error {
 		return err
 	}
 
+	m.schemas.SetOnSchemasLoaded(m.content.SetEditorSchemas)
+
 	m.tabBar.AddTab("Content", m.content, true)
 	m.tabBar.AddTab("Indexes", m.indexes, false)
 	m.tabBar.AddTab("Structure", m.structure, false)
@@ -164,9 +166,9 @@ func (m *Main) render() {
 	if m.headerHeight == 0 {
 		m.headerHeight = 4
 	}
-	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
 	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
 	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
+	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
 
 	m.App.Pages.AddPage(m.GetIdentifier(), m, true, true)
 	m.App.SetFocus(m.schemas)
@@ -175,9 +177,9 @@ func (m *Main) render() {
 func (m *Main) ToggleHeader() {
 	m.headerHeight = m.header.Toggle()
 	m.innerFlex.Clear()
-	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
 	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
 	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
+	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
 	m.header.Render()
 	m.App.GetManager().Broadcast(manager.EventMsg{
 		Sender:  m.GetIdentifier(),

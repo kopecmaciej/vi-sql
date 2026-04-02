@@ -24,20 +24,21 @@ type (
 	}
 
 	KeyBindings struct {
-		Navigation   NavigationKeys   `yaml:"navigation"`
-		Global       GlobalKeys       `yaml:"global"`
-		Help         HelpKeys         `yaml:"help"`
-		Connection   ConnectionKeys   `yaml:"connection"`
-		Schema       SchemaKeys       `yaml:"schema"`
-		InputBar     InputBarKeys     `yaml:"inputBar"`
-		Content      ContentKeys      `yaml:"content"`
-		Peeker       PeekerKeys       `yaml:"peeker"`
-		QueryBar     QueryBar         `yaml:"queryBar"`
-		Index        IndexKeys        `yaml:"index"`
-		IndexAddForm IndexAddFormKeys `yaml:"indexAddForm"`
-		Structure    StructureKeys    `yaml:"structure"`
-		History      HistoryKeys      `yaml:"history"`
-		CreateTable  CreateTableKeys  `yaml:"createTable"`
+		Navigation     NavigationKeys     `yaml:"navigation"`
+		Global         GlobalKeys         `yaml:"global"`
+		Help           HelpKeys           `yaml:"help"`
+		Connection     ConnectionKeys     `yaml:"connection"`
+		Schema         SchemaKeys         `yaml:"schema"`
+		InputBar       InputBarKeys       `yaml:"inputBar"`
+		Content        ContentKeys        `yaml:"content"`
+		Peeker         PeekerKeys         `yaml:"peeker"`
+		QueryBar       QueryBar           `yaml:"queryBar"`
+		SQLQueryEditor SQLQueryEditorKeys `yaml:"sqlQueryEditor"`
+		Index          IndexKeys          `yaml:"index"`
+		IndexAddForm   IndexAddFormKeys   `yaml:"indexAddForm"`
+		Structure      StructureKeys      `yaml:"structure"`
+		History        HistoryKeys        `yaml:"history"`
+		CreateTable    CreateTableKeys    `yaml:"createTable"`
 	}
 
 	NavigationKeys struct {
@@ -170,6 +171,12 @@ type (
 		DeleteColumn Key `yaml:"deleteColumn"`
 		Execute      Key `yaml:"execute"`
 		Cancel       Key `yaml:"cancel"`
+	}
+
+	SQLQueryEditorKeys struct {
+		Execute   Key `yaml:"execute"`
+		LoadQuery Key `yaml:"loadQuery"`
+		Close     Key `yaml:"close"`
 	}
 )
 

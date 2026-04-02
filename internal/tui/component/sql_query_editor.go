@@ -9,6 +9,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const SQLQueryEditorId = "SQLQueryEditor"
@@ -19,17 +20,21 @@ type SQLQueryEditor struct {
 	*core.BaseElement
 	*tview.TextArea
 
-	style     *config.SQLEditorStyle
-	schemas   []database.SchemaWithTables
-	columns   []string
-	onExecute func(sql string)
-	loadQuery func() string
+	style         *config.SQLEditorStyle
+	schemas       []database.SchemaWithTables
+	columns       []string
+	columnCache   map[string][]string // key: "schema.table" or "table"
+	columnFetcher func(schema, table string) ([]string, error)
+	onExecute     func(sql string)
+	loadQuery     func() string
+	onClose       func()
 }
 
 func NewSQLQueryEditor() *SQLQueryEditor {
 	e := &SQLQueryEditor{
 		BaseElement: core.NewBaseElement(),
 		TextArea:    tview.NewTextArea(),
+		columnCache: make(map[string][]string),
 	}
 	e.SetIdentifier(SQLQueryEditorId)
 	e.SetAfterInitFunc(e.init)
@@ -51,10 +56,16 @@ func (e *SQLQueryEditor) setStyle() {
 	fg := styles.Global.TextColor.Color()
 	border := styles.Global.FocusColor.Color()
 
+	k := e.App.GetKeys()
+	title := " SQL Editor  " +
+		k.SQLQueryEditor.Execute.String() + ": execute  " +
+		k.SQLQueryEditor.LoadQuery.String() + ": load query  " +
+		k.SQLQueryEditor.Close.String() + ": close "
+
 	e.TextArea.SetTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
 	e.TextArea.SetBorder(true)
 	e.TextArea.SetBorderColor(border)
-	e.TextArea.SetTitle(" SQL Editor  F5/Ctrl+Enter: execute  Ctrl+L: load query  Esc: close ")
+	e.TextArea.SetTitle(title)
 	e.TextArea.SetTitleAlign(tview.AlignLeft)
 }
 
@@ -76,12 +87,129 @@ func (e *SQLQueryEditor) setHighlighting() {
 	})
 }
 
+// resolveColumnsForQuery merges columns from all tables referenced in the FROM/JOIN
+// clauses of text. Falls back to e.columns when no references are resolvable.
+func (e *SQLQueryEditor) resolveColumnsForQuery(text string) []string {
+	refs := database.ExtractFromTableRefs(text)
+	if len(refs) == 0 {
+		return e.columns
+	}
+
+	seen := make(map[string]bool)
+	var merged []string
+
+	for _, ref := range refs {
+		schema := ref.Schema
+		table := ref.Table
+
+		// Resolve schema if missing
+		if schema == "" {
+			for _, s := range e.schemas {
+				for _, t := range s.Tables {
+					if strings.EqualFold(t, table) {
+						schema = s.Schema
+						break
+					}
+				}
+				if schema != "" {
+					break
+				}
+			}
+		}
+
+		key := schema + "." + table
+		cols, ok := e.columnCache[key]
+		if !ok && key == "." + table {
+			// try unqualified key
+			cols, ok = e.columnCache[table]
+		}
+		if !ok && e.columnFetcher != nil {
+			fetched, err := e.columnFetcher(schema, table)
+			if err == nil {
+				cols = fetched
+				if key != "."+table {
+					e.columnCache[key] = cols
+				}
+				e.columnCache[table] = cols
+			}
+		}
+
+		for _, col := range cols {
+			if !seen[col] {
+				seen[col] = true
+				merged = append(merged, col)
+			}
+		}
+	}
+
+	if len(merged) == 0 {
+		return e.columns
+	}
+	return merged
+}
+
+// resolveColumnsForTable returns columns for a specific table (for CtxAfterDot).
+func (e *SQLQueryEditor) resolveColumnsForTable(tableName string) []string {
+	// Try qualified keys first
+	for _, s := range e.schemas {
+		for _, t := range s.Tables {
+			if strings.EqualFold(t, tableName) {
+				key := s.Schema + "." + t
+				if cols, ok := e.columnCache[key]; ok {
+					return cols
+				}
+				if e.columnFetcher != nil {
+					cols, err := e.columnFetcher(s.Schema, t)
+					if err == nil {
+						e.columnCache[key] = cols
+						e.columnCache[t] = cols
+						return cols
+					}
+				}
+			}
+		}
+	}
+	// Fall back to unqualified cache
+	if cols, ok := e.columnCache[tableName]; ok {
+		return cols
+	}
+	return e.columns
+}
+
 func (e *SQLQueryEditor) setAutocomplete() {
 	e.TextArea.SetAutocompleteFunc(func(text string, cursorBytePos int) []tview.AutocompleteItem {
 		if cursorBytePos > 0 && strings.HasSuffix(strings.TrimSpace(text[:cursorBytePos]), ";") {
 			return nil
 		}
-		entries := database.BuildSQLAutocomplete(text, cursorBytePos, e.schemas, e.columns)
+
+		// Detect context to decide which columns to pass
+		tokens := database.Tokenize(text)
+		ctx := database.DetectContext(tokens, cursorBytePos)
+
+		var cols []string
+		switch ctx.Type {
+		case database.CtxAfterDot:
+			// Check if qualifier is a table (not a schema)
+			isSchema := false
+			for _, s := range e.schemas {
+				if strings.EqualFold(ctx.TableName, s.Schema) {
+					isSchema = true
+					break
+				}
+			}
+			if !isSchema && ctx.TableName != "" {
+				cols = e.resolveColumnsForTable(ctx.TableName)
+			} else {
+				cols = e.columns
+			}
+		case database.CtxAfterSelect, database.CtxAfterWhere, database.CtxAfterOn,
+			database.CtxAfterOrderBy, database.CtxAfterGroupBy, database.CtxAfterSet:
+			cols = e.resolveColumnsForQuery(text)
+		default:
+			cols = e.columns
+		}
+
+		entries := database.BuildSQLAutocomplete(text, cursorBytePos, e.schemas, cols)
 		items := make([]tview.AutocompleteItem, len(entries))
 		for i, en := range entries {
 			items[i] = tview.AutocompleteItem{Main: en.Main, Secondary: en.Secondary}
@@ -119,26 +247,47 @@ func (e *SQLQueryEditor) SetSchemas(schemas []database.SchemaWithTables) {
 	e.schemas = schemas
 }
 
-// SetColumns updates the column list for SELECT/WHERE autocomplete.
+// SetColumns updates the column list for the currently selected table (fallback).
 func (e *SQLQueryEditor) SetColumns(columns []string) {
 	e.columns = columns
 }
 
-// SetOnExecute sets the callback invoked when the user presses F5/Ctrl+Enter.
+// SetColumnsForTable caches columns for a specific schema.table and sets them
+// as the fallback column list.
+func (e *SQLQueryEditor) SetColumnsForTable(schema, table string, columns []string) {
+	key := schema + "." + table
+	e.columnCache[key] = columns
+	e.columnCache[table] = columns
+	e.columns = columns
+}
+
+// SetColumnFetcher provides a function to fetch columns on demand for tables
+// referenced in the SQL editor that haven't been cached yet.
+func (e *SQLQueryEditor) SetColumnFetcher(fn func(schema, table string) ([]string, error)) {
+	e.columnFetcher = fn
+}
+
+// SetOnExecute sets the callback invoked when the user presses the execute key.
 func (e *SQLQueryEditor) SetOnExecute(fn func(sql string)) {
 	e.onExecute = fn
 }
 
 // SetLoadQuery sets a callback that returns the current query bar text.
-// Bound to Ctrl+L so the user can pull it into the editor on demand.
 func (e *SQLQueryEditor) SetLoadQuery(fn func() string) {
 	e.loadQuery = fn
 }
 
-// InputHandler intercepts Ctrl+Enter (execute) and Escape (close), passing
-// everything else to the underlying TextArea.
+// SetOnClose sets the callback invoked when the user closes the editor.
+func (e *SQLQueryEditor) SetOnClose(fn func()) {
+	e.onClose = fn
+}
+
+// InputHandler intercepts execute/load/paste/close keys, passing everything
+// else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return e.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		k := e.App.GetKeys()
+
 		execute := func() {
 			if e.onExecute != nil {
 				sql := strings.TrimRight(strings.TrimSpace(e.GetText()), ";")
@@ -147,37 +296,43 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				}
 			}
 		}
-		switch event.Key() {
-		case tcell.KeyF5:
+
+		switch {
+		case k.Contains(k.SQLQueryEditor.Execute, event.Name()):
+			// Ctrl+Enter comes as KeyEnter with Ctrl modifier; F5 as KeyF5.
+			// The Contains check handles F5. For Ctrl+Enter we check the modifier.
+			if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModCtrl == 0 {
+				// Plain Enter — pass through to TextArea (newline).
+				break
+			}
 			execute()
 			return
-		case tcell.KeyCtrlL:
+		case k.Contains(k.SQLQueryEditor.LoadQuery, event.Name()):
 			if e.loadQuery != nil {
 				if q := e.loadQuery(); q != "" {
 					e.SetText(q, true)
 				}
 			}
 			return
-		case tcell.KeyEnter:
-			if event.Modifiers()&tcell.ModCtrl != 0 {
-				execute()
-				return
+		case k.Contains(k.InputBar.Paste, event.Name()):
+			_, pasteFunc := util.GetClipboard()
+			if text := pasteFunc(); text != "" {
+				before := e.GetTextBeforeCursor()
+				after := e.GetText()[len(before):]
+				e.SetText(before+text+after, false)
+				e.Select(len(before+text), len(before+text))
 			}
-		case tcell.KeyEscape:
+			return
+		case k.Contains(k.SQLQueryEditor.Close, event.Name()):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(event, setFocus)
 				return
 			}
-			e.App.Pages.RemovePage(SQLQueryEditorId)
+			if e.onClose != nil {
+				e.onClose()
+			}
 			return
 		}
 		e.TextArea.InputHandler()(event, setFocus)
 	})
-}
-
-// Open adds the editor as a centered overlay on app.Pages.
-func (e *SQLQueryEditor) Open(initial string) {
-	e.SetText(initial, initial == "")
-	e.App.Pages.AddPage(SQLQueryEditorId, e, true, true)
-	e.App.SetFocusInternal(e)
 }
