@@ -56,16 +56,10 @@ func (e *SQLQueryEditor) setStyle() {
 	fg := styles.Global.TextColor.Color()
 	border := styles.Global.FocusColor.Color()
 
-	k := e.App.GetKeys()
-	title := " SQL Editor  " +
-		k.SQLQueryEditor.Execute.String() + ": execute  " +
-		k.SQLQueryEditor.LoadQuery.String() + ": load query  " +
-		k.SQLQueryEditor.Close.String() + ": close "
-
 	e.TextArea.SetTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
 	e.TextArea.SetBorder(true)
 	e.TextArea.SetBorderColor(border)
-	e.TextArea.SetTitle(title)
+	e.TextArea.SetTitle(" SQL Editor ")
 	e.TextArea.SetTitleAlign(tview.AlignLeft)
 }
 
