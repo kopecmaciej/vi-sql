@@ -176,6 +176,7 @@ type (
 	SQLQueryEditorKeys struct {
 		Execute   Key `yaml:"execute"`
 		LoadQuery Key `yaml:"loadQuery"`
+		Clear     Key `yaml:"clear"`
 		Close     Key `yaml:"close"`
 	}
 )

@@ -119,7 +119,7 @@ func (e *SQLQueryEditor) resolveColumnsForQuery(text string) []string {
 
 		key := schema + "." + table
 		cols, ok := e.columnCache[key]
-		if !ok && key == "." + table {
+		if !ok && key == "."+table {
 			// try unqualified key
 			cols, ok = e.columnCache[table]
 		}
@@ -222,11 +222,9 @@ func (e *SQLQueryEditor) setAutocomplete() {
 			return false
 		}
 		before := e.GetTextBeforeCursor()
-		after := e.GetText()[len(before):]
 		ctx := database.DetectContext(database.Tokenize(e.GetText()), len(before))
-		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
-		e.SetText(trimmed+text+after, false)
-		e.Select(len(trimmed+text), len(trimmed+text))
+		startPos := len(before) - len(ctx.PartialWord)
+		e.Replace(startPos, len(before), text)
 		return true
 	})
 }
@@ -299,12 +297,6 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 
 		switch {
 		case k.Contains(k.SQLQueryEditor.Execute, event.Name()):
-			// Ctrl+Enter comes as KeyEnter with Ctrl modifier; F5 as KeyF5.
-			// The Contains check handles F5. For Ctrl+Enter we check the modifier.
-			if event.Key() == tcell.KeyEnter && event.Modifiers()&tcell.ModCtrl == 0 {
-				// Plain Enter — pass through to TextArea (newline).
-				break
-			}
 			execute()
 			return
 		case k.Contains(k.SQLQueryEditor.LoadQuery, event.Name()):
@@ -322,6 +314,9 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				e.SetText(before+text+after, false)
 				e.Select(len(before+text), len(before+text))
 			}
+			return
+		case k.Contains(k.SQLQueryEditor.Clear, event.Name()):
+			e.SetText("", true)
 			return
 		case k.Contains(k.SQLQueryEditor.Close, event.Name()):
 			if e.TextArea.IsAutocompleteVisible() {

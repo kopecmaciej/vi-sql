@@ -382,12 +382,16 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.SQLQueryEditor = SQLQueryEditorKeys{
 		Execute: Key{
-			Keys:        []string{"F5", "Ctrl+Enter"},
+			Keys:        []string{"Ctrl+s"},
 			Description: "Execute query",
 		},
 		LoadQuery: Key{
-			Keys:        []string{"Ctrl+L"},
+			Keys:        []string{"Ctrl+l"},
 			Description: "Load last query",
+		},
+		Clear: Key{
+			Keys:        []string{"Ctrl+u"},
+			Description: "Clear editor",
 		},
 		Close: Key{
 			Keys:        []string{"Esc"},
