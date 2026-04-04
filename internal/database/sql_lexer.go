@@ -208,44 +208,16 @@ func isNumContinue(ch byte) bool {
 }
 
 // sqlKeywordSet is the full set of SQL reserved words recognised by the lexer.
+// It is derived from allKeywordWords in keywords.go — that is the single source
+// of truth. Multi-word entries (e.g. "LEFT JOIN") are split on spaces so that
+// each individual word is classified as TokenKeyword during tokenization.
 // Keys are upper-case; lookup is always done with strings.ToUpper.
 var sqlKeywordSet = func() map[string]bool {
-	words := []string{
-		// DML
-		"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "WITH",
-		// DDL
-		"CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME",
-		// Clauses
-		"FROM", "WHERE", "HAVING", "GROUP", "ORDER", "BY",
-		"JOIN", "LEFT", "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "NATURAL",
-		"ON", "USING", "INTO", "VALUES", "SET", "RETURNING",
-		"LIMIT", "OFFSET", "FETCH", "NEXT", "ROWS", "ONLY", "FOR",
-		"UNION", "INTERSECT", "EXCEPT", "ALL", "DISTINCT",
-		// Boolean logic
-		"AND", "OR", "NOT",
-		// Predicates
-		"IN", "BETWEEN", "LIKE", "ILIKE", "SIMILAR", "IS",
-		"EXISTS", "ANY", "SOME", "UNIQUE",
-		// Values
-		"NULL", "TRUE", "FALSE", "DEFAULT",
-		// Table/column keywords
-		"AS", "CASE", "WHEN", "THEN", "ELSE", "END",
-		"CONSTRAINT", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "CHECK",
-		"TABLE", "VIEW", "INDEX", "SCHEMA", "DATABASE", "SEQUENCE",
-		"FUNCTION", "PROCEDURE", "TRIGGER", "COLUMN", "ROW", "TYPE",
-		// Order
-		"ASC", "DESC", "NULLS", "FIRST", "LAST",
-		// Functions (common)
-		"CAST", "COALESCE", "NULLIF", "COUNT", "SUM", "AVG", "MIN", "MAX",
-		"NOW", "CURRENT_TIMESTAMP", "CURRENT_DATE",
-		"LOWER", "UPPER", "TRIM", "LENGTH",
-		// Misc
-		"DO", "BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT",
-		"GRANT", "REVOKE", "EXPLAIN", "ANALYZE", "VACUUM",
-	}
-	m := make(map[string]bool, len(words))
-	for _, w := range words {
-		m[w] = true
+	m := make(map[string]bool, len(allKeywordWords)*2)
+	for _, kw := range allKeywordWords {
+		for _, word := range strings.Fields(kw) {
+			m[strings.ToUpper(word)] = true
+		}
 	}
 	return m
 }()
