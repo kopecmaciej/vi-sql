@@ -178,6 +178,7 @@ type (
 		LoadQuery Key `yaml:"loadQuery"`
 		Clear     Key `yaml:"clear"`
 		Close     Key `yaml:"close"`
+		Expand    Key `yaml:"expand"`
 	}
 )
 

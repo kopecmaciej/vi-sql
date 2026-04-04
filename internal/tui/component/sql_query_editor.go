@@ -16,6 +16,11 @@ const SQLQueryEditorId = "SQLQueryEditor"
 
 // SQLQueryEditor is an in-TUI multi-line SQL editor backed by a tview.TextArea.
 // It supports syntax highlighting via SetStyleFunc and context-aware autocomplete.
+const (
+	sqlEditorDefaultHeight  = 10
+	sqlEditorExpandedHeight = 20
+)
+
 type SQLQueryEditor struct {
 	*core.BaseElement
 	*tview.TextArea
@@ -28,6 +33,8 @@ type SQLQueryEditor struct {
 	onExecute     func(sql string)
 	loadQuery     func() string
 	onClose       func()
+	onExpand      func()
+	expanded      bool
 }
 
 func NewSQLQueryEditor() *SQLQueryEditor {
@@ -77,7 +84,7 @@ func (e *SQLQueryEditor) setHighlighting() {
 			c.text = text
 			c.tokens = database.Tokenize(text)
 		}
-		return sqlTokenStyle(c.tokens, byteOffset, style)
+		return core.SQLTokenStyle(c.tokens, byteOffset, style)
 	})
 }
 
@@ -274,6 +281,20 @@ func (e *SQLQueryEditor) SetOnClose(fn func()) {
 	e.onClose = fn
 }
 
+// SetOnExpand sets the callback invoked when the user toggles the editor size.
+func (e *SQLQueryEditor) SetOnExpand(fn func()) {
+	e.onExpand = fn
+}
+
+// Toggle flips the expanded state and returns the new required height.
+func (e *SQLQueryEditor) Toggle() int {
+	e.expanded = !e.expanded
+	if e.expanded {
+		return sqlEditorExpandedHeight
+	}
+	return sqlEditorDefaultHeight
+}
+
 // InputHandler intercepts execute/load/paste/close keys, passing everything
 // else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
@@ -300,13 +321,31 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				}
 			}
 			return
+		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+			if e.TextArea.IsAutocompleteVisible() {
+				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)
+				return
+			}
+		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+			if e.TextArea.IsAutocompleteVisible() {
+				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone), setFocus)
+				return
+			}
+		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+			if e.TextArea.IsAutocompleteVisible() {
+				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
+				return
+			}
 		case k.Contains(k.InputBar.Paste, event.Name()):
 			_, pasteFunc := util.GetClipboard()
 			if text := pasteFunc(); text != "" {
-				before := e.GetTextBeforeCursor()
-				after := e.GetText()[len(before):]
-				e.SetText(before+text+after, false)
-				e.Select(len(before+text), len(before+text))
+				cursorPos := len(e.GetTextBeforeCursor())
+				e.Replace(cursorPos, cursorPos, text)
+			}
+			return
+		case k.Contains(k.SQLQueryEditor.Expand, event.Name()):
+			if e.onExpand != nil {
+				e.onExpand()
 			}
 			return
 		case k.Contains(k.SQLQueryEditor.Clear, event.Name()):

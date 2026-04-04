@@ -397,5 +397,9 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Esc"},
 			Description: "Close editor",
 		},
+		Expand: Key{
+			Keys:        []string{"Ctrl+e"},
+			Description: "Toggle expand",
+		},
 	}
 }

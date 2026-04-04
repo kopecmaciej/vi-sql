@@ -243,7 +243,7 @@ func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
 			c.text = text
 			c.tokens = database.Tokenize(text)
 		}
-		return sqlTokenStyle(c.tokens, byteOffset, style)
+		return core.SQLTokenStyle(c.tokens, byteOffset, style)
 	})
 }
 
@@ -283,30 +283,6 @@ func (i *InputBar) Enable() {
 
 func (i *InputBar) Disable() {
 	i.enabled = false
-}
-
-// sqlTokenStyle returns a tcell.Style for the token that contains byteOffset.
-// It performs a linear scan through tokens (they are sorted by Start).
-func sqlTokenStyle(tokens []database.Token, byteOffset int, s *config.SQLEditorStyle) tcell.Style {
-	for _, tok := range tokens {
-		if tok.Start <= byteOffset && byteOffset < tok.End {
-			switch tok.Type {
-			case database.TokenKeyword:
-				return tcell.StyleDefault.Foreground(s.KeywordColor.Color())
-			case database.TokenString:
-				return tcell.StyleDefault.Foreground(s.StringColor.Color())
-			case database.TokenNumber:
-				return tcell.StyleDefault.Foreground(s.NumberColor.Color())
-			case database.TokenComment:
-				return tcell.StyleDefault.Foreground(s.CommentColor.Color())
-			case database.TokenOperator, database.TokenTypecast:
-				return tcell.StyleDefault.Foreground(s.OperatorColor.Color())
-			default:
-				return tcell.StyleDefault.Foreground(s.IdentifierColor.Color())
-			}
-		}
-	}
-	return tcell.StyleDefault.Foreground(s.IdentifierColor.Color())
 }
 
 // Ctrl+letter names are normalized to uppercase to match tcell.KeyNames.

@@ -101,6 +101,10 @@ func (c *Content) init() error {
 		c.Render()
 		c.App.SetFocus(c.table)
 	})
+	c.sqlQueryEditor.SetOnExpand(func() {
+		newH := c.sqlQueryEditor.Toggle()
+		c.Flex.ResizeItem(c.sqlQueryEditor, newH, 0)
+	})
 	if err := c.inlineEdit.Init(c.App); err != nil {
 		return err
 	}
