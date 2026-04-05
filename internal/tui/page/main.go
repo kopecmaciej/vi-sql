@@ -23,13 +23,13 @@ type Main struct {
 	*core.Flex
 
 	innerFlex    *core.Flex
-	header       *component.Header
-	tabBar       *component.TabBar
+	footer       *component.Footer
+	topBar       *component.TopBar
 	schemas      *component.SchemaTree
 	content      *component.Content
 	structure    *component.Structure
 	indexes      *component.Indexes
-	headerHeight int
+	footerHeight int
 }
 
 func NewMain() *Main {
@@ -37,8 +37,8 @@ func NewMain() *Main {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		innerFlex:   core.NewFlex(),
-		header:      component.NewHeader(),
-		tabBar:      component.NewTabBar(),
+		footer:      component.NewFooter(),
+		topBar:      component.NewTopBar(),
 		schemas:     component.NewSchemaTree(),
 		content:     component.NewContent(),
 		structure:   component.NewStructure(),
@@ -76,10 +76,10 @@ func (m *Main) handleEvents() {
 }
 
 func (m *Main) initComponents() error {
-	if err := m.header.Init(m.App); err != nil {
+	if err := m.footer.Init(m.App); err != nil {
 		return err
 	}
-	if err := m.tabBar.Init(m.App); err != nil {
+	if err := m.topBar.Init(m.App); err != nil {
 		return err
 	}
 	if err := m.schemas.Init(m.App); err != nil {
@@ -97,25 +97,25 @@ func (m *Main) initComponents() error {
 
 	m.schemas.SetOnSchemasLoaded(m.content.SetEditorSchemas)
 
-	m.tabBar.AddTab("Content", m.content, true)
-	m.tabBar.AddTab("Indexes", m.indexes, false)
-	m.tabBar.AddTab("Structure", m.structure, false)
+	m.topBar.AddTab("Content", m.content, true)
+	m.topBar.AddTab("Indexes", m.indexes, false)
+	m.topBar.AddTab("Structure", m.structure, false)
 
 	return nil
 }
 
 func (m *Main) Render() {
 	m.schemas.Render()
-	m.header.Render()
-	m.tabBar.Render()
+	m.footer.Render()
+	m.topBar.Render()
 
-	m.header.SetOnHeightChange(func() {
-		newHeight := m.header.ExpandedHeight()
-		if newHeight == m.headerHeight {
+	m.footer.SetOnHeightChange(func() {
+		newHeight := m.footer.ExpandedHeight()
+		if newHeight == m.footerHeight {
 			return
 		}
-		m.headerHeight = newHeight
-		m.innerFlex.ResizeItem(m.header, newHeight, 0)
+		m.footerHeight = newHeight
+		m.innerFlex.ResizeItem(m.footer, newHeight, 0)
 	})
 
 	m.schemas.SetSelectFunc(func(ctx context.Context, schema, table string) error {
@@ -124,7 +124,7 @@ func (m *Main) Render() {
 		}
 		m.structure.HandleTableSelection(ctx, schema, table)
 		m.indexes.HandleTableSelection(ctx, schema, table)
-		m.App.SetFocus(m.tabBar.GetActiveComponent())
+		m.App.SetFocus(m.topBar.GetActiveComponent())
 		return nil
 	})
 
@@ -134,13 +134,15 @@ func (m *Main) Render() {
 func (m *Main) UpdateDriver(driver database.Driver) {
 	m.BaseElement.UpdateDriver(driver)
 	m.schemas.UpdateDriver(driver)
-	m.header.UpdateDriver(driver)
+	m.footer.UpdateDriver(driver)
 	m.content.UpdateDriver(driver)
 	m.structure.UpdateDriver(driver)
 	m.indexes.UpdateDriver(driver)
 
 	m.content.Reset()
-	m.tabBar.ResetRendered()
+	m.topBar.ResetRendered()
+
+	m.App.QueueUpdateDraw(func() { m.topBar.Render() })
 }
 
 func (m *Main) JumpToTable(schema, table string) error {
@@ -154,7 +156,6 @@ func (m *Main) JumpToTable(schema, table string) error {
 
 func (m *Main) render() {
 	m.Clear()
-	m.innerFlex.Clear()
 
 	schemaPanelWidth := m.App.GetConfig().UI.SchemaPanelWidth
 	if schemaPanelWidth == 0 {
@@ -163,27 +164,29 @@ func (m *Main) render() {
 
 	m.AddItem(m.schemas, schemaPanelWidth, 0, true)
 	m.AddItem(m.innerFlex, 0, 7, false)
-	if m.headerHeight == 0 {
-		m.headerHeight = 4
+	if m.footerHeight == 0 {
+		m.footerHeight = 1
 	}
-	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
-	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
-	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
+	m.rebuildInnerFlex()
 
 	m.App.Pages.AddPage(m.GetIdentifier(), m, true, true)
 	m.App.SetFocus(m.schemas)
 }
 
-func (m *Main) ToggleHeader() {
-	m.headerHeight = m.header.Toggle()
+func (m *Main) rebuildInnerFlex() {
 	m.innerFlex.Clear()
-	m.innerFlex.AddItem(m.tabBar, 1, 0, false)
-	m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
-	m.innerFlex.AddItem(m.header, m.headerHeight, 0, false)
-	m.header.Render()
+	m.innerFlex.AddItem(m.topBar, 1, 0, false)
+	m.innerFlex.AddItem(m.topBar.GetActiveComponentAndRender(), 0, 7, true)
+	m.innerFlex.AddItem(m.footer, m.footerHeight, 0, false)
+}
+
+func (m *Main) ToggleHeader() {
+	m.footerHeight = m.footer.Toggle()
+	m.rebuildInnerFlex()
+	m.footer.Render()
 	m.App.GetManager().Broadcast(manager.EventMsg{
 		Sender:  m.GetIdentifier(),
-		Message: manager.Message{Type: manager.HeaderHeightChanged, Data: m.headerHeight},
+		Message: manager.Message{Type: manager.HeaderHeightChanged, Data: m.footerHeight},
 	})
 }
 
@@ -199,31 +202,29 @@ func (m *Main) setKeybindings() {
 				return event
 			}
 			if m.schemas.IsFocused() {
-				m.App.SetFocus(m.tabBar.GetActiveComponent())
+				m.App.SetFocus(m.topBar.GetActiveComponent())
 			} else {
-				m.innerFlex.RemoveItem(m.tabBar.GetActiveComponent())
-				m.tabBar.NextTab()
-				m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
-				m.App.SetFocus(m.tabBar.GetActiveComponent())
+				m.topBar.NextTab()
+				m.rebuildInnerFlex()
+				m.App.SetFocus(m.topBar.GetActiveComponent())
 			}
 			return nil
 		case k.Contains(k.Navigation.FocusLeft, event.Name()):
 			if m.indexes.IsAddFormFocused() {
 				return event
 			}
-			if m.tabBar.GetActiveTabIndex() == 0 {
+			if m.topBar.GetActiveTabIndex() == 0 {
 				m.App.SetFocus(m.schemas)
 			} else {
-				m.innerFlex.RemoveItem(m.tabBar.GetActiveComponent())
-				m.tabBar.PreviousTab()
-				m.innerFlex.AddItem(m.tabBar.GetActiveComponentAndRender(), 0, 7, true)
-				m.App.SetFocus(m.tabBar.GetActiveComponent())
+				m.topBar.PreviousTab()
+				m.rebuildInnerFlex()
+				m.App.SetFocus(m.topBar.GetActiveComponent())
 			}
 			return nil
 		case k.Contains(k.Global.HideSchema, event.Name()):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
 				m.RemoveItem(m.schemas)
-				m.App.SetFocus(m.tabBar.GetActiveComponent())
+				m.App.SetFocus(m.topBar.GetActiveComponent())
 			} else {
 				m.Clear()
 				m.render()

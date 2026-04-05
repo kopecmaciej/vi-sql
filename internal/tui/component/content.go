@@ -33,24 +33,24 @@ type Content struct {
 	*core.BaseElement
 	*core.Flex
 
-	tableFlex    *core.Flex
-	resultsBar   *widget.ResultsBar
-	table        *core.Table
-	style        *config.ContentStyle
+	tableFlex      *core.Flex
+	resultsBar     *widget.ResultsBar
+	table          *core.Table
+	style          *config.ContentStyle
 	filterBar      *InputBar
 	sortBar        *InputBar
 	queryBar       *InputBar
 	sqlEditor      *SQLEditor
 	sqlQueryEditor *SQLQueryEditor
 	tuiEditorOpen  bool
-	inlineEdit   *modal.InlineEditModal
-	confirmModal *modal.Confirm
-	peeker       *Peeker
-	columns      []database.ColumnInfo
-	state        *database.TableState
-	stateMap     *database.StateMap
-	lastExecTime time.Duration
-	countPending bool
+	inlineEdit     *modal.InlineEditModal
+	confirmModal   *modal.Confirm
+	peeker         *Peeker
+	columns        []database.ColumnInfo
+	state          *database.TableState
+	stateMap       *database.StateMap
+	lastExecTime   time.Duration
+	countPending   bool
 }
 
 func NewContent() *Content {
@@ -58,19 +58,19 @@ func NewContent() *Content {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 
-		tableFlex:    core.NewFlex(),
-		resultsBar:   widget.NewResultsBar(),
-		table:        core.NewTable(),
+		tableFlex:      core.NewFlex(),
+		resultsBar:     widget.NewResultsBar(),
+		table:          core.NewTable(),
 		filterBar:      NewInputBar(FilterBarId, "WHERE"),
 		sortBar:        NewInputBar(SortBarId, "ORDER BY"),
 		queryBar:       NewInputBar(QueryBarId, "SQL"),
 		sqlEditor:      NewSQLEditor(),
 		sqlQueryEditor: NewSQLQueryEditor(),
-		inlineEdit:   modal.NewInlineEditModal(),
-		confirmModal: modal.NewConfirm(ContentDeleteModalId),
-		peeker:       NewPeeker(),
-		state:        &database.TableState{},
-		stateMap:     database.NewStateMap(),
+		inlineEdit:     modal.NewInlineEditModal(),
+		confirmModal:   modal.NewConfirm(ContentDeleteModalId),
+		peeker:         NewPeeker(),
+		state:          &database.TableState{},
+		stateMap:       database.NewStateMap(),
 	}
 
 	c.SetIdentifier(ContentId)
