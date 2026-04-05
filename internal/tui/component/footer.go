@@ -54,7 +54,7 @@ func (f *Footer) init() error {
 
 func (f *Footer) setLayout() {
 	f.Table.SetBorder(false)
-	f.Table.SetBorderPadding(0, 0, 1, 1)
+	f.Table.SetBorderPadding(0, 1, 1, 1)
 }
 
 func (f *Footer) setStyle() {

@@ -79,6 +79,7 @@ func (i *InputBar) setStyle() {
 		Italic(true)
 
 	i.SetAutocompleteStyles(background, main, selected, second, false)
+	i.SetAutocompleteBorderColor(i.style.Autocomplete.BorderColor.Color())
 }
 
 func (i *InputBar) setKeybindings() {

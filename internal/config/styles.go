@@ -116,6 +116,7 @@ type (
 		ActiveBackgroundColor Style `yaml:"activeBackgroundColor"`
 		ActiveTextColor       Style `yaml:"activeTextColor"`
 		SecondaryTextColor    Style `yaml:"secondaryTextColor"`
+		BorderColor           Style `yaml:"borderColor"`
 	}
 
 	HistoryStyle struct {
@@ -244,6 +245,7 @@ func (s *Styles) loadDefaults() {
 			ActiveBackgroundColor: "#2563EB",
 			ActiveTextColor:       "#0F172A",
 			SecondaryTextColor:    "#FDE68A",
+			BorderColor:           "#60A5FA",
 		},
 	}
 
@@ -343,6 +345,18 @@ func (s *Styles) LoadMainStyles() {
 	tview.Styles.FocusColor = s.loadColor(s.Global.FocusColor)
 	tview.Styles.TitleColor = s.loadColor(s.Global.TitleColor)
 	tview.Styles.GraphicsColor = s.loadColor(s.Global.GraphicsColor)
+
+	tview.Borders.TopLeft     = tview.BoxDrawingsLightArcDownAndRight
+	tview.Borders.TopRight    = tview.BoxDrawingsLightArcDownAndLeft
+	tview.Borders.BottomLeft  = tview.BoxDrawingsLightArcUpAndRight
+	tview.Borders.BottomRight = tview.BoxDrawingsLightArcUpAndLeft
+
+	tview.Borders.HorizontalFocus  = tview.BoxDrawingsLightHorizontal
+	tview.Borders.VerticalFocus    = tview.BoxDrawingsLightVertical
+	tview.Borders.TopLeftFocus     = tview.BoxDrawingsLightArcDownAndRight
+	tview.Borders.TopRightFocus    = tview.BoxDrawingsLightArcDownAndLeft
+	tview.Borders.BottomLeftFocus  = tview.BoxDrawingsLightArcUpAndRight
+	tview.Borders.BottomRightFocus = tview.BoxDrawingsLightArcUpAndLeft
 }
 
 func (s *Styles) loadColor(color Style) tcell.Color {

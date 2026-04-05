@@ -165,7 +165,7 @@ func (m *Main) render() {
 	m.AddItem(m.schemas, schemaPanelWidth, 0, true)
 	m.AddItem(m.innerFlex, 0, 7, false)
 	if m.footerHeight == 0 {
-		m.footerHeight = 1
+		m.footerHeight = 2
 	}
 	m.rebuildInnerFlex()
 
@@ -175,7 +175,7 @@ func (m *Main) render() {
 
 func (m *Main) rebuildInnerFlex() {
 	m.innerFlex.Clear()
-	m.innerFlex.AddItem(m.topBar, 1, 0, false)
+	m.innerFlex.AddItem(m.topBar, 3, 0, false)
 	m.innerFlex.AddItem(m.topBar.GetActiveComponentAndRender(), 0, 7, true)
 	m.innerFlex.AddItem(m.footer, m.footerHeight, 0, false)
 }

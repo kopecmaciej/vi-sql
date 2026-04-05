@@ -41,21 +41,25 @@ func (t *TopBar) init() error {
 		return err
 	}
 
-	styles := t.App.GetStyles()
-
-	t.Flex.SetDirection(tview.FlexColumn)
-	t.Flex.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-
 	t.connText = tview.NewTextView()
 	t.connText.SetDynamicColors(true)
 	t.connText.SetTextAlign(tview.AlignRight)
-	t.connText.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+
+	t.Flex.SetDirection(tview.FlexColumn)
+	t.Flex.SetBorder(true)
+	t.setStyle()
 
 	t.Flex.AddItem(t.tabBar, 0, 1, false)
 	t.Flex.AddItem(t.connText, connInfoWidth, 0, false)
 
 	t.handleEvents()
 	return nil
+}
+
+func (t *TopBar) setStyle() {
+	styles := t.App.GetStyles()
+	t.Flex.SetStyle(styles)
+	t.connText.SetBackgroundColor(styles.Global.BackgroundColor.Color())
 }
 
 func (t *TopBar) updateConnText() {
@@ -94,7 +98,7 @@ func (t *TopBar) handleEvents() {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			t.App.QueueUpdateDraw(func() {
-				t.connText.SetBackgroundColor(t.App.GetStyles().Global.BackgroundColor.Color())
+				t.setStyle()
 				t.updateConnText()
 			})
 		}

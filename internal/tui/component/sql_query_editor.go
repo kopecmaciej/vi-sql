@@ -69,6 +69,7 @@ func (e *SQLQueryEditor) setStyle() {
 	e.TextArea.SetBorderColor(border)
 	e.TextArea.SetTitle(" SQL Editor ")
 	e.TextArea.SetTitleAlign(tview.AlignCenter)
+	e.TextArea.SetBorderPadding(0, 0, 1, 1)
 
 	a := styles.InputBar.Autocomplete
 	acBackground := a.BackgroundColor.Color()
@@ -79,6 +80,7 @@ func (e *SQLQueryEditor) setStyle() {
 		Background(a.ActiveBackgroundColor.Color()).
 		Foreground(a.ActiveTextColor.Color())
 	e.TextArea.SetAutocompleteStyles(acBackground, acMain, acSelected)
+	e.TextArea.SetAutocompleteBorderColor(a.BorderColor.Color())
 }
 
 func (e *SQLQueryEditor) setHighlighting() {

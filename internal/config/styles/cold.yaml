@@ -59,6 +59,7 @@ inputBar:
     activeBackgroundColor: "#2563EB"
     activeTextColor: "#0F172A"
     secondaryTextColor: "#FDE68A"
+    borderColor: "#60A5FA"
 history:
   textColor: "#E2E8F0"
   selectedTextColor: "#0F172A"
