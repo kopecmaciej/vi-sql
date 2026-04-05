@@ -57,7 +57,7 @@ func (sc *StyleChangeModal) setStyle() {
 	sc.SetMainTextStyle(mainStyle)
 
 	selectedStyle := tcell.StyleDefault.
-		Foreground(sc.style.SelectedTextColor.Color()).
+		Foreground(globalBackground).
 		Background(sc.style.SelectedBackgroundColor.Color())
 	sc.SetSelectedStyle(selectedStyle)
 }

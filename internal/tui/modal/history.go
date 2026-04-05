@@ -64,7 +64,7 @@ func (h *History) setStyle() {
 	h.SetMainTextStyle(mainStyle)
 
 	selectedStyle := tcell.StyleDefault.
-		Foreground(h.style.SelectedTextColor.Color()).
+		Foreground(globalBackground).
 		Background(h.style.SelectedBackgroundColor.Color())
 	h.SetSelectedStyle(selectedStyle)
 }

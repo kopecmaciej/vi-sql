@@ -20,13 +20,12 @@ type (
 
 	Styles struct {
 		Global      GlobalStyles     `yaml:"global"`
-		Welcome     WelcomeStyle     `yaml:"welcome"`
+		Welcome     FormStyle        `yaml:"welcome"`
 		Connection  ConnectionStyle  `yaml:"connection"`
 		Header      HeaderStyle      `yaml:"header"`
 		TabBar      TabBarStyle      `yaml:"tabBar"`
 		Schemas     SchemasStyle     `yaml:"schemas"`
 		Content     ContentStyle     `yaml:"content"`
-		AIPrompt    AIQueryStyle     `yaml:"aiQuery"`
 		RowPeeker   RowPeekerStyle   `yaml:"rowPeeker"`
 		InputBar    InputBarStyle    `yaml:"inputBar"`
 		History     HistoryStyle     `yaml:"history"`
@@ -48,16 +47,14 @@ type (
 		GraphicsColor               Style `yaml:"graphicsColor"`
 	}
 
-	WelcomeStyle struct {
+	FormStyle struct {
 		FormLabelColor           Style `yaml:"formLabelColor"`
 		FormInputColor           Style `yaml:"formInputColor"`
 		FormInputBackgroundColor Style `yaml:"formInputBackgroundColor"`
 	}
 
 	ConnectionStyle struct {
-		FormLabelColor               Style `yaml:"formLabelColor"`
-		FormInputBackgroundColor     Style `yaml:"formInputBackgroundColor"`
-		FormInputColor               Style `yaml:"formInputColor"`
+		FormStyle                    `yaml:",inline"`
 		ListTextColor                Style `yaml:"listTextColor"`
 		ListSelectedTextColor        Style `yaml:"listSelectedTextColor"`
 		ListSelectedBackgroundColor  Style `yaml:"listSelectedBackgroundColor"`
@@ -121,7 +118,6 @@ type (
 
 	HistoryStyle struct {
 		TextColor               Style `yaml:"textColor"`
-		SelectedTextColor       Style `yaml:"selectedTextColor"`
 		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
 	}
 
@@ -147,14 +143,7 @@ type (
 
 	StyleChangeStyle struct {
 		TextColor               Style `yaml:"textColor"`
-		SelectedTextColor       Style `yaml:"selectedTextColor"`
 		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
-	}
-
-	AIQueryStyle struct {
-		FormLabelColor           Style `yaml:"formLabelColor"`
-		FormInputBackgroundColor Style `yaml:"formInputBackgroundColor"`
-		FormInputColor           Style `yaml:"formInputColor"`
 	}
 
 	SQLEditorStyle struct {
@@ -180,16 +169,18 @@ func (s *Styles) loadDefaults() {
 		GraphicsColor:               "#2563EB",
 	}
 
-	s.Welcome = WelcomeStyle{
+	s.Welcome = FormStyle{
 		FormLabelColor:           "#FDE68A",
 		FormInputColor:           "#E2E8F0",
 		FormInputBackgroundColor: "#1E293B",
 	}
 
 	s.Connection = ConnectionStyle{
-		FormLabelColor:               "#F1FA8C",
-		FormInputBackgroundColor:     "#163694",
-		FormInputColor:               "#F1FA8C",
+		FormStyle: FormStyle{
+			FormLabelColor:           "#FDE68A",
+			FormInputColor:           "#E2E8F0",
+			FormInputBackgroundColor: "#1E293B",
+		},
 		ListTextColor:                "#F1FA8C",
 		ListSelectedTextColor:        "#F1FA8C",
 		ListSelectedBackgroundColor:  "#2563EB",
@@ -251,7 +242,6 @@ func (s *Styles) loadDefaults() {
 
 	s.History = HistoryStyle{
 		TextColor:               "#E2E8F0",
-		SelectedTextColor:       "#0F172A",
 		SelectedBackgroundColor: "#2563EB",
 	}
 
@@ -277,14 +267,7 @@ func (s *Styles) loadDefaults() {
 
 	s.StyleChange = StyleChangeStyle{
 		TextColor:               "#E2E8F0",
-		SelectedTextColor:       "#0F172A",
 		SelectedBackgroundColor: "#2563EB",
-	}
-
-	s.AIPrompt = AIQueryStyle{
-		FormLabelColor:           "#F1FA8C",
-		FormInputBackgroundColor: "#163694",
-		FormInputColor:           "#F1FA8C",
 	}
 
 	s.SQLEditor = SQLEditorStyle{

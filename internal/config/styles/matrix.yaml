@@ -45,10 +45,6 @@ content:
     cellTextColor: '#00E676'
     selectedRowColor: '#69FF47'
     multiSelectedRowColor: '#145A2A'
-aiQuery:
-    formLabelColor: '#F1FA8C'
-    formInputBackgroundColor: '#163694'
-    formInputColor: '#F1FA8C'
 rowPeeker:
     keyColor: '#00E676'
     valueColor: '#B9F6CA'
@@ -66,7 +62,6 @@ inputBar:
         borderColor: '#00E676'
 history:
     textColor: '#B9F6CA'
-    selectedTextColor: '#0C110C'
     selectedBackgroundColor: '#1A6B32'
 help:
     headerColor: '#00E676'
@@ -86,7 +81,6 @@ others:
     separatorColor: '#1A3A1A'
 styleChange:
     textColor: '#B9F6CA'
-    selectedTextColor: '#0C110C'
     selectedBackgroundColor: '#1A6B32'
 sqlEditor:
     keywordColor: '#60A5FA'

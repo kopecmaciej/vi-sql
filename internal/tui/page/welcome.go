@@ -23,7 +23,7 @@ type Welcome struct {
 	form    *core.Form
 	hintBar *widget.HintBar
 
-	style *config.WelcomeStyle
+	style *config.FormStyle
 
 	onSubmit func()
 }
