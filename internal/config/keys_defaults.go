@@ -70,9 +70,9 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Alt+t"},
 			Description: "Change style",
 		},
-		ToggleHeader: Key{
+		ToggleFooter: Key{
 			Keys:        []string{"Ctrl+t"},
-			Description: "Expand/collapse header",
+			Description: "Expand/collapse footer",
 		},
 		HideSchema: Key{
 			Runes:       []string{"|"},

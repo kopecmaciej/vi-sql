@@ -70,7 +70,7 @@ func (a *App) setKeybindings() {
 		case a.GetKeys().Contains(a.GetKeys().Global.ChangeStyle, event.Name()):
 			a.ShowStyleChangeModal()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ToggleHeader, event.Name()):
+		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFooter, event.Name()):
 			if a.main.App != nil {
 				a.main.ToggleHeader()
 			}

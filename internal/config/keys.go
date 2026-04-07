@@ -62,7 +62,7 @@ type (
 		OpenConnection  Key `yaml:"openConnection"`
 		ChangeStyle     Key `yaml:"changeStyle"`
 		ServerInfo      Key `yaml:"serverInfo"`
-		ToggleHeader    Key `yaml:"toggleHeader"`
+		ToggleFooter    Key `yaml:"togglefooter"`
 		HideSchema      Key `yaml:"hideSchema"`
 		NewTab          Key `yaml:"newTab"`
 		CloseTab        Key `yaml:"closeTab"`
