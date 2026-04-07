@@ -83,11 +83,11 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Server info",
 		},
 		NewTab: Key{
-			Keys:        []string{"Alt+n"},
+			Keys:        []string{"Ctrl+a"},
 			Description: "New query tab",
 		},
 		CloseTab: Key{
-			Keys:        []string{"Alt+w"},
+			Keys:        []string{"Ctrl+w"},
 			Description: "Close tab",
 		},
 		FocusSchemaTree: Key{
