@@ -57,15 +57,16 @@ type (
 	}
 
 	GlobalKeys struct {
-		CloseApp       Key `yaml:"closeApp"`
-		FullScreenHelp Key `yaml:"fullScreenHelp"`
-		OpenConnection Key `yaml:"openConnection"`
-		ChangeStyle    Key `yaml:"changeStyle"`
-		ServerInfo     Key `yaml:"serverInfo"`
-		ToggleHeader   Key `yaml:"toggleHeader"`
-		HideSchema     Key `yaml:"hideSchema"`
-		NewTab         Key `yaml:"newTab"`
-		CloseTab       Key `yaml:"closeTab"`
+		CloseApp        Key `yaml:"closeApp"`
+		FullScreenHelp  Key `yaml:"fullScreenHelp"`
+		OpenConnection  Key `yaml:"openConnection"`
+		ChangeStyle     Key `yaml:"changeStyle"`
+		ServerInfo      Key `yaml:"serverInfo"`
+		ToggleHeader    Key `yaml:"toggleHeader"`
+		HideSchema      Key `yaml:"hideSchema"`
+		NewTab          Key `yaml:"newTab"`
+		CloseTab        Key `yaml:"closeTab"`
+		FocusSchemaTree Key `yaml:"focusSchemaTree"`
 	}
 
 	SchemaKeys struct {
@@ -76,6 +77,7 @@ type (
 		AddTable    Key `yaml:"addTable"`
 		DeleteTable Key `yaml:"deleteTable"`
 		RenameTable Key `yaml:"renameTable"`
+		ExpandTable Key `yaml:"expandTable"`
 	}
 
 	InputBarKeys struct {

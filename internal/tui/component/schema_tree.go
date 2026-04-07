@@ -140,6 +140,12 @@ func (s *SchemaTree) setKeybindings() {
 		case k.Contains(k.Schema.RenameTable, event.Name()):
 			s.showRenameTableModal(ctx)
 			return nil
+		case k.Contains(k.Schema.ExpandTable, event.Name()):
+			current := s.tree.GetCurrentNode()
+			if current != nil && !s.isSubnode(current) && current.GetLevel() >= 2 {
+				current.SetExpanded(!current.IsExpanded())
+			}
+			return nil
 		case k.Contains(k.Schema.FilterBar, event.Name()):
 			s.filterBar.Enable()
 			s.renderLayout()
@@ -298,12 +304,7 @@ func (s *SchemaTree) addTableNode(ctx context.Context, parent *tview.TreeNode, s
 	parent.AddChild(node).SetExpanded(expand)
 	node.SetReference(parent)
 	node.SetSelectedFunc(func() {
-		// Toggle child visibility
-		wasExpanded := node.IsExpanded()
-		node.SetExpanded(!wasExpanded)
-
-		// Open a new tab only when expanding (first click opens, second collapses)
-		if !wasExpanded {
+		if s.nodeSelectFunc != nil {
 			if err := s.nodeSelectFunc(ctx, schemaName, tableName); err != nil {
 				log.Error().Err(err).Msg("Error selecting table")
 				modal.ShowError(s.App.Pages, "Error selecting table", err)

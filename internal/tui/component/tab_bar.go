@@ -177,6 +177,24 @@ func (t *TabBar) GetActiveTabName() string {
 	return ""
 }
 
+// SwitchToTabByName activates the first tab with the given name.
+// Returns true if a matching tab was found.
+func (t *TabBar) SwitchToTabByName(name string) bool {
+	for i, tab := range t.tabs {
+		if tab.id == name {
+			t.active = i
+			t.Render()
+			return true
+		}
+	}
+	return false
+}
+
+// GetTabCount returns the total number of registered tabs.
+func (t *TabBar) GetTabCount() int {
+	return len(t.tabs)
+}
+
 // ResetRendered clears the rendered flag on all tabs so each tab's Render()
 // is called again on the next GetActiveComponentAndRender invocation.
 func (t *TabBar) ResetRendered() {

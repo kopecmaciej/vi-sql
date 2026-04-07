@@ -161,6 +161,17 @@ func (t *TopBar) GetActiveTabName() string {
 	return t.tabBar.GetActiveTabName()
 }
 
+// SwitchToTabByName activates the first tab with the given name.
+// Returns true if a matching tab was found.
+func (t *TopBar) SwitchToTabByName(name string) bool {
+	return t.tabBar.SwitchToTabByName(name)
+}
+
+// GetTabCount returns the total number of registered tabs.
+func (t *TopBar) GetTabCount() int {
+	return t.tabBar.GetTabCount()
+}
+
 // ResetRendered clears the rendered flag on all tabs.
 func (t *TopBar) ResetRendered() {
 	t.tabBar.ResetRendered()

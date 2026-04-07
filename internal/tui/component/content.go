@@ -360,6 +360,12 @@ func (c *Content) SetEditorSchemas(schemas []database.SchemaWithTables) {
 	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
+// OpenEditorOnRender causes the SQL query editor to be shown when Render is called.
+// Used for new blank query tabs so the user lands on the editor immediately.
+func (c *Content) OpenEditorOnRender() {
+	c.tuiEditorOpen = true
+}
+
 func (c *Content) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()

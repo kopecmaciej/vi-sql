@@ -90,6 +90,10 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Alt+w"},
 			Description: "Close tab",
 		},
+		FocusSchemaTree: Key{
+			Keys:        []string{"Alt+b"},
+			Description: "Focus schema tree",
+		},
 	}
 
 	k.Schema = SchemaKeys{
@@ -120,6 +124,10 @@ func (k *KeyBindings) loadDefaults() {
 		RenameTable: Key{
 			Runes:       []string{"R"},
 			Description: "Rename table",
+		},
+		ExpandTable: Key{
+			Runes:       []string{"e"},
+			Description: "Expand table",
 		},
 	}
 
