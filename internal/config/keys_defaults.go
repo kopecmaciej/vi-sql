@@ -82,6 +82,14 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Alt+s"},
 			Description: "Server info",
 		},
+		NewTab: Key{
+			Keys:        []string{"Alt+n"},
+			Description: "New query tab",
+		},
+		CloseTab: Key{
+			Keys:        []string{"Alt+w"},
+			Description: "Close tab",
+		},
 	}
 
 	k.Schema = SchemaKeys{

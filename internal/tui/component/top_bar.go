@@ -110,6 +110,26 @@ func (t *TopBar) AddTab(name string, component TabBarPrimitive, defaultTab bool)
 	t.tabBar.AddTab(name, component, defaultTab)
 }
 
+// AddDynamicTab adds a tab at runtime and activates it. Returns its index.
+func (t *TopBar) AddDynamicTab(name string, component TabBarPrimitive) int {
+	return t.tabBar.AddDynamicTab(name, component)
+}
+
+// CloseActiveTab removes the active tab. Does nothing if only one tab remains.
+func (t *TopBar) CloseActiveTab() {
+	t.tabBar.CloseActiveTab()
+}
+
+// HasTabs reports whether any tabs are registered.
+func (t *TopBar) HasTabs() bool {
+	return t.tabBar.HasTabs()
+}
+
+// ClearAllTabs removes all tabs from the tab bar.
+func (t *TopBar) ClearAllTabs() {
+	t.tabBar.ClearAllTabs()
+}
+
 // NextTab switches to the next tab.
 func (t *TopBar) NextTab() {
 	t.tabBar.NextTab()
@@ -134,6 +154,11 @@ func (t *TopBar) GetActiveComponentAndRender() TabBarPrimitive {
 // GetActiveTabIndex returns the index of the currently active tab.
 func (t *TopBar) GetActiveTabIndex() int {
 	return t.tabBar.GetActiveTabIndex()
+}
+
+// GetActiveTabName returns the name of the currently active tab.
+func (t *TopBar) GetActiveTabName() string {
+	return t.tabBar.GetActiveTabName()
 }
 
 // ResetRendered clears the rendered flag on all tabs.

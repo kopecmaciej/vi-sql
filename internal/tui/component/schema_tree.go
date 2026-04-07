@@ -42,6 +42,8 @@ type SchemaTree struct {
 	mutex             sync.Mutex
 	schemasWithTables []database.SchemaWithTables
 	nodeSelectFunc    func(ctx context.Context, schema, table string) error
+	nodeColumnsFunc   func(ctx context.Context, schema, table string)
+	nodeIndexesFunc   func(ctx context.Context, schema, table string)
 	onSchemasLoaded   func([]database.SchemaWithTables)
 }
 
@@ -226,6 +228,18 @@ func (s *SchemaTree) SetSelectFunc(f func(ctx context.Context, schema, table str
 	s.nodeSelectFunc = f
 }
 
+// SetColumnsFunc registers a callback invoked when the user selects the
+// "Columns" child node under a table. Use it to show the structure panel.
+func (s *SchemaTree) SetColumnsFunc(f func(ctx context.Context, schema, table string)) {
+	s.nodeColumnsFunc = f
+}
+
+// SetIndexesFunc registers a callback invoked when the user selects the
+// "Indexes" child node under a table. Use it to show the index panel.
+func (s *SchemaTree) SetIndexesFunc(f func(ctx context.Context, schema, table string)) {
+	s.nodeIndexesFunc = f
+}
+
 func (s *SchemaTree) SetOnSchemasLoaded(fn func([]database.SchemaWithTables)) {
 	s.onSchemasLoaded = fn
 }
@@ -284,14 +298,40 @@ func (s *SchemaTree) addTableNode(ctx context.Context, parent *tview.TreeNode, s
 	parent.AddChild(node).SetExpanded(expand)
 	node.SetReference(parent)
 	node.SetSelectedFunc(func() {
-		_, cleanTable := s.removeSymbols(parent.GetText(), node.GetText())
-		cleanSchema, _ := s.removeSymbols(parent.GetText(), "")
-		err := s.nodeSelectFunc(ctx, cleanSchema, cleanTable)
-		if err != nil {
-			log.Error().Err(err).Msg("Error selecting table")
-			modal.ShowError(s.App.Pages, "Error selecting table", err)
+		// Toggle child visibility
+		wasExpanded := node.IsExpanded()
+		node.SetExpanded(!wasExpanded)
+
+		// Open a new tab only when expanding (first click opens, second collapses)
+		if !wasExpanded {
+			if err := s.nodeSelectFunc(ctx, schemaName, tableName); err != nil {
+				log.Error().Err(err).Msg("Error selecting table")
+				modal.ShowError(s.App.Pages, "Error selecting table", err)
+			}
 		}
 	})
+
+	columnsNode := tview.NewTreeNode("  Columns")
+	columnsNode.SetColor(s.style.NodeTextColor.Color())
+	columnsNode.SetSelectable(true)
+	columnsNode.SetReference("__subnode__")
+	columnsNode.SetSelectedFunc(func() {
+		if s.nodeColumnsFunc != nil {
+			s.nodeColumnsFunc(ctx, schemaName, tableName)
+		}
+	})
+	node.AddChild(columnsNode)
+
+	indexesNode := tview.NewTreeNode("  Indexes")
+	indexesNode.SetColor(s.style.NodeTextColor.Color())
+	indexesNode.SetSelectable(true)
+	indexesNode.SetReference("__subnode__")
+	indexesNode.SetSelectedFunc(func() {
+		if s.nodeIndexesFunc != nil {
+			s.nodeIndexesFunc(ctx, schemaName, tableName)
+		}
+	})
+	node.AddChild(indexesNode)
 }
 
 func (s *SchemaTree) expandAllNodes(closedSymbol, openSymbol string) {
@@ -330,16 +370,33 @@ func (s *SchemaTree) removeSymbols(schema, table string) (string, string) {
 	return strings.TrimSpace(schema), strings.TrimSpace(table)
 }
 
+func (s *SchemaTree) isSubnode(node *tview.TreeNode) bool {
+	ref, ok := node.GetReference().(string)
+	return ok && ref == "__subnode__"
+}
+
 func (s *SchemaTree) refreshStyle() {
 	root := s.tree.GetRoot()
 	if root == nil {
 		return
 	}
 	root.Walk(func(node, parent *tview.TreeNode) bool {
-		if parent != nil {
-			s.updateNodeSymbol(parent)
+		// Skip Columns/Indexes sub-nodes — they keep plain text.
+		if s.isSubnode(node) {
+			node.SetColor(s.style.NodeTextColor.Color())
+			return true
 		}
-		s.updateLeafSymbol(node)
+		// updateNodeSymbol(parent) is only correct for schema-level nodes.
+		// Table nodes have a *tview.TreeNode reference; schema nodes have nil.
+		if parent != nil && !s.isSubnode(parent) {
+			if _, isTableRef := parent.GetReference().(*tview.TreeNode); !isTableRef {
+				s.updateNodeSymbol(parent)
+			}
+		}
+		// Only apply leaf symbol to table nodes (not schema nodes or sub-nodes).
+		if _, isTableRef := node.GetReference().(*tview.TreeNode); isTableRef {
+			s.updateLeafSymbol(node)
+		}
 		return true
 	})
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -27,12 +28,33 @@ const (
 	ContentEditModalId   = "ContentEditModal"
 )
 
+// QueryTabMode controls which keybindings and features are active.
+type QueryTabMode int
+
+const (
+	// TableMode: pre-filled SELECT, full CRUD keybindings. Used when opening a
+	// table directly from the schema tree.
+	TableMode QueryTabMode = iota
+	// QueryMode: blank editor, read-only results. Used for ad-hoc query tabs.
+	QueryMode
+)
+
+// contentTabCounter generates unique identifiers for each Content/QueryTab instance
+// so that multiple tabs can subscribe to the event system without colliding.
+var contentTabCounter int32
+
+func nextContentID() string {
+	n := atomic.AddInt32(&contentTabCounter, 1)
+	return fmt.Sprintf("QueryTab-%d", n)
+}
+
 // Content displays table rows in a grid with pagination, filtering,
 // sorting, column hide/show, and row CRUD.
 type Content struct {
 	*core.BaseElement
 	*core.Flex
 
+	mode           QueryTabMode
 	tableFlex      *core.Flex
 	resultsBar     *widget.ResultsBar
 	table          *core.Table
@@ -54,32 +76,45 @@ type Content struct {
 	countPending   bool
 }
 
-func NewContent() *Content {
+func newContent(mode QueryTabMode) *Content {
+	id := tview.Identifier(nextContentID())
 	c := &Content{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 
+		mode:           mode,
 		tableFlex:      core.NewFlex(),
 		resultsBar:     widget.NewResultsBar(),
 		table:          core.NewTable(),
-		filterBar:      NewInputBar(FilterBarId, "WHERE"),
-		sortBar:        NewInputBar(SortBarId, "ORDER BY"),
-		queryBar:       NewInputBar(QueryBarId, "SQL"),
+		filterBar:      NewInputBar(id+"-filter", "WHERE"),
+		sortBar:        NewInputBar(id+"-sort", "ORDER BY"),
+		queryBar:       NewInputBar(id+"-query", "SQL"),
 		sqlEditor:      NewTermEditor(),
 		sqlQueryEditor: NewSQLQueryEditor(),
 		inlineEdit:     modal.NewInlineEditModal(),
-		confirmModal:   modal.NewConfirm(ContentDeleteModalId),
+		confirmModal:   modal.NewConfirm(id + "-delete"),
 		peeker:         NewPeeker(),
 		explainViewer:  NewExplainViewer(),
 		state:          &database.TableState{},
 		stateMap:       database.NewStateMap(),
 	}
 
-	c.SetIdentifier(ContentId)
-	c.table.SetIdentifier(ContentId)
+	c.SetIdentifier(id)
+	c.table.SetIdentifier(id)
 	c.SetAfterInitFunc(c.init)
 
 	return c
+}
+
+// NewContent creates a blank query-mode tab (no CRUD, empty editor).
+func NewContent() *Content {
+	return newContent(QueryMode)
+}
+
+// NewTableTab creates a table-mode tab with full CRUD keybindings.
+// Callers must follow up with HandleTableSelection to load data.
+func NewTableTab() *Content {
+	return newContent(TableMode)
 }
 
 func (c *Content) init() error {
@@ -149,7 +184,7 @@ func (c *Content) init() error {
 }
 
 func (c *Content) handleEvents(ctx context.Context) {
-	go c.HandleEvents(ContentId, func(event manager.EventMsg) {
+	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			c.setStyle()
@@ -202,26 +237,12 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			return c.handlePeekRow(ctx, row, false)
 		case k.Contains(k.Content.FullPagePeek, event.Name()):
 			return c.handlePeekRow(ctx, row, true)
-		case k.Contains(k.Content.InlineEdit, event.Name()):
-			return c.handleInlineEdit(ctx, row, col)
-		case k.Contains(k.Content.EditRow, event.Name()):
-			return c.handleEditRow(ctx, row)
-		case k.Contains(k.Content.AddRow, event.Name()):
-			c.handleAddRow(ctx)
-			return nil
-		case k.Contains(k.Content.DuplicateRow, event.Name()):
-			c.handleDuplicateRow(ctx, row)
-			return nil
-		case k.Contains(k.Content.DeleteRow, event.Name()):
-			return c.handleDeleteRow(ctx, row, col)
 		case k.Contains(k.Content.CopyValue, event.Name()):
 			return c.handleCopyCell(row, col)
 		case k.Contains(k.Content.CopyRow, event.Name()):
 			return c.handleCopyRow(row)
 		case k.Contains(k.Content.Refresh, event.Name()):
 			return c.handleRefresh(ctx)
-		case k.Contains(k.Content.ToggleFilterBar, event.Name()):
-			return c.handleToggleFilter()
 		case k.Contains(k.Content.ToggleQueryBar, event.Name()):
 			return c.handleToggleQueryBar()
 		case k.Contains(k.Content.TermEditor, event.Name()):
@@ -230,10 +251,6 @@ func (c *Content) setKeybindings(ctx context.Context) {
 		case k.Contains(k.Content.QueryEditor, event.Name()):
 			c.handleOpenTuiEditor(ctx)
 			return nil
-		case k.Contains(k.Content.ToggleSortBar, event.Name()):
-			return c.handleToggleSort()
-		case k.Contains(k.Content.SortByColumn, event.Name()):
-			return c.handleSortByColumn(ctx, col)
 		case k.Contains(k.Content.HideColumn, event.Name()):
 			return c.handleHideColumn(ctx, col)
 		case k.Contains(k.Content.ResetHiddenColumns, event.Name()):
@@ -252,6 +269,31 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			}
 			return nil
 		}
+
+		// CRUD keybindings — only available in TableMode.
+		if c.mode == TableMode {
+			switch {
+			case k.Contains(k.Content.InlineEdit, event.Name()):
+				return c.handleInlineEdit(ctx, row, col)
+			case k.Contains(k.Content.EditRow, event.Name()):
+				return c.handleEditRow(ctx, row)
+			case k.Contains(k.Content.AddRow, event.Name()):
+				c.handleAddRow(ctx)
+				return nil
+			case k.Contains(k.Content.DuplicateRow, event.Name()):
+				c.handleDuplicateRow(ctx, row)
+				return nil
+			case k.Contains(k.Content.DeleteRow, event.Name()):
+				return c.handleDeleteRow(ctx, row, col)
+			case k.Contains(k.Content.ToggleFilterBar, event.Name()):
+				return c.handleToggleFilter()
+			case k.Contains(k.Content.ToggleSortBar, event.Name()):
+				return c.handleToggleSort()
+			case k.Contains(k.Content.SortByColumn, event.Name()):
+				return c.handleSortByColumn(ctx, col)
+			}
+		}
+
 		return event
 	})
 }

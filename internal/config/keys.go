@@ -64,6 +64,8 @@ type (
 		ServerInfo     Key `yaml:"serverInfo"`
 		ToggleHeader   Key `yaml:"toggleHeader"`
 		HideSchema     Key `yaml:"hideSchema"`
+		NewTab         Key `yaml:"newTab"`
+		CloseTab       Key `yaml:"closeTab"`
 	}
 
 	SchemaKeys struct {

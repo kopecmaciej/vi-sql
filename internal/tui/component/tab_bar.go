@@ -1,6 +1,8 @@
 package component
 
 import (
+	"slices"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
@@ -81,6 +83,42 @@ func (t *TabBar) AddTab(name string, component TabBarPrimitive, defaultTab bool)
 	t.Render()
 }
 
+// AddDynamicTab adds a tab at runtime and activates it immediately.
+// Returns the index of the new tab.
+func (t *TabBar) AddDynamicTab(name string, component TabBarPrimitive) int {
+	t.tabs = append(t.tabs, &TabBarComponent{
+		id:        name,
+		primitive: component,
+	})
+	t.active = len(t.tabs) - 1
+	t.Render()
+	return t.active
+}
+
+// CloseActiveTab removes the currently active tab. Does nothing if only one tab remains.
+func (t *TabBar) CloseActiveTab() {
+	if len(t.tabs) <= 1 {
+		return
+	}
+	t.tabs = slices.Delete(t.tabs, t.active, t.active+1)
+	if t.active >= len(t.tabs) {
+		t.active = len(t.tabs) - 1
+	}
+	t.Render()
+}
+
+// HasTabs reports whether any tabs are registered.
+func (t *TabBar) HasTabs() bool {
+	return len(t.tabs) > 0
+}
+
+// ClearAllTabs removes every tab and resets the active index.
+func (t *TabBar) ClearAllTabs() {
+	t.tabs = t.tabs[:0]
+	t.active = 0
+	t.Render()
+}
+
 func (t *TabBar) NextTab() {
 	if t.active < len(t.tabs)-1 {
 		t.active++
@@ -99,7 +137,7 @@ func (t *TabBar) Render() {
 	styles := t.App.GetStyles()
 	t.Clear()
 	for i, tab := range t.tabs {
-		cell := tview.NewTableCell(" " + tab.id + "")
+		cell := tview.NewTableCell(" " + tab.id + " ")
 		if i == t.active {
 			cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
 			cell.SetAttributes(tcell.AttrBold)
@@ -109,6 +147,10 @@ func (t *TabBar) Render() {
 		}
 		t.SetCell(0, i, cell)
 	}
+	plusCell := tview.NewTableCell(" + ").
+		SetTextColor(styles.Global.SecondaryTextColor.Color()).
+		SetSelectable(false)
+	t.SetCell(0, len(t.tabs), plusCell)
 }
 
 func (t *TabBar) GetActiveComponent() TabBarPrimitive {
@@ -126,6 +168,13 @@ func (t *TabBar) GetActiveComponentAndRender() TabBarPrimitive {
 
 func (t *TabBar) GetActiveTabIndex() int {
 	return t.active
+}
+
+func (t *TabBar) GetActiveTabName() string {
+	if t.active < len(t.tabs) {
+		return t.tabs[t.active].id
+	}
+	return ""
 }
 
 // ResetRendered clears the rendered flag on all tabs so each tab's Render()
