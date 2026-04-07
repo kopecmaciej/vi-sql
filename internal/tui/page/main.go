@@ -170,7 +170,21 @@ func (m *Main) Render() {
 }
 
 // openNewTableTab creates a full CRUD table tab and adds it to the tab bar.
+// If the only existing tab is a clean blank query tab, it is silently replaced.
 func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error {
+	// Replace the initial blank query tab if it hasn't been used yet.
+	if len(m.queryTabs) == 1 && m.topBar.GetTabCount() == 1 {
+		if m.queryTabs[0].IsCleanQueryTab() {
+			name := m.topBar.GetActiveTabName()
+			var n int
+			if _, err := fmt.Sscanf(name, "Query %d", &n); err == nil {
+				delete(m.queryTabNums, n)
+			}
+			m.queryTabs = m.queryTabs[:0]
+			m.topBar.ClearAllTabs()
+		}
+	}
+
 	tab := component.NewTableTab()
 	if err := tab.Init(m.App); err != nil {
 		return err
@@ -251,7 +265,7 @@ func (m *Main) closeActiveTab() {
 	m.topBar.CloseActiveTab()
 	m.rebuildInnerFlex()
 	if m.topBar.HasTabs() {
-		m.App.SetFocus(m.topBar.GetActiveComponent())
+		m.setFocusToActiveTab()
 	}
 }
 
@@ -272,10 +286,8 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.topBar.ClearAllTabs()
 
 	m.topBar.ResetRendered()
-	m.App.QueueUpdateDraw(func() {
-		m.topBar.Render()
-		m.rebuildInnerFlex()
-	})
+	m.topBar.Render()
+	m.rebuildInnerFlex()
 }
 
 func (m *Main) JumpToTable(schema, table string) error {
@@ -329,13 +341,13 @@ func (m *Main) rebuildInnerFlex() {
 	m.innerFlex.AddItem(m.footer, m.footerHeight, 0, false)
 }
 
-func (m *Main) ToggleHeader() {
+func (m *Main) ToggleFooter() {
 	m.footerHeight = m.footer.Toggle()
 	m.rebuildInnerFlex()
 	m.footer.Render()
 	m.App.GetManager().Broadcast(manager.EventMsg{
 		Sender:  m.GetIdentifier(),
-		Message: manager.Message{Type: manager.HeaderHeightChanged, Data: m.footerHeight},
+		Message: manager.Message{Type: manager.FooterHeightChanged, Data: m.footerHeight},
 	})
 }
 
@@ -355,12 +367,13 @@ func (m *Main) setKeybindings() {
 				return event
 			}
 			if m.schemas.IsFocused() {
-				m.App.SetFocus(m.topBar.GetActiveComponent())
-			} else {
+				m.setFocusToActiveTab()
+			} else if m.topBar.GetActiveTabIndex() < m.topBar.GetTabCount()-1 {
 				m.topBar.NextTab()
 				m.rebuildInnerFlex()
-				m.App.SetFocus(m.topBar.GetActiveComponent())
+				m.setFocusToActiveTab()
 			}
+			// On last tab: do nothing; focus and footer keys stay intact
 			return nil
 		case k.Contains(k.Navigation.FocusLeft, event.Name()):
 			if m.topBar.HasTabs() {
@@ -373,7 +386,7 @@ func (m *Main) setKeybindings() {
 			} else {
 				m.topBar.PreviousTab()
 				m.rebuildInnerFlex()
-				m.App.SetFocus(m.topBar.GetActiveComponent())
+				m.setFocusToActiveTab()
 			}
 			return nil
 		case k.Contains(k.Global.FocusSchemaTree, event.Name()):
@@ -387,7 +400,7 @@ func (m *Main) setKeybindings() {
 			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
 				m.RemoveItem(m.schemas)
 				if m.topBar.HasTabs() {
-					m.App.SetFocus(m.topBar.GetActiveComponent())
+					m.setFocusToActiveTab()
 				}
 			} else {
 				m.showSchemas()
@@ -405,6 +418,17 @@ func (m *Main) setKeybindings() {
 		}
 		return event
 	})
+}
+
+// setFocusToActiveTab sets focus on the right inner primitive of the currently active tab.
+// For Content tabs it re-focuses the SQL editor if it was open, otherwise the table.
+func (m *Main) setFocusToActiveTab() {
+	active := m.topBar.GetActiveComponent()
+	if content, ok := active.(*component.Content); ok {
+		m.App.SetFocus(content.GetFocusPrimitive())
+	} else {
+		m.App.SetFocus(active)
+	}
 }
 
 func (m *Main) showServerInfo() {

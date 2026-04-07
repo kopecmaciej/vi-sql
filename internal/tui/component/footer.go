@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kopecmaciej/tview"
+
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
@@ -191,12 +192,19 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		return nil, nil
 	}
 
-	focus := f.currentFocus
-	switch focus {
-	case SchemaTreeId:
+	focus := string(f.currentFocus)
+	switch {
+	case focus == string(SchemaTreeId):
 		focus = "Schema"
-	case "FilterBar", "SortBar":
+	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort") || strings.HasSuffix(focus, "-query"):
+		// Dynamic input bar IDs from Content tabs (e.g. "QueryTab-1-filter")
 		focus = "InputBar"
+	case focus == "FilterBar" || focus == "SortBar":
+		// Static IDs (e.g. SchemaTree's filter bar)
+		focus = "InputBar"
+	case strings.HasPrefix(focus, "QueryTab-"):
+		// Content tab's inner table uses the Content's dynamic ID
+		focus = "Content"
 	}
 
 	orderedKeys, err := f.App.GetKeys().GetKeysForElement(string(focus))

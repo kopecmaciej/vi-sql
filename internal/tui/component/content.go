@@ -366,6 +366,21 @@ func (c *Content) OpenEditorOnRender() {
 	c.tuiEditorOpen = true
 }
 
+// IsCleanQueryTab reports whether this tab has never loaded any table data,
+// making it safe to replace without losing user work.
+func (c *Content) IsCleanQueryTab() bool {
+	return c.mode == QueryMode && c.state.Table == ""
+}
+
+// GetFocusPrimitive returns the inner primitive that should receive focus
+// when this tab is activated from outside (e.g. tab switching).
+func (c *Content) GetFocusPrimitive() tview.Primitive {
+	if c.tuiEditorOpen {
+		return c.sqlQueryEditor
+	}
+	return c.table
+}
+
 func (c *Content) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()

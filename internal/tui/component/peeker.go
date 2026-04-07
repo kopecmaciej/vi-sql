@@ -55,7 +55,7 @@ func (p *Peeker) handleEvents() {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			p.setStyle()
-		case manager.HeaderHeightChanged:
+		case manager.FooterHeightChanged:
 			if h, ok := event.Message.Data.(int); ok {
 				p.ViewModal.SetTopOffset(h)
 			}

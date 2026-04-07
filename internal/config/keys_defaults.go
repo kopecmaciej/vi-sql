@@ -91,7 +91,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Close tab",
 		},
 		FocusSchemaTree: Key{
-			Keys:        []string{"Alt+b"},
+			Keys:        []string{"Ctrl+b"},
 			Description: "Focus schema tree",
 		},
 	}

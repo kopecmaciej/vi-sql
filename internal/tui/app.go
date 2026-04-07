@@ -72,7 +72,7 @@ func (a *App) setKeybindings() {
 			return nil
 		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFooter, event.Name()):
 			if a.main.App != nil {
-				a.main.ToggleHeader()
+				a.main.ToggleFooter()
 			}
 			return nil
 		case a.GetKeys().Contains(a.GetKeys().Global.FullScreenHelp, event.Name()):
