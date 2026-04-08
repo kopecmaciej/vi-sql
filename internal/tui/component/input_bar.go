@@ -94,10 +94,6 @@ func (i *InputBar) setKeybindings() {
 			if i.defaultText != "" {
 				go i.SetWordAtCursor(i.defaultText)
 			}
-		case k.Contains(k.QueryBar.ShowHistory, event.Name()):
-			if i.historyModal != nil {
-				i.historyModal.Render()
-			}
 		}
 
 		return event

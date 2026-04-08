@@ -17,10 +17,6 @@ const SQLQueryEditorId = "SQLQueryEditor"
 
 // SQLQueryEditor is an in-TUI multi-line SQL editor backed by a tview.TextArea.
 // It supports syntax highlighting via SetStyleFunc and context-aware autocomplete.
-const (
-	sqlEditorDefaultHeight  = 10
-	sqlEditorExpandedHeight = 20
-)
 
 type SQLQueryEditor struct {
 	*core.BaseElement
@@ -32,10 +28,9 @@ type SQLQueryEditor struct {
 	columnCache   map[string][]string // key: "schema.table" or "table"
 	columnFetcher func(schema, table string) ([]string, error)
 	onExecute     func(sql string)
-	queryBarText  func() string
 	onClose       func()
 	onExpand      func()
-	expanded      bool
+	onFocusDown   func()
 }
 
 func NewSQLQueryEditor() *SQLQueryEditor {
@@ -61,7 +56,6 @@ func (e *SQLQueryEditor) init() error {
 func (e *SQLQueryEditor) setStyle() {
 	styles := e.App.GetStyles()
 	e.TextArea.SetStyle(styles)
-	e.TextArea.SetBorderColor(styles.Global.FocusColor.Color())
 	e.TextArea.SetBorder(true)
 	e.TextArea.SetTitle(" SQL Editor ")
 	e.TextArea.SetTitleAlign(tview.AlignCenter)
@@ -290,12 +284,6 @@ func (e *SQLQueryEditor) SetOnExecute(fn func(sql string)) {
 	e.onExecute = fn
 }
 
-// SetQueryBarSource sets a callback that returns the current query bar text,
-// used to pre-populate the editor when the user presses the load-query key.
-func (e *SQLQueryEditor) SetQueryBarSource(fn func() string) {
-	e.queryBarText = fn
-}
-
 // SetOnClose sets the callback invoked when the user closes the editor.
 func (e *SQLQueryEditor) SetOnClose(fn func()) {
 	e.onClose = fn
@@ -306,13 +294,10 @@ func (e *SQLQueryEditor) SetOnExpand(fn func()) {
 	e.onExpand = fn
 }
 
-// Toggle flips the expanded state and returns the new required height in terminal rows.
-func (e *SQLQueryEditor) Toggle() int {
-	e.expanded = !e.expanded
-	if e.expanded {
-		return sqlEditorExpandedHeight
-	}
-	return sqlEditorDefaultHeight
+// SetOnFocusDown sets the callback invoked when the user presses the focus-down key,
+// used to move focus from the editor to the results table below.
+func (e *SQLQueryEditor) SetOnFocusDown(fn func()) {
+	e.onFocusDown = fn
 }
 
 // InputHandler intercepts execute/load/paste/close keys, passing everything
@@ -334,13 +319,13 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		case k.Contains(k.SQLQueryEditor.Execute, event.Name()):
 			execute()
 			return
-		case k.Contains(k.SQLQueryEditor.LoadQuery, event.Name()):
-			if e.queryBarText != nil {
-				if q := e.queryBarText(); q != "" {
-					e.SetText(q, true)
+		case k.Contains(k.Navigation.FocusDown, event.Name()):
+			if !e.TextArea.IsAutocompleteVisible() {
+				if e.onFocusDown != nil {
+					e.onFocusDown()
 				}
+				return
 			}
-			return
 		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)

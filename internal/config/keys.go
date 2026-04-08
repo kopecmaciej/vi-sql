@@ -32,7 +32,6 @@ type (
 		InputBar       InputBarKeys       `yaml:"inputBar"`
 		Content        ContentKeys        `yaml:"content"`
 		Peeker         PeekerKeys         `yaml:"peeker"`
-		QueryBar       QueryBar           `yaml:"queryBar"`
 		SQLQueryEditor SQLQueryEditorKeys `yaml:"sqlQueryEditor"`
 		Index          IndexKeys          `yaml:"index"`
 		IndexAddForm   IndexAddFormKeys   `yaml:"indexAddForm"`
@@ -93,14 +92,12 @@ type (
 		AddRow             Key `yaml:"addRow"`
 		EditRow            Key `yaml:"editRow"`
 		InlineEdit         Key `yaml:"inlineEdit"`
-		QueryEditor        Key `yaml:"openTuiEditor"`
 		DuplicateRow       Key `yaml:"duplicateRow"`
 		DeleteRow          Key `yaml:"deleteRow"`
 		CopyValue          Key `yaml:"copyValue"`
 		CopyRow            Key `yaml:"copyRow"`
 		Refresh            Key `yaml:"refresh"`
 		ToggleFilterBar    Key `yaml:"toggleFilterBar"`
-		ToggleQueryBar     Key `yaml:"toggleQueryBar"`
 		NextPage           Key `yaml:"nextPage"`
 		PreviousPage       Key `yaml:"previousPage"`
 		ToggleSortBar      Key `yaml:"toggleSortBar"`
@@ -114,10 +111,6 @@ type (
 
 	ExplainViewerKeys struct {
 		Close Key `yaml:"close"`
-	}
-
-	QueryBar struct {
-		ShowHistory Key `yaml:"showHistory"`
 	}
 
 	ConnectionKeys struct {
@@ -183,21 +176,17 @@ type (
 	}
 
 	SQLQueryEditorKeys struct {
-		Execute   Key `yaml:"execute"`
-		LoadQuery Key `yaml:"loadQuery"`
-		Clear     Key `yaml:"clear"`
-		Close     Key `yaml:"close"`
-		Expand    Key `yaml:"expand"`
+		Execute Key `yaml:"execute"`
+		Clear   Key `yaml:"clear"`
+		Close   Key `yaml:"close"`
+		Expand  Key `yaml:"expand"`
 	}
 )
 
 // keyGroupParents defines optional single-parent inheritance for key groups.
 // GetKeysForElement prepends the parent's keys before the child's own keys,
 // making the header and help page show the full effective key set.
-var keyGroupParents = map[string]string{
-	// "ChildKeys": "ParentKeys"
-	"QueryBar": "InputBar",
-}
+var keyGroupParents = map[string]string{}
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
 # keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space])

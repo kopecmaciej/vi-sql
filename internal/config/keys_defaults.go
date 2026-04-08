@@ -160,10 +160,6 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+e"},
 			Description: "$EDITOR",
 		},
-		QueryEditor: Key{
-			Keys:        []string{"Ctrl+i"},
-			Description: "Query editor",
-		},
 		AddRow: Key{
 			Runes:       []string{"a"},
 			Description: "Add new",
@@ -208,10 +204,6 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"/"},
 			Description: "Filter bar",
 		},
-		ToggleQueryBar: Key{
-			Runes:       []string{":"},
-			Description: "Query bar",
-		},
 		ToggleSortBar: Key{
 			Runes:       []string{"s"},
 			Description: "Sort bar",
@@ -246,13 +238,6 @@ func (k *KeyBindings) loadDefaults() {
 		Close: Key{
 			Keys:        []string{"Esc"},
 			Description: "Close",
-		},
-	}
-
-	k.QueryBar = QueryBar{
-		ShowHistory: Key{
-			Keys:        []string{"Ctrl+y"},
-			Description: "History",
 		},
 	}
 
@@ -409,21 +394,17 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+s", "Ctrl+Enter"},
 			Description: "Execute",
 		},
-		LoadQuery: Key{
-			Keys:        []string{"Ctrl+l"},
-			Description: "Load query",
-		},
 		Clear: Key{
 			Keys:        []string{"Ctrl+u"},
 			Description: "Clear",
 		},
 		Close: Key{
-			Keys:        []string{"Esc", "Ctrl+i"},
-			Description: "Close",
+			Keys:        []string{"Esc"},
+			Description: "Focus results",
 		},
 		Expand: Key{
 			Keys:        []string{"Ctrl+e"},
-			Description: "Expand",
+			Description: "Expand/collapse editor",
 		},
 	}
 }

@@ -23,9 +23,15 @@ const (
 	ContentId            = "Content"
 	FilterBarId          = "FilterBar"
 	SortBarId            = "SortBar"
-	QueryBarId           = "QueryBar"
 	ContentDeleteModalId = "ContentDeleteModal"
 	ContentEditModalId   = "ContentEditModal"
+)
+
+// SQL editor size states, cycled by the Expand key.
+const (
+	editorSizeTiny   = 0 // 3 rows fixed — bar-like, maximises table space
+	editorSizeNormal = 1 // 30/70 proportional split
+	editorSizeLarge  = 2 // 50/50 proportional split
 )
 
 // QueryTabMode controls which keybindings and features are active.
@@ -61,10 +67,9 @@ type Content struct {
 	style          *config.ContentStyle
 	filterBar      *InputBar
 	sortBar        *InputBar
-	queryBar       *InputBar
 	sqlEditor      *TermEditor
 	sqlQueryEditor *SQLQueryEditor
-	tuiEditorOpen  bool
+	editorSize     int
 	inlineEdit     *modal.InlineEditModal
 	confirmModal   *modal.Confirm
 	peeker         *Peeker
@@ -78,6 +83,10 @@ type Content struct {
 
 func newContent(mode QueryTabMode) *Content {
 	id := tview.Identifier(nextContentID())
+	editorSize := 0
+	if mode == QueryMode {
+		editorSize = editorSizeNormal
+	}
 	c := &Content{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
@@ -88,9 +97,9 @@ func newContent(mode QueryTabMode) *Content {
 		table:          core.NewTable(),
 		filterBar:      NewInputBar(id+"-filter", "WHERE"),
 		sortBar:        NewInputBar(id+"-sort", "ORDER BY"),
-		queryBar:       NewInputBar(id+"-query", "SQL"),
 		sqlEditor:      NewTermEditor(),
 		sqlQueryEditor: NewSQLQueryEditor(),
+		editorSize:     editorSize,
 		inlineEdit:     modal.NewInlineEditModal(),
 		confirmModal:   modal.NewConfirm(id + "-delete"),
 		peeker:         NewPeeker(),
@@ -134,16 +143,21 @@ func (c *Content) init() error {
 		return c.Driver.GetTableColumnNames(context.Background(), schema, table)
 	})
 	c.sqlQueryEditor.SetOnClose(func() {
-		c.tuiEditorOpen = false
-		c.Render()
-		c.App.SetFocus(c.table)
+		c.App.SetFocusInternal(c.table)
 	})
 	c.sqlQueryEditor.SetOnExpand(func() {
-		newH := c.sqlQueryEditor.Toggle()
-		c.Flex.ResizeItem(c.sqlQueryEditor, newH, 0)
+		switch c.editorSize {
+		case editorSizeTiny:
+			c.editorSize = editorSizeNormal
+		case editorSizeNormal:
+			c.editorSize = editorSizeLarge
+		default:
+			c.editorSize = editorSizeTiny
+		}
+		c.Render()
 	})
-	c.sqlQueryEditor.SetQueryBarSource(func() string {
-		return c.state.LastQuery
+	c.sqlQueryEditor.SetOnFocusDown(func() {
+		c.App.SetFocusInternal(c.table)
 	})
 	c.sqlQueryEditor.SetOnExecute(func(sql string) {
 		go func() {
@@ -230,23 +244,16 @@ func (c *Content) init() error {
 	if err := c.sortBar.Init(c.App); err != nil {
 		return err
 	}
-	if err := c.queryBar.Init(c.App); err != nil {
-		return err
-	}
 
 	c.filterBar.EnableColumnAutocomplete(database.OperatorKeywords)
 	c.sortBar.EnableColumnAutocomplete(database.OrderKeywords)
-	c.queryBar.EnableAutocomplete()
-	c.queryBar.EnableHistory()
 
 	sqlEditorStyle := &c.App.GetStyles().SQLEditor
 	c.filterBar.EnableHighlighting(sqlEditorStyle)
 	c.sortBar.EnableHighlighting(sqlEditorStyle)
-	c.queryBar.EnableHighlighting(sqlEditorStyle)
 
 	c.filterBarHandler(ctx)
 	c.sortBarHandler(ctx)
-	c.queryBarHandler(ctx)
 
 	c.handleEvents(ctx)
 
@@ -269,7 +276,6 @@ func (c *Content) setStyle() {
 	sqlEditorStyle := &styles.SQLEditor
 	c.filterBar.EnableHighlighting(sqlEditorStyle)
 	c.sortBar.EnableHighlighting(sqlEditorStyle)
-	c.queryBar.EnableHighlighting(sqlEditorStyle)
 
 	c.tableFlex.SetStyle(styles)
 	c.resultsBar.SetStyle(styles)
@@ -313,14 +319,27 @@ func (c *Content) setKeybindings(ctx context.Context) {
 			return c.handleCopyRow(row)
 		case k.Contains(k.Content.Refresh, event.Name()):
 			return c.handleRefresh(ctx)
-		case k.Contains(k.Content.ToggleQueryBar, event.Name()):
-			return c.handleToggleQueryBar()
 		case k.Contains(k.Content.TermEditor, event.Name()):
 			c.handleTermEditor(ctx)
 			return nil
-		case k.Contains(k.Content.QueryEditor, event.Name()):
-			c.handleOpenTuiEditor(ctx)
-			return nil
+		case k.Contains(k.Navigation.FocusUp, event.Name()):
+			if c.mode == QueryMode {
+				c.App.SetFocusInternal(c.sqlQueryEditor)
+				return nil
+			}
+		case k.Contains(k.SQLQueryEditor.Expand, event.Name()):
+			if c.mode == QueryMode {
+				switch c.editorSize {
+				case editorSizeTiny:
+					c.editorSize = editorSizeNormal
+				case editorSizeNormal:
+					c.editorSize = editorSizeLarge
+				default:
+					c.editorSize = editorSizeTiny
+				}
+				c.Render()
+				return nil
+			}
 		case k.Contains(k.Content.HideColumn, event.Name()):
 			return c.handleHideColumn(ctx, col)
 		case k.Contains(k.Content.ResetHiddenColumns, event.Name()):
@@ -426,14 +445,7 @@ func (c *Content) Reset() {
 func (c *Content) SetEditorSchemas(schemas []database.SchemaWithTables) {
 	c.filterBar.SetSchemas(schemas)
 	c.sortBar.SetSchemas(schemas)
-	c.queryBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
-}
-
-// OpenEditorOnRender causes the SQL query editor to be shown when Render is called.
-// Used for new blank query tabs so the user lands on the editor immediately.
-func (c *Content) OpenEditorOnRender() {
-	c.tuiEditorOpen = true
 }
 
 // IsQueryTab reports whether this tab is in query mode (not a table tab).
@@ -450,7 +462,7 @@ func (c *Content) IsCleanQueryTab() bool {
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).
 func (c *Content) GetFocusPrimitive() tview.Primitive {
-	if c.tuiEditorOpen {
+	if c.mode == QueryMode {
 		return c.sqlQueryEditor
 	}
 	return c.table
@@ -460,31 +472,37 @@ func (c *Content) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()
 
-	var focusPrimitive tview.Primitive
-	focusPrimitive = c
-
-	if c.tuiEditorOpen {
-		c.Flex.AddItem(c.sqlQueryEditor, 10, 0, true)
-		focusPrimitive = c.sqlQueryEditor
-	}
-
-	if c.filterBar.IsEnabled() {
-		c.Flex.AddItem(c.filterBar, 3, 0, false)
-		focusPrimitive = c.filterBar
-	}
-	if c.sortBar.IsEnabled() {
-		c.Flex.AddItem(c.sortBar, 3, 0, false)
-		focusPrimitive = c.sortBar
-	}
-	if c.queryBar.IsEnabled() {
-		c.Flex.AddItem(c.queryBar, 3, 0, false)
-		focusPrimitive = c.queryBar
-	}
-
 	c.tableFlex.AddItem(c.resultsBar, 2, 0, false)
 	c.tableFlex.AddItem(c.table, 0, 1, true)
 
-	c.Flex.AddItem(c.tableFlex, 0, 1, true)
+	var focusPrimitive tview.Primitive
+
+	if c.mode == QueryMode {
+		focusPrimitive = c.sqlQueryEditor
+		switch c.editorSize {
+		case editorSizeTiny:
+			c.Flex.AddItem(c.sqlQueryEditor, 3, 0, true)
+			c.Flex.AddItem(c.tableFlex, 0, 1, true)
+		case editorSizeLarge:
+			c.Flex.AddItem(c.sqlQueryEditor, 0, 1, true)
+			c.Flex.AddItem(c.tableFlex, 0, 1, true)
+		default: // editorSizeNormal
+			c.Flex.AddItem(c.sqlQueryEditor, 0, 3, true)
+			c.Flex.AddItem(c.tableFlex, 0, 7, true)
+		}
+	} else {
+		// TableMode: filter/sort bars sit above the table
+		focusPrimitive = c.table
+		if c.filterBar.IsEnabled() {
+			c.Flex.AddItem(c.filterBar, 3, 0, false)
+			focusPrimitive = c.filterBar
+		}
+		if c.sortBar.IsEnabled() {
+			c.Flex.AddItem(c.sortBar, 3, 0, false)
+			focusPrimitive = c.sortBar
+		}
+		c.Flex.AddItem(c.tableFlex, 0, 1, true)
+	}
 
 	c.App.SetFocus(focusPrimitive)
 }
@@ -546,7 +564,6 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	}
 	c.filterBar.LoadAutocompleteKeys(cols)
 	c.sortBar.LoadAutocompleteKeys(cols)
-	c.queryBar.LoadAutocompleteKeys(cols)
 	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, cols)
 
 	c.App.GetManager().Broadcast(manager.EventMsg{
@@ -560,7 +577,6 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	}
 	c.filterBar.SetSchemas(schemas)
 	c.sortBar.SetSchemas(schemas)
-	c.queryBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
@@ -969,16 +985,6 @@ func (c *Content) handleClearSelection() *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleToggleQueryBar() *tcell.EventKey {
-	text := c.state.LastQuery
-	if c.state.RawSQL != "" {
-		text = c.state.RawSQL
-	}
-	c.queryBar.Toggle(text)
-	c.Render()
-	return nil
-}
-
 func (c *Content) handleTermEditor(ctx context.Context) {
 	sql, err := c.sqlEditor.Open("")
 	if err != nil {
@@ -1046,78 +1052,6 @@ func (c *Content) handleTermEditor(ctx context.Context) {
 			c.showStatementResult(affected, execTime)
 		})
 	}
-}
-
-func (c *Content) handleOpenTuiEditor(ctx context.Context) {
-	if c.tuiEditorOpen {
-		c.tuiEditorOpen = false
-		c.Render()
-		c.App.SetFocus(c.table)
-		return
-	}
-	c.tuiEditorOpen = true
-	c.Render()
-}
-
-// queryBarHandler wires the QueryBar's accept/reject callbacks.
-// On Enter it detects whether the SQL is a SELECT-like query or a
-// DML/DDL statement and dispatches accordingly.
-func (c *Content) queryBarHandler(ctx context.Context) {
-	acceptFunc := func(text string) {
-		text = strings.TrimSpace(text)
-		if text == "" {
-			c.queryBar.Disable()
-			c.Flex.RemoveItem(c.queryBar)
-			c.App.SetFocus(c.table)
-			return
-		}
-
-		if isExplainQuery(text) {
-			c.queryBar.Disable()
-			c.Flex.RemoveItem(c.queryBar)
-			c.App.SetFocus(c.table)
-			if err := c.queryBar.SaveToHistory(text); err != nil {
-				modal.ShowError(c.App.Pages, "Failed to save history", err)
-			}
-			go c.runExplain(ctx, text)
-			return
-		}
-
-		if isSelectQuery(text) {
-			sqlState := database.NewTableState("", "")
-			sqlState.RawSQL = text
-			sqlState.Limit = c.state.Limit
-			sqlState.Where, sqlState.OrderBy = database.ExtractSelectClauses(text)
-			c.state = sqlState
-			if err := c.updateContent(ctx, false); err != nil {
-				// Keep the bar open so the user can fix the query.
-				modal.ShowError(c.App.Pages, "Query error", err)
-				return
-			}
-		} else {
-			start := time.Now()
-			affected, err := c.Driver.ExecuteStatement(ctx, text)
-			if err != nil {
-				// Keep the bar open so the user can fix the statement.
-				modal.ShowError(c.App.Pages, "Statement error", err)
-				return
-			}
-			c.showStatementResult(affected, time.Since(start))
-		}
-
-		c.queryBar.Disable()
-		c.Flex.RemoveItem(c.queryBar)
-		c.App.SetFocus(c.table)
-
-		if err := c.queryBar.SaveToHistory(text); err != nil {
-			modal.ShowError(c.App.Pages, "Failed to save history", err)
-		}
-	}
-	rejectFunc := func() {
-		c.Flex.RemoveItem(c.queryBar)
-		c.App.SetFocus(c.table)
-	}
-	c.queryBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
 func (c *Content) showStatementResult(affected int64, execTime time.Duration) {

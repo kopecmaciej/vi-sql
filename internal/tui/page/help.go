@@ -21,7 +21,7 @@ const (
 var sectionOrder = []string{
 	"Navigation", "Global", "Help", "Connection",
 	"Main", "Schema", "InputBar", "Content",
-	"Peeker", "QueryBar", "Index", "IndexAddForm", "Structure", "History",
+	"Peeker", "SQLQueryEditor", "Index", "IndexAddForm", "Structure", "History",
 }
 
 type Help struct {

@@ -219,7 +219,6 @@ func (m *Main) openNewQueryTab() {
 		return
 	}
 	tab.SetEditorSchemas(m.lastSchemas)
-	tab.OpenEditorOnRender()
 	tab.Render()
 	m.queryTabs = append(m.queryTabs, tab)
 	m.topBar.AddDynamicTab(fmt.Sprintf("Query %d", n), tab)
