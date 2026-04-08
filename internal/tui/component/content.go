@@ -1146,7 +1146,6 @@ func (c *Content) showExplainViewer(result string) {
 	c.explainViewer.Render(result)
 	c.explainViewer.SetDoneFunc(func() {
 		c.App.Pages.RemovePage(ExplainViewerId)
-		c.App.SetFocusInternal(c.table)
 	})
 	c.App.Pages.AddPage(ExplainViewerId, c.explainViewer, true, true)
 	c.App.SetFocusInternal(c.explainViewer.tree.TreeView)
