@@ -226,16 +226,18 @@ func (m *Main) openNewQueryTab() {
 	m.rebuildInnerFlex()
 }
 
-// closeActiveTab removes the active tab. The last tab cannot be closed.
+// closeActiveTab removes the active tab. The last query tab cannot be closed,
+// but the last table/structure/index tab can — a fresh blank query tab replaces it.
 func (m *Main) closeActiveTab() {
-	if m.topBar.GetTabCount() <= 1 {
-		return
-	}
+	isLastTab := m.topBar.GetTabCount() <= 1
 	name := m.topBar.GetActiveTabName()
 	active := m.topBar.GetActiveComponent()
 
 	switch tab := active.(type) {
 	case *component.Content:
+		if isLastTab && tab.IsQueryTab() {
+			return
+		}
 		for i, t := range m.queryTabs {
 			if t == tab {
 				m.queryTabs = slices.Delete(m.queryTabs, i, i+1)
@@ -262,11 +264,14 @@ func (m *Main) closeActiveTab() {
 		}
 	}
 
+	if isLastTab {
+		m.topBar.ClearAllTabs()
+		m.openNewQueryTab()
+		return
+	}
 	m.topBar.CloseActiveTab()
 	m.rebuildInnerFlex()
-	if m.topBar.HasTabs() {
-		m.setFocusToActiveTab()
-	}
+	m.setFocusToActiveTab()
 }
 
 func (m *Main) UpdateDriver(driver database.Driver) {

@@ -319,9 +319,6 @@ func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
 	if namedKey == "Rune[ ]" {
 		namedKey = "Space"
 	}
-	if namedKey == "Backspace" {
-		namedKey = "Ctrl+H"
-	}
 
 	// Normalize Ctrl+letter to uppercase since tcell always reports uppercase,
 	// allowing config to use lowercase (e.g. "Ctrl+l") for user clarity

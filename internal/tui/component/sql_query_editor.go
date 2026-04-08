@@ -24,7 +24,7 @@ const (
 
 type SQLQueryEditor struct {
 	*core.BaseElement
-	*tview.TextArea
+	*core.TextArea
 
 	style         *config.SQLEditorStyle
 	schemas       []database.SchemaWithTables
@@ -41,7 +41,7 @@ type SQLQueryEditor struct {
 func NewSQLQueryEditor() *SQLQueryEditor {
 	e := &SQLQueryEditor{
 		BaseElement: core.NewBaseElement(),
-		TextArea:    tview.NewTextArea(),
+		TextArea:    core.NewTextArea(),
 		columnCache: make(map[string][]string),
 	}
 	e.SetIdentifier(SQLQueryEditorId)
@@ -60,13 +60,9 @@ func (e *SQLQueryEditor) init() error {
 
 func (e *SQLQueryEditor) setStyle() {
 	styles := e.App.GetStyles()
-	bg := styles.Global.BackgroundColor.Color()
-	fg := styles.Global.TextColor.Color()
-	border := styles.Global.FocusColor.Color()
-
-	e.TextArea.SetTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
+	e.TextArea.SetStyle(styles)
+	e.TextArea.SetBorderColor(styles.Global.FocusColor.Color())
 	e.TextArea.SetBorder(true)
-	e.TextArea.SetBorderColor(border)
 	e.TextArea.SetTitle(" SQL Editor ")
 	e.TextArea.SetTitleAlign(tview.AlignCenter)
 	e.TextArea.SetBorderPadding(0, 0, 1, 1)

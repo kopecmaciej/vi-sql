@@ -35,6 +35,9 @@ type (
 	TextView struct {
 		*tview.TextView
 	}
+	TextArea struct {
+		*tview.TextArea
+	}
 	TreeView struct {
 		*tview.TreeView
 	}
@@ -62,6 +65,10 @@ func NewList() *List {
 
 func NewTextView() *TextView {
 	return &TextView{TextView: tview.NewTextView()}
+}
+
+func NewTextArea() *TextArea {
+	return &TextArea{TextArea: tview.NewTextArea()}
 }
 
 func NewTreeView() *TreeView {
@@ -95,6 +102,13 @@ func (l *List) SetStyle(style *config.Styles) {
 func (t *TextView) SetStyle(style *config.Styles) {
 	SetCommonStyle(t.TextView, style)
 	t.SetTextColor(style.Global.TextColor.Color())
+}
+
+func (t *TextArea) SetStyle(style *config.Styles) {
+	SetCommonStyle(t.TextArea, style)
+	t.TextArea.SetTextStyle(tcell.StyleDefault.
+		Background(style.Global.BackgroundColor.Color()).
+		Foreground(style.Global.TextColor.Color()))
 }
 
 func (t *TreeView) SetStyle(style *config.Styles) {

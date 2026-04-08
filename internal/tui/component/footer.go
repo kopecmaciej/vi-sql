@@ -75,7 +75,7 @@ func (f *Footer) Toggle() int {
 	if f.expanded {
 		return f.ExpandedHeight()
 	}
-	return 1
+	return 2 // bottom padding consumes 1 row, so minimum is 2 to show content
 }
 
 func (f *Footer) collectPairs() []info {
@@ -94,9 +94,15 @@ func (f *Footer) expandedLayout(width int, pairs []info) (numGroups, numRows int
 	if len(pairs) == 0 {
 		return 1, 0
 	}
-	numGroups = width / 40
-	if numGroups < 1 {
-		numGroups = 1
+	// Target 2 rows; each group takes ~30 chars (key + value + separator).
+	maxGroups := width / 30
+	if maxGroups < 1 {
+		maxGroups = 1
+	}
+	desiredGroups := (len(pairs) + 1) / 2 // ceil(n/2) → 2 rows
+	numGroups = desiredGroups
+	if numGroups > maxGroups {
+		numGroups = maxGroups
 	}
 	numRows = (len(pairs) + numGroups - 1) / numGroups
 	return numGroups, numRows
@@ -107,7 +113,7 @@ func (f *Footer) ExpandedHeight() int {
 	_, _, width, _ := f.Table.GetInnerRect()
 	pairs := f.collectPairs()
 	_, numRows := f.expandedLayout(width, pairs)
-	return numRows
+	return numRows + 1 // +1 for bottom padding from SetBorderPadding(0,1,1,1)
 }
 
 func (f *Footer) renderExpanded() {

@@ -87,7 +87,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "New query tab",
 		},
 		CloseTab: Key{
-			Keys:        []string{"Ctrl+w"},
+			Keys:        []string{"Ctrl+x"},
 			Description: "Close tab",
 		},
 		FocusSchemaTree: Key{
@@ -114,7 +114,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Collapse all",
 		},
 		AddTable: Key{
-			Runes:       []string{"A"},
+			Runes:       []string{"a"},
 			Description: "Add table",
 		},
 		DeleteTable: Key{
@@ -134,7 +134,7 @@ func (k *KeyBindings) loadDefaults() {
 	k.InputBar = InputBarKeys{
 		Exit: Key{
 			Keys:        []string{"Esc"},
-			Description: "Close / cancel",
+			Description: "Close",
 		},
 		ClearInput: Key{
 			Keys:        []string{"Ctrl+u"},
@@ -161,11 +161,11 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "$EDITOR",
 		},
 		QueryEditor: Key{
-			Keys:        []string{"Ctrl+p"},
+			Keys:        []string{"Ctrl+i"},
 			Description: "Query editor",
 		},
 		AddRow: Key{
-			Runes:       []string{"A"},
+			Runes:       []string{"a"},
 			Description: "Add new",
 		},
 		EditRow: Key{
@@ -237,7 +237,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Previous page",
 		},
 		ExplainQuery: Key{
-			Keys:        []string{"Ctrl+x"},
+			Keys:        []string{"Ctrl+g"},
 			Description: "Explain query",
 		},
 	}
@@ -327,8 +327,9 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Full screen",
 		},
 		Exit: Key{
-			Runes:       []string{"o", "O"},
-			Description: "Exit",
+			Keys:        []string{"Esc"},
+			Runes:       []string{"q"},
+			Description: "Close",
 		},
 	}
 
@@ -349,7 +350,7 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.Index = IndexKeys{
 		AddIndex: Key{
-			Runes:       []string{"A"},
+			Runes:       []string{"a"},
 			Description: "Add index",
 		},
 		DeleteIndex: Key{
@@ -361,7 +362,7 @@ func (k *KeyBindings) loadDefaults() {
 	k.IndexAddForm = IndexAddFormKeys{
 		ExitForm: Key{
 			Keys:        []string{"Esc"},
-			Description: "Exit",
+			Description: "Close",
 		},
 		ToggleSQLMode: Key{
 			Keys:        []string{"Ctrl+e"},
@@ -399,13 +400,13 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		Cancel: Key{
 			Keys:        []string{"Esc"},
-			Description: "Cancel",
+			Description: "Close",
 		},
 	}
 
 	k.SQLQueryEditor = SQLQueryEditorKeys{
 		Execute: Key{
-			Keys:        []string{"Ctrl+s"},
+			Keys:        []string{"Ctrl+s", "Ctrl+Enter"},
 			Description: "Execute",
 		},
 		LoadQuery: Key{
@@ -417,7 +418,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Clear",
 		},
 		Close: Key{
-			Keys:        []string{"Esc"},
+			Keys:        []string{"Esc", "Ctrl+i"},
 			Description: "Close",
 		},
 		Expand: Key{
