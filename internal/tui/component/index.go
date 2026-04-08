@@ -197,8 +197,8 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 	for i, h := range headers {
 		idx.table.SetCell(0, i, tview.NewTableCell(" "+h+" ").
 			SetSelectable(false).
-			SetTextColor(styles.Content.ColumnKeyColor.Color()).
-			SetBackgroundColor(styles.Content.HeaderRowBackgroundColor.Color()).
+			SetTextColor(styles.Data.ColumnKeyColor.Color()).
+			SetBackgroundColor(styles.Data.HeaderRowBackgroundColor.Color()).
 			SetAlign(tview.AlignCenter))
 	}
 
@@ -214,17 +214,17 @@ func (idx *Indexes) renderIndexes(indexes []database.IndexInfo) {
 		cols := strings.Join(ix.Columns, ", ")
 
 		idx.table.SetCell(r+1, 0, tview.NewTableCell(" "+ix.Name+" ").
-			SetTextColor(styles.Content.ColumnKeyColor.Color()).
+			SetTextColor(styles.Data.ColumnKeyColor.Color()).
 			SetReference(ix.Name))
 		idx.table.SetCell(r+1, 1, tview.NewTableCell(" "+cols+" ").
 			SetTextColor(styles.Global.TextColor.Color()))
 		idx.table.SetCell(r+1, 2, tview.NewTableCell(" "+ix.Type+" ").
 			SetTextColor(styles.Global.SecondaryTextColor.Color()))
 		idx.table.SetCell(r+1, 3, tview.NewTableCell(" "+unique+" ").
-			SetTextColor(styles.Content.ColumnTypeColor.Color()).
+			SetTextColor(styles.Data.ColumnTypeColor.Color()).
 			SetAlign(tview.AlignCenter))
 		idx.table.SetCell(r+1, 4, tview.NewTableCell(" "+primary+" ").
-			SetTextColor(styles.Content.ColumnTypeColor.Color()).
+			SetTextColor(styles.Data.ColumnTypeColor.Color()).
 			SetAlign(tview.AlignCenter))
 		idx.table.SetCell(r+1, 5, tview.NewTableCell(" "+ix.Definition+" ").
 			SetTextColor(styles.Global.TextColor.Color()))

@@ -25,7 +25,7 @@ type (
 		Header      HeaderStyle      `yaml:"header"`
 		TabBar      TabBarStyle      `yaml:"tabBar"`
 		Schemas     SchemasStyle     `yaml:"schemas"`
-		Content     ContentStyle     `yaml:"content"`
+		Data        DataStyle        `yaml:"data"`
 		RowPeeker   RowPeekerStyle   `yaml:"rowPeeker"`
 		InputBar    InputBarStyle    `yaml:"inputBar"`
 		History     HistoryStyle     `yaml:"history"`
@@ -84,7 +84,7 @@ type (
 		LeafSymbol       Style `yaml:"leafSymbol"`
 	}
 
-	ContentStyle struct {
+	DataStyle struct {
 		StatusTextColor          Style `yaml:"statusTextColor"`
 		HeaderRowBackgroundColor Style `yaml:"headerRowColor"`
 		ColumnKeyColor           Style `yaml:"columnKeyColor"`
@@ -210,7 +210,7 @@ func (s *Styles) loadDefaults() {
 		LeafSymbol:       "⊞",
 	}
 
-	s.Content = ContentStyle{
+	s.Data = DataStyle{
 		StatusTextColor:          "#FDE68A",
 		HeaderRowBackgroundColor: "#1E293B",
 		ColumnKeyColor:           "#FDE68A",

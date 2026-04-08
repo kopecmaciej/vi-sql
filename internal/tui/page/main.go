@@ -30,7 +30,7 @@ type Main struct {
 	footerHeight int
 
 	// queryTabs holds only Content (query/table) tabs.
-	queryTabs []*component.Content
+	queryTabs []*component.Data
 
 	// structureTabs and indexTabs cache open structure/index tabs by "schema.table" key.
 	structureTabs map[string]*component.Structure
@@ -212,7 +212,7 @@ func (m *Main) nextQueryTabNum() int {
 func (m *Main) openNewQueryTab() {
 	n := m.nextQueryTabNum()
 	m.queryTabNums[n] = true
-	tab := component.NewContent()
+	tab := component.NewData()
 	if err := tab.Init(m.App); err != nil {
 		modal.ShowError(m.App.Pages, "Failed to create tab", err)
 		m.queryTabNums[n] = false
@@ -233,7 +233,7 @@ func (m *Main) closeActiveTab() {
 	active := m.topBar.GetActiveComponent()
 
 	switch tab := active.(type) {
-	case *component.Content:
+	case *component.Data:
 		if isLastTab && tab.IsQueryTab() {
 			return
 		}
@@ -428,7 +428,7 @@ func (m *Main) setKeybindings() {
 // For Content tabs it re-focuses the SQL editor if it was open, otherwise the table.
 func (m *Main) setFocusToActiveTab() {
 	active := m.topBar.GetActiveComponent()
-	if content, ok := active.(*component.Content); ok {
+	if content, ok := active.(*component.Data); ok {
 		m.App.SetFocus(content.GetFocusPrimitive())
 	} else {
 		m.App.SetFocus(active)

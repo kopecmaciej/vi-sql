@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -20,11 +21,11 @@ import (
 )
 
 const (
-	ContentId            = "Content"
-	FilterBarId          = "FilterBar"
-	SortBarId            = "SortBar"
-	ContentDeleteModalId = "ContentDeleteModal"
-	ContentEditModalId   = "ContentEditModal"
+	DataId            = "Data"
+	FilterBarId       = "FilterBar"
+	SortBarId         = "SortBar"
+	DataDeleteModalId = "DataDeleteModal"
+	DataEditModalId   = "DataEditModal"
 )
 
 // SQL editor size states, cycled by the Expand key.
@@ -45,18 +46,18 @@ const (
 	QueryMode
 )
 
-// contentTabCounter generates unique identifiers for each Content/QueryTab instance
+// dataTabCounter generates unique identifiers for each Data/QueryTab instance
 // so that multiple tabs can subscribe to the event system without colliding.
-var contentTabCounter int32
+var dataTabCounter int32
 
-func nextContentID() string {
-	n := atomic.AddInt32(&contentTabCounter, 1)
+func nextDataID() string {
+	n := atomic.AddInt32(&dataTabCounter, 1)
 	return fmt.Sprintf("QueryTab-%d", n)
 }
 
-// Content displays table rows in a grid with pagination, filtering,
+// Data displays table rows in a grid with pagination, filtering,
 // sorting, column hide/show, and row CRUD.
-type Content struct {
+type Data struct {
 	*core.BaseElement
 	*core.Flex
 
@@ -64,7 +65,7 @@ type Content struct {
 	tableFlex      *core.Flex
 	resultsBar     *widget.ResultsBar
 	table          *core.Table
-	style          *config.ContentStyle
+	style          *config.DataStyle
 	filterBar      *InputBar
 	sortBar        *InputBar
 	sqlEditor      *TermEditor
@@ -81,13 +82,13 @@ type Content struct {
 	countPending   bool
 }
 
-func newContent(mode QueryTabMode) *Content {
-	id := tview.Identifier(nextContentID())
+func newData(mode QueryTabMode) *Data {
+	id := tview.Identifier(nextDataID())
 	editorSize := 0
 	if mode == QueryMode {
 		editorSize = editorSizeNormal
 	}
-	c := &Content{
+	c := &Data{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 
@@ -109,24 +110,28 @@ func newContent(mode QueryTabMode) *Content {
 	}
 
 	c.SetIdentifier(id)
-	c.table.SetIdentifier(id)
+	if mode == QueryMode {
+		c.table.SetIdentifier(id + "-results")
+	} else {
+		c.table.SetIdentifier(id)
+	}
 	c.SetAfterInitFunc(c.init)
 
 	return c
 }
 
-// NewContent creates a blank query-mode tab (no CRUD, empty editor).
-func NewContent() *Content {
-	return newContent(QueryMode)
+// NewData creates a blank query-mode tab (no CRUD, empty editor).
+func NewData() *Data {
+	return newData(QueryMode)
 }
 
 // NewTableTab creates a table-mode tab with full CRUD keybindings.
 // Callers must follow up with HandleTableSelection to load data.
-func NewTableTab() *Content {
-	return newContent(TableMode)
+func NewTableTab() *Data {
+	return newData(TableMode)
 }
 
-func (c *Content) init() error {
+func (c *Data) init() error {
 	ctx := context.Background()
 
 	c.setLayout()
@@ -142,19 +147,8 @@ func (c *Content) init() error {
 	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]string, error) {
 		return c.Driver.GetTableColumnNames(context.Background(), schema, table)
 	})
-	c.sqlQueryEditor.SetOnClose(func() {
-		c.App.SetFocusInternal(c.table)
-	})
 	c.sqlQueryEditor.SetOnExpand(func() {
-		switch c.editorSize {
-		case editorSizeTiny:
-			c.editorSize = editorSizeNormal
-		case editorSizeNormal:
-			c.editorSize = editorSizeLarge
-		default:
-			c.editorSize = editorSizeTiny
-		}
-		c.Render()
+		c.cycleEditorSize()
 	})
 	c.sqlQueryEditor.SetOnFocusDown(func() {
 		c.App.SetFocusInternal(c.table)
@@ -260,18 +254,18 @@ func (c *Content) init() error {
 	return nil
 }
 
-func (c *Content) handleEvents(ctx context.Context) {
+func (c *Data) handleEvents(ctx context.Context) {
 	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			c.setStyle()
-			c.updateContent(ctx, true)
+			c.updateData(ctx, true)
 		}
 	})
 }
 
-func (c *Content) setStyle() {
-	c.style = &c.App.GetStyles().Content
+func (c *Data) setStyle() {
+	c.style = &c.App.GetStyles().Data
 	styles := c.App.GetStyles()
 	sqlEditorStyle := &styles.SQLEditor
 	c.filterBar.EnableHighlighting(sqlEditorStyle)
@@ -293,66 +287,57 @@ func (c *Content) setStyle() {
 	c.table.SetMultiSelectedStyle(multiSelectedStyle)
 }
 
-func (c *Content) setLayout() {
+func (c *Data) setLayout() {
 	c.tableFlex.SetBorder(true)
 	c.tableFlex.SetDirection(tview.FlexRow)
-	c.tableFlex.SetTitle(" Content ")
+	c.tableFlex.SetTitle(" Data ")
 	c.tableFlex.SetTitleAlign(tview.AlignCenter)
 	c.tableFlex.SetBorderPadding(0, 0, 1, 1)
 
 	c.Flex.SetDirection(tview.FlexRow)
 }
 
-func (c *Content) setKeybindings(ctx context.Context) {
+func (c *Data) setKeybindings(ctx context.Context) {
 	k := c.App.GetKeys()
 
 	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		row, col := c.table.GetSelection()
 		switch {
-		case k.Contains(k.Content.PeekRow, event.Name()):
+		case k.Contains(k.Data.PeekRow, event.Name()):
 			return c.handlePeekRow(ctx, row, false)
-		case k.Contains(k.Content.FullPagePeek, event.Name()):
+		case k.Contains(k.Data.FullPagePeek, event.Name()):
 			return c.handlePeekRow(ctx, row, true)
-		case k.Contains(k.Content.CopyValue, event.Name()):
+		case k.Contains(k.Data.CopyValue, event.Name()):
 			return c.handleCopyCell(row, col)
-		case k.Contains(k.Content.CopyRow, event.Name()):
+		case k.Contains(k.Data.CopyRow, event.Name()):
 			return c.handleCopyRow(row)
-		case k.Contains(k.Content.Refresh, event.Name()):
+		case k.Contains(k.Data.Refresh, event.Name()):
 			return c.handleRefresh(ctx)
-		case k.Contains(k.Content.TermEditor, event.Name()):
-			c.handleTermEditor(ctx)
+		case k.Contains(k.Data.TermEditor, event.Name()):
+			if c.mode == QueryMode {
+				c.cycleEditorSize()
+			} else {
+				c.handleTermEditor(ctx)
+			}
 			return nil
 		case k.Contains(k.Navigation.FocusUp, event.Name()):
 			if c.mode == QueryMode {
 				c.App.SetFocusInternal(c.sqlQueryEditor)
 				return nil
 			}
-		case k.Contains(k.SQLQueryEditor.Expand, event.Name()):
-			if c.mode == QueryMode {
-				switch c.editorSize {
-				case editorSizeTiny:
-					c.editorSize = editorSizeNormal
-				case editorSizeNormal:
-					c.editorSize = editorSizeLarge
-				default:
-					c.editorSize = editorSizeTiny
-				}
-				c.Render()
-				return nil
-			}
-		case k.Contains(k.Content.HideColumn, event.Name()):
+		case k.Contains(k.Data.HideColumn, event.Name()):
 			return c.handleHideColumn(ctx, col)
-		case k.Contains(k.Content.ResetHiddenColumns, event.Name()):
+		case k.Contains(k.Data.ResetHiddenColumns, event.Name()):
 			return c.handleResetHiddenColumns(ctx)
-		case k.Contains(k.Content.NextPage, event.Name()):
+		case k.Contains(k.Data.NextPage, event.Name()):
 			return c.handleNextPage(ctx)
-		case k.Contains(k.Content.PreviousPage, event.Name()):
+		case k.Contains(k.Data.PreviousPage, event.Name()):
 			return c.handlePreviousPage(ctx)
-		case k.Contains(k.Content.MultipleSelect, event.Name()):
+		case k.Contains(k.Data.MultipleSelect, event.Name()):
 			return c.handleMultipleSelect(row)
-		case k.Contains(k.Content.ClearSelection, event.Name()):
+		case k.Contains(k.Data.ClearSelection, event.Name()):
 			return c.handleClearSelection()
-		case k.Contains(k.Content.ExplainQuery, event.Name()):
+		case k.Contains(k.Data.ExplainQuery, event.Name()):
 			if c.state.LastQuery != "" {
 				go c.runExplain(ctx, c.state.LastQuery)
 			}
@@ -362,23 +347,23 @@ func (c *Content) setKeybindings(ctx context.Context) {
 		// CRUD keybindings — only available in TableMode.
 		if c.mode == TableMode {
 			switch {
-			case k.Contains(k.Content.InlineEdit, event.Name()):
+			case k.Contains(k.Data.InlineEdit, event.Name()):
 				return c.handleInlineEdit(ctx, row, col)
-			case k.Contains(k.Content.EditRow, event.Name()):
+			case k.Contains(k.Data.EditRow, event.Name()):
 				return c.handleEditRow(ctx, row)
-			case k.Contains(k.Content.AddRow, event.Name()):
+			case k.Contains(k.Data.AddRow, event.Name()):
 				c.handleAddRow(ctx)
 				return nil
-			case k.Contains(k.Content.DuplicateRow, event.Name()):
+			case k.Contains(k.Data.DuplicateRow, event.Name()):
 				c.handleDuplicateRow(ctx, row)
 				return nil
-			case k.Contains(k.Content.DeleteRow, event.Name()):
+			case k.Contains(k.Data.DeleteRow, event.Name()):
 				return c.handleDeleteRow(ctx, row, col)
-			case k.Contains(k.Content.ToggleFilterBar, event.Name()):
+			case k.Contains(k.Data.ToggleFilterBar, event.Name()):
 				return c.handleToggleFilter()
-			case k.Contains(k.Content.ToggleSortBar, event.Name()):
+			case k.Contains(k.Data.ToggleSortBar, event.Name()):
 				return c.handleToggleSort()
-			case k.Contains(k.Content.SortByColumn, event.Name()):
+			case k.Contains(k.Data.SortByColumn, event.Name()):
 				return c.handleSortByColumn(ctx, col)
 			}
 		}
@@ -387,7 +372,7 @@ func (c *Content) setKeybindings(ctx context.Context) {
 	})
 }
 
-func (c *Content) HandleTableSelection(ctx context.Context, schema, table string) error {
+func (c *Data) HandleTableSelection(ctx context.Context, schema, table string) error {
 	c.filterBar.SetText("")
 	c.sortBar.SetText("")
 
@@ -421,7 +406,7 @@ func (c *Content) HandleTableSelection(ctx context.Context, schema, table string
 		c.state.SetPrimaryKey(pkCols)
 	}
 
-	err = c.updateContent(ctx, false)
+	err = c.updateData(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -432,7 +417,7 @@ func (c *Content) HandleTableSelection(ctx context.Context, schema, table string
 
 // Reset clears stale table data and state from a previous connection so a
 // fresh table selection starts from a clean slate.
-func (c *Content) Reset() {
+func (c *Data) Reset() {
 	c.table.Clear()
 	c.resultsBar.Clear()
 	c.state = &database.TableState{}
@@ -442,33 +427,33 @@ func (c *Content) Reset() {
 
 // SetEditorSchemas propagates the already-loaded schema list to all bars and
 // the SQL query editor so autocomplete works before any table is selected.
-func (c *Content) SetEditorSchemas(schemas []database.SchemaWithTables) {
+func (c *Data) SetEditorSchemas(schemas []database.SchemaWithTables) {
 	c.filterBar.SetSchemas(schemas)
 	c.sortBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
 // IsQueryTab reports whether this tab is in query mode (not a table tab).
-func (c *Content) IsQueryTab() bool {
+func (c *Data) IsQueryTab() bool {
 	return c.mode == QueryMode
 }
 
 // IsCleanQueryTab reports whether this tab has never loaded any table data,
 // making it safe to replace without losing user work.
-func (c *Content) IsCleanQueryTab() bool {
+func (c *Data) IsCleanQueryTab() bool {
 	return c.mode == QueryMode && c.state.Table == ""
 }
 
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).
-func (c *Content) GetFocusPrimitive() tview.Primitive {
+func (c *Data) GetFocusPrimitive() tview.Primitive {
 	if c.mode == QueryMode {
 		return c.sqlQueryEditor
 	}
 	return c.table
 }
 
-func (c *Content) Render() {
+func (c *Data) Render() {
 	c.Flex.Clear()
 	c.tableFlex.Clear()
 
@@ -507,7 +492,7 @@ func (c *Content) Render() {
 	c.App.SetFocus(focusPrimitive)
 }
 
-func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
+func (c *Data) listRows(ctx context.Context) ([]database.Row, error) {
 	start := time.Now()
 	c.countPending = c.state.Count == 0
 
@@ -557,7 +542,7 @@ func (c *Content) listRows(ctx context.Context) ([]database.Row, error) {
 	return rows, nil
 }
 
-func (c *Content) loadAutocompleteKeys(ctx context.Context) {
+func (c *Data) loadAutocompleteKeys(ctx context.Context) {
 	cols, err := c.Driver.GetTableColumnNames(ctx, c.state.Schema, c.state.Table)
 	if err != nil {
 		return
@@ -580,7 +565,7 @@ func (c *Content) loadAutocompleteKeys(ctx context.Context) {
 	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
-func (c *Content) updateContent(ctx context.Context, useState bool) error {
+func (c *Data) updateData(ctx context.Context, useState bool) error {
 	c.table.ClearSelection()
 	var rows []database.Row
 
@@ -607,7 +592,7 @@ func (c *Content) updateContent(ctx context.Context, useState bool) error {
 	return nil
 }
 
-func (c *Content) renderTableView(rows []database.Row) {
+func (c *Data) renderTableView(rows []database.Row) {
 	c.table.SetFixed(1, 0)
 	c.table.SetSelectable(true, true)
 
@@ -673,13 +658,13 @@ func (c *Content) renderTableView(rows []database.Row) {
 	c.table.Select(1, 0)
 }
 
-func (c *Content) filterBarHandler(ctx context.Context) {
+func (c *Data) filterBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
 			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, text, c.state.OrderBy)
 		}
 		c.state.SetWhere(text)
-		err := c.updateContent(ctx, false)
+		err := c.updateData(ctx, false)
 		if err != nil {
 			c.state.SetWhere("")
 			modal.ShowError(c.App.Pages, "Error applying WHERE filter", err)
@@ -696,13 +681,13 @@ func (c *Content) filterBarHandler(ctx context.Context) {
 	c.filterBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-func (c *Content) sortBarHandler(ctx context.Context) {
+func (c *Data) sortBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
 			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, text)
 		}
 		c.state.SetOrderBy(text)
-		err := c.updateContent(ctx, false)
+		err := c.updateData(ctx, false)
 		if err != nil {
 			c.state.SetOrderBy("")
 			modal.ShowError(c.App.Pages, "Error applying ORDER BY", err)
@@ -719,7 +704,7 @@ func (c *Content) sortBarHandler(ctx context.Context) {
 	c.sortBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-func (c *Content) handlePeekRow(_ context.Context, row int, fullScreen bool) *tcell.EventKey {
+func (c *Data) handlePeekRow(_ context.Context, row int, fullScreen bool) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -734,7 +719,7 @@ func (c *Content) handlePeekRow(_ context.Context, row int, fullScreen bool) *tc
 	return nil
 }
 
-func (c *Content) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKey {
+func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -779,7 +764,7 @@ func (c *Content) handleDeleteRow(ctx context.Context, row, col int) *tcell.Even
 				c.state.DeleteRow(pk)
 			}
 			c.table.ClearSelection()
-			c.updateContent(ctx, true)
+			c.updateData(ctx, true)
 			if row >= c.table.GetRowCount() {
 				c.table.Select(row-1, col)
 			} else {
@@ -791,7 +776,7 @@ func (c *Content) handleDeleteRow(ctx context.Context, row, col int) *tcell.Even
 	return nil
 }
 
-func (c *Content) rowPrimaryKey(row int) *database.PrimaryKey {
+func (c *Data) rowPrimaryKey(row int) *database.PrimaryKey {
 	pkCols := c.state.GetPrimaryKey()
 	if len(pkCols) == 0 {
 		return nil
@@ -811,7 +796,7 @@ func (c *Content) rowPrimaryKey(row int) *database.PrimaryKey {
 	return &pk
 }
 
-func (c *Content) getVisibleColumns() []string {
+func (c *Data) getVisibleColumns() []string {
 	rows := c.state.GetAllRows()
 	if len(rows) == 0 {
 		return nil
@@ -829,7 +814,7 @@ func (c *Content) getVisibleColumns() []string {
 
 // orderedColumnNames returns column names in their ordinal_position order
 // using c.columns metadata. Falls back to alphabetical if metadata is absent.
-func (c *Content) orderedColumnNames(row database.Row) []string {
+func (c *Data) orderedColumnNames(row database.Row) []string {
 	if len(c.columns) > 0 {
 		names := make([]string, 0, len(c.columns))
 		for _, col := range c.columns {
@@ -842,7 +827,7 @@ func (c *Content) orderedColumnNames(row database.Row) []string {
 	return database.GetSortedColumnNames(row)
 }
 
-func (c *Content) handleCopyCell(row, col int) *tcell.EventKey {
+func (c *Data) handleCopyCell(row, col int) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -863,7 +848,7 @@ func (c *Content) handleCopyCell(row, col int) *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleCopyRow(row int) *tcell.EventKey {
+func (c *Data) handleCopyRow(row int) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -883,15 +868,15 @@ func (c *Content) handleCopyRow(row int) *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleRefresh(ctx context.Context) *tcell.EventKey {
-	err := c.updateContent(ctx, false)
+func (c *Data) handleRefresh(ctx context.Context) *tcell.EventKey {
+	err := c.updateData(ctx, false)
 	if err != nil {
 		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
 	}
 	return nil
 }
 
-func (c *Content) handleToggleFilter() *tcell.EventKey {
+func (c *Data) handleToggleFilter() *tcell.EventKey {
 	if c.state.Where != "" {
 		c.filterBar.Toggle(c.state.Where)
 	} else {
@@ -901,7 +886,7 @@ func (c *Content) handleToggleFilter() *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleToggleSort() *tcell.EventKey {
+func (c *Data) handleToggleSort() *tcell.EventKey {
 	if c.state.OrderBy != "" {
 		c.sortBar.Toggle(c.state.OrderBy)
 	} else {
@@ -911,7 +896,7 @@ func (c *Content) handleToggleSort() *tcell.EventKey {
 	return nil
 }
 
-func (c *Content) handleSortByColumn(ctx context.Context, col int) *tcell.EventKey {
+func (c *Data) handleSortByColumn(ctx context.Context, col int) *tcell.EventKey {
 	headerCell := c.table.GetCell(0, col)
 	if headerCell == nil {
 		return nil
@@ -930,12 +915,12 @@ func (c *Content) handleSortByColumn(ctx context.Context, col int) *tcell.EventK
 	}
 
 	c.state.SetOrderBy(newSort)
-	c.updateContent(ctx, false)
+	c.updateData(ctx, false)
 	c.table.Select(1, col)
 	return nil
 }
 
-func (c *Content) handleHideColumn(ctx context.Context, col int) *tcell.EventKey {
+func (c *Data) handleHideColumn(ctx context.Context, col int) *tcell.EventKey {
 	headerCell := c.table.GetCell(0, col)
 	if headerCell == nil {
 		return nil
@@ -945,47 +930,47 @@ func (c *Content) handleHideColumn(ctx context.Context, col int) *tcell.EventKey
 		columnName = headerCell.Text
 	}
 	c.stateMap.AddHiddenColumn(c.state.Schema, c.state.Table, columnName)
-	c.updateContent(ctx, true)
+	c.updateData(ctx, true)
 	return nil
 }
 
-func (c *Content) handleResetHiddenColumns(ctx context.Context) *tcell.EventKey {
+func (c *Data) handleResetHiddenColumns(ctx context.Context) *tcell.EventKey {
 	c.stateMap.ResetHiddenColumns(c.state.Schema, c.state.Table)
-	c.updateContent(ctx, true)
+	c.updateData(ctx, true)
 	return nil
 }
 
-func (c *Content) handleNextPage(ctx context.Context) *tcell.EventKey {
+func (c *Data) handleNextPage(ctx context.Context) *tcell.EventKey {
 	if c.state.Offset+c.state.Limit >= c.state.Count {
 		return nil
 	}
 	c.state.SetOffset(c.state.Offset + c.state.Limit)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	c.updateContent(ctx, false)
+	c.updateData(ctx, false)
 	return nil
 }
 
-func (c *Content) handlePreviousPage(ctx context.Context) *tcell.EventKey {
+func (c *Data) handlePreviousPage(ctx context.Context) *tcell.EventKey {
 	if c.state.Offset == 0 {
 		return nil
 	}
 	c.state.SetOffset(c.state.Offset - c.state.Limit)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	c.updateContent(ctx, false)
+	c.updateData(ctx, false)
 	return nil
 }
 
-func (c *Content) handleMultipleSelect(row int) *tcell.EventKey {
+func (c *Data) handleMultipleSelect(row int) *tcell.EventKey {
 	c.table.ToggleRowSelection(row)
 	return nil
 }
 
-func (c *Content) handleClearSelection() *tcell.EventKey {
+func (c *Data) handleClearSelection() *tcell.EventKey {
 	c.table.ClearSelection()
 	return nil
 }
 
-func (c *Content) handleTermEditor(ctx context.Context) {
+func (c *Data) handleTermEditor(ctx context.Context) {
 	sql, err := c.sqlEditor.Open("")
 	if err != nil {
 		modal.ShowError(c.App.Pages, "Editor error", err)
@@ -1054,7 +1039,19 @@ func (c *Content) handleTermEditor(ctx context.Context) {
 	}
 }
 
-func (c *Content) showStatementResult(affected int64, execTime time.Duration) {
+func (c *Data) cycleEditorSize() {
+	switch c.editorSize {
+	case editorSizeTiny:
+		c.editorSize = editorSizeNormal
+	case editorSizeNormal:
+		c.editorSize = editorSizeLarge
+	default:
+		c.editorSize = editorSizeTiny
+	}
+	c.Render()
+}
+
+func (c *Data) showStatementResult(affected int64, execTime time.Duration) {
 	c.table.Clear()
 	c.table.SetFixed(0, 0)
 	c.table.SetSelectable(false, false)
@@ -1063,7 +1060,7 @@ func (c *Content) showStatementResult(affected int64, execTime time.Duration) {
 		fmt.Sprintf("%d rows affected", affected)))
 }
 
-func (c *Content) runExplain(ctx context.Context, sql string) {
+func (c *Data) runExplain(ctx context.Context, sql string) {
 	result, err := c.Driver.ExplainQuery(ctx, stripExplainPrefix(sql))
 	if err != nil {
 		c.App.QueueUpdateDraw(func() {
@@ -1076,7 +1073,7 @@ func (c *Content) runExplain(ctx context.Context, sql string) {
 	})
 }
 
-func (c *Content) showExplainViewer(result string) {
+func (c *Data) showExplainViewer(result string) {
 	c.explainViewer.Render(result)
 	c.explainViewer.SetDoneFunc(func() {
 		c.App.Pages.RemovePage(ExplainViewerId)
@@ -1115,7 +1112,7 @@ func stripExplainPrefix(sql string) string {
 	return rest
 }
 
-func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventKey {
+func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -1144,9 +1141,7 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 
 	c.inlineEdit.SetApplyCallback(func(fieldName, newValue string) error {
 		updatedRow := make(database.Row)
-		for k, v := range originalRow {
-			updatedRow[k] = v
-		}
+		maps.Copy(updatedRow, originalRow)
 		// If the displayed string is unchanged keep the original typed value
 		// so the DB driver doesn't need to reparse it (avoids type coercion issues).
 		if newValue != c.App.GetFormatter().EditableString(originalRow[fieldName]) {
@@ -1159,7 +1154,7 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 		c.state.UpdateRow(*pk, updatedRow)
 		c.inlineEdit.Hide()
 		c.App.SetFocus(c.table)
-		c.updateContent(ctx, true)
+		c.updateData(ctx, true)
 		c.table.Select(row, col)
 		return nil
 	})
@@ -1177,7 +1172,7 @@ func (c *Content) handleInlineEdit(ctx context.Context, row, col int) *tcell.Eve
 // handleAddRow opens the external editor pre-filled with an INSERT SQL template.
 // The user fills in values and saves; the statement is executed immediately.
 // On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
-func (c *Content) handleAddRow(ctx context.Context) {
+func (c *Data) handleAddRow(ctx context.Context) {
 	if len(c.columns) == 0 {
 		return
 	}
@@ -1198,16 +1193,16 @@ func (c *Content) handleAddRow(ctx context.Context) {
 			})
 			return
 		}
-		c.updateContent(ctx, false)
+		c.updateData(ctx, false)
 	}
 	openEditor(c.buildInsertSQL())
 }
 
-func (c *Content) buildInsertSQL() string {
+func (c *Data) buildInsertSQL() string {
 	return database.BuildInsertSQL(c.state.Schema, c.state.Table, c.columns)
 }
 
-func (c *Content) buildDuplicateInsertSQL(row database.Row) string {
+func (c *Data) buildDuplicateInsertSQL(row database.Row) string {
 	colMeta := make(map[string]database.ColumnInfo, len(c.columns))
 	for _, col := range c.columns {
 		colMeta[col.Name] = col
@@ -1223,7 +1218,7 @@ func (c *Content) buildDuplicateInsertSQL(row database.Row) string {
 // statement containing all values from the selected row (auto-generated
 // columns omitted). On save the statement is executed and the table refreshes.
 // On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
-func (c *Content) handleDuplicateRow(ctx context.Context, row int) {
+func (c *Data) handleDuplicateRow(ctx context.Context, row int) {
 	if row < 1 {
 		return
 	}
@@ -1250,7 +1245,7 @@ func (c *Content) handleDuplicateRow(ctx context.Context, row int) {
 			})
 			return
 		}
-		c.updateContent(ctx, false)
+		c.updateData(ctx, false)
 	}
 	openEditor(c.buildDuplicateInsertSQL(rows[dataRow]))
 }
@@ -1258,7 +1253,7 @@ func (c *Content) handleDuplicateRow(ctx context.Context, row int) {
 // handleEditRow opens the external editor pre-filled with an UPDATE SQL template
 // for the current row. The edited statement is executed on save.
 // On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
-func (c *Content) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
+func (c *Data) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -1291,13 +1286,13 @@ func (c *Content) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 			})
 			return
 		}
-		c.updateContent(ctx, false)
+		c.updateData(ctx, false)
 	}
 	openEditor(c.buildUpdateSQL(rows[dataRow], pk))
 	return nil
 }
 
-func (c *Content) buildUpdateSQL(row database.Row, pk *database.PrimaryKey) string {
+func (c *Data) buildUpdateSQL(row database.Row, pk *database.PrimaryKey) string {
 	return database.BuildUpdateSQL(
 		c.state.Schema, c.state.Table,
 		c.orderedColumnNames(row), c.state.GetPrimaryKey(),

@@ -38,7 +38,7 @@ func TestMissingKeysFilledInMemory(t *testing.T) {
 
 	assert.NotEmpty(t, loaded.Global.CloseApp.Keys,
 		"Global.CloseApp should be filled from defaults")
-	assert.NotEmpty(t, loaded.Content.PeekRow.Runes,
+	assert.NotEmpty(t, loaded.Data.PeekRow.Runes,
 		"Content.PeekRow should be filled from defaults")
 	assert.NotEmpty(t, loaded.Schema.FilterBar.Runes,
 		"Schema.FilterBar should be filled from defaults")
@@ -59,7 +59,7 @@ func TestMissingKeysWrittenBackToFile(t *testing.T) {
 
 	assert.NotEmpty(t, onDisk.Global.CloseApp.Keys,
 		"Global.CloseApp.Keys should be written back to disk")
-	assert.NotEmpty(t, onDisk.Content.PeekRow.Runes,
+	assert.NotEmpty(t, onDisk.Data.PeekRow.Runes,
 		"Content.PeekRow.Runes should be written back to disk")
 	assert.NotEmpty(t, onDisk.Schema.FilterBar.Runes,
 		"Schema.FilterBar.Runes should be written back to disk")
@@ -70,7 +70,7 @@ func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {
 
 	partial := KeyBindings{}
 	partial.loadDefaults()
-	partial.Content.ExplainQuery = Key{}
+	partial.Data.ExplainQuery = Key{}
 	data, err := yaml.Marshal(&partial)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0644))
@@ -78,7 +78,7 @@ func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {
 	loaded, err := util.LoadConfigFile(defaultKB(), path)
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, loaded.Content.ExplainQuery.Keys,
+	assert.NotEmpty(t, loaded.Data.ExplainQuery.Keys,
 		"Content.ExplainQuery should be filled from defaults")
 }
 
@@ -87,7 +87,7 @@ func TestNewKeyInExistingStructWrittenBackToFile(t *testing.T) {
 
 	partial := KeyBindings{}
 	partial.loadDefaults()
-	partial.Content.ExplainQuery = Key{}
+	partial.Data.ExplainQuery = Key{}
 	data, err := yaml.Marshal(&partial)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, data, 0644))
@@ -101,7 +101,7 @@ func TestNewKeyInExistingStructWrittenBackToFile(t *testing.T) {
 	var onDisk KeyBindings
 	require.NoError(t, yaml.Unmarshal(fileBytes, &onDisk))
 
-	assert.NotEmpty(t, onDisk.Content.ExplainQuery.Keys,
+	assert.NotEmpty(t, onDisk.Data.ExplainQuery.Keys,
 		"Content.ExplainQuery.Keys should be written back to disk")
 }
 

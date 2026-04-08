@@ -395,8 +395,8 @@ func (m *CreateTableModal) renderColumns() {
 	for i, h := range headers {
 		m.columnsTable.SetCell(0, i, tview.NewTableCell(" "+h+" ").
 			SetSelectable(false).
-			SetTextColor(styles.Content.ColumnKeyColor.Color()).
-			SetBackgroundColor(styles.Content.HeaderRowBackgroundColor.Color()).
+			SetTextColor(styles.Data.ColumnKeyColor.Color()).
+			SetBackgroundColor(styles.Data.HeaderRowBackgroundColor.Color()).
 			SetAlign(tview.AlignCenter))
 	}
 
@@ -408,7 +408,7 @@ func (m *CreateTableModal) renderColumns() {
 			SetTextColor(styles.Global.TextColor.Color()))
 
 		m.columnsTable.SetCell(r+1, 1, tview.NewTableCell(" "+col.dataType+" ").
-			SetTextColor(styles.Content.ColumnTypeColor.Color()))
+			SetTextColor(styles.Data.ColumnTypeColor.Color()))
 
 		pkText := empty
 		if col.pk {
@@ -416,7 +416,7 @@ func (m *CreateTableModal) renderColumns() {
 		}
 		m.columnsTable.SetCell(r+1, 2, tview.NewTableCell(pkText).
 			SetAlign(tview.AlignCenter).
-			SetTextColor(styles.Content.ColumnTypeColor.Color()))
+			SetTextColor(styles.Data.ColumnTypeColor.Color()))
 
 		nullText := empty
 		if col.nullable {
@@ -424,7 +424,7 @@ func (m *CreateTableModal) renderColumns() {
 		}
 		m.columnsTable.SetCell(r+1, 3, tview.NewTableCell(nullText).
 			SetAlign(tview.AlignCenter).
-			SetTextColor(styles.Content.ColumnTypeColor.Color()))
+			SetTextColor(styles.Data.ColumnTypeColor.Color()))
 	}
 
 	if len(m.columns) > 0 {

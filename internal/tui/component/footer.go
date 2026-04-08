@@ -199,18 +199,26 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	}
 
 	focus := string(f.currentFocus)
+
+	// QueryMode results table: show only read-only keys from DataKeys.
+	if strings.HasSuffix(focus, "-results") {
+		keys := f.App.GetKeys().DataKeysForQueryMode()
+		f.keys = keys
+		return keys, nil
+	}
+
 	switch {
 	case focus == string(SchemaTreeId):
 		focus = "Schema"
-	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort") || strings.HasSuffix(focus, "-query"):
-		// Dynamic input bar IDs from Content tabs (e.g. "QueryTab-1-filter")
+	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort"):
+		// Dynamic input bar IDs from Data tabs (e.g. "QueryTab-1-filter")
 		focus = "InputBar"
 	case focus == "FilterBar" || focus == "SortBar":
 		// Static IDs (e.g. SchemaTree's filter bar)
 		focus = "InputBar"
 	case strings.HasPrefix(focus, "QueryTab-"):
-		// Content tab's inner table uses the Content's dynamic ID
-		focus = "Content"
+		// TableMode Data tab inner table
+		focus = "Data"
 	}
 
 	orderedKeys, err := f.App.GetKeys().GetKeysForElement(string(focus))

@@ -30,7 +30,7 @@ type (
 		Connection     ConnectionKeys     `yaml:"connection"`
 		Schema         SchemaKeys         `yaml:"schema"`
 		InputBar       InputBarKeys       `yaml:"inputBar"`
-		Content        ContentKeys        `yaml:"content"`
+		Data           DataKeys           `yaml:"data"`
 		Peeker         PeekerKeys         `yaml:"peeker"`
 		SQLQueryEditor SQLQueryEditorKeys `yaml:"sqlQueryEditor"`
 		Index          IndexKeys          `yaml:"index"`
@@ -85,7 +85,7 @@ type (
 		Paste      Key `yaml:"paste"`
 	}
 
-	ContentKeys struct {
+	DataKeys struct {
 		PeekRow            Key `yaml:"peekRow"`
 		FullPagePeek       Key `yaml:"fullPagePeek"`
 		TermEditor         Key `yaml:"termEditor"`
@@ -178,10 +178,22 @@ type (
 	SQLQueryEditorKeys struct {
 		Execute Key `yaml:"execute"`
 		Clear   Key `yaml:"clear"`
-		Close   Key `yaml:"close"`
 		Expand  Key `yaml:"expand"`
 	}
 )
+
+// DataKeysForQueryMode returns the subset of DataKeys that are meaningful in
+// QueryMode (read-only results table — no CRUD, no filter/sort bars).
+// This lets the footer show only relevant hints without a separate key group.
+func (kb *KeyBindings) DataKeysForQueryMode() []Key {
+	d := kb.Data
+	return []Key{
+		d.PeekRow, d.FullPagePeek,
+		d.CopyValue, d.CopyRow,
+		d.Refresh, d.NextPage, d.PreviousPage,
+		d.ExplainQuery,
+	}
+}
 
 // keyGroupParents defines optional single-parent inheritance for key groups.
 // GetKeysForElement prepends the parent's keys before the child's own keys,

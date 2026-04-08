@@ -146,7 +146,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 	}
 
-	k.Content = ContentKeys{
+	k.Data = DataKeys{
 		PeekRow: Key{
 			Runes:       []string{"o"},
 			Keys:        []string{"Enter"},
@@ -391,16 +391,12 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.SQLQueryEditor = SQLQueryEditorKeys{
 		Execute: Key{
-			Keys:        []string{"Ctrl+s", "Ctrl+Enter"},
+			Keys:        []string{"Ctrl+Enter"},
 			Description: "Execute",
 		},
 		Clear: Key{
 			Keys:        []string{"Ctrl+u"},
 			Description: "Clear",
-		},
-		Close: Key{
-			Keys:        []string{"Esc"},
-			Description: "Focus results",
 		},
 		Expand: Key{
 			Keys:        []string{"Ctrl+e"},

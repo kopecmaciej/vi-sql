@@ -284,11 +284,6 @@ func (e *SQLQueryEditor) SetOnExecute(fn func(sql string)) {
 	e.onExecute = fn
 }
 
-// SetOnClose sets the callback invoked when the user closes the editor.
-func (e *SQLQueryEditor) SetOnClose(fn func()) {
-	e.onClose = fn
-}
-
 // SetOnExpand sets the callback invoked when the user toggles the editor size.
 func (e *SQLQueryEditor) SetOnExpand(fn func()) {
 	e.onExpand = fn
@@ -300,7 +295,7 @@ func (e *SQLQueryEditor) SetOnFocusDown(fn func()) {
 	e.onFocusDown = fn
 }
 
-// InputHandler intercepts execute/load/paste/close keys, passing everything
+// InputHandler intercepts execute/load/paste keys, passing everything
 // else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return e.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
@@ -355,15 +350,6 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 			return
 		case k.Contains(k.SQLQueryEditor.Clear, event.Name()):
 			e.SetText("", true)
-			return
-		case k.Contains(k.SQLQueryEditor.Close, event.Name()):
-			if e.TextArea.IsAutocompleteVisible() {
-				e.TextArea.InputHandler()(event, setFocus)
-				return
-			}
-			if e.onClose != nil {
-				e.onClose()
-			}
 			return
 		}
 		e.TextArea.InputHandler()(event, setFocus)
