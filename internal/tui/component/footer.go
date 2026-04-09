@@ -15,8 +15,6 @@ const (
 )
 
 type (
-	order int
-
 	info struct {
 		label string
 		value string
@@ -75,7 +73,7 @@ func (f *Footer) Toggle() int {
 	if f.expanded {
 		return f.ExpandedHeight()
 	}
-	return 2 // bottom padding consumes 1 row, so minimum is 2 to show content
+	return 2 // 1 row + padding
 }
 
 func (f *Footer) collectPairs() []info {
@@ -165,17 +163,13 @@ func (f *Footer) handleEvents() {
 		switch event.Message.Type {
 		case manager.FocusChanged:
 			f.currentFocus = tview.Identifier(event.Message.Data.(tview.Identifier))
-			go f.App.QueueUpdateDraw(func() {
-				if f.expanded && f.onHeightChange != nil {
-					f.onHeightChange()
-				}
-				f.Render()
-			})
+			if f.expanded && f.onHeightChange != nil {
+				f.onHeightChange()
+			}
+			f.Render()
 		case manager.StyleChanged:
 			f.setStyle()
-			go f.App.QueueUpdateDraw(func() {
-				f.Render()
-			})
+			f.Render()
 		}
 	})
 }
@@ -208,8 +202,6 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	}
 
 	switch {
-	case focus == string(SchemaTreeId):
-		focus = "Schema"
 	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort"):
 		// Dynamic input bar IDs from Data tabs (e.g. "QueryTab-1-filter")
 		focus = "InputBar"

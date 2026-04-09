@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	SchemaTreeId        = "SchemaTree"
+	SchemaTreeId        = "Schema"
 	SchemaFilterBarId   = "FilterBar"
 	SchemaInputModalId  = "SchemaInputModal"
 	SchemaDeleteModalId = "SchemaDeleteModal"
@@ -312,7 +312,7 @@ func (s *SchemaTree) addTableNode(ctx context.Context, parent *tview.TreeNode, s
 		}
 	})
 
-	columnsNode := tview.NewTreeNode("  Columns")
+	columnsNode := tview.NewTreeNode(" Columns")
 	columnsNode.SetColor(s.style.NodeTextColor.Color())
 	columnsNode.SetSelectable(true)
 	columnsNode.SetReference("__subnode__")
@@ -323,7 +323,7 @@ func (s *SchemaTree) addTableNode(ctx context.Context, parent *tview.TreeNode, s
 	})
 	node.AddChild(columnsNode)
 
-	indexesNode := tview.NewTreeNode("  Indexes")
+	indexesNode := tview.NewTreeNode(" Indexes")
 	indexesNode.SetColor(s.style.NodeTextColor.Color())
 	indexesNode.SetSelectable(true)
 	indexesNode.SetReference("__subnode__")

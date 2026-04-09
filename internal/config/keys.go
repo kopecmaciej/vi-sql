@@ -184,7 +184,6 @@ type (
 
 // DataKeysForQueryMode returns the subset of DataKeys that are meaningful in
 // QueryMode (read-only results table — no CRUD, no filter/sort bars).
-// This lets the footer show only relevant hints without a separate key group.
 func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	d := kb.Data
 	return []Key{
@@ -197,8 +196,7 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 
 // keyGroupParents defines optional single-parent inheritance for key groups.
 // GetKeysForElement prepends the parent's keys before the child's own keys,
-// making the header and help page show the full effective key set.
-var keyGroupParents = map[string]string{}
+var keyGroupParents = map[string]string{} // eg: "ChildKeys": "ParentKeys"
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
 # keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space])
