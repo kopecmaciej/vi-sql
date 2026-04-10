@@ -4,7 +4,7 @@ global:
   moreContrastBackgroundColor: "#2563EB"
   textColor: "#E2E8F0"
   secondaryTextColor: "#FDE68A"
-  borderColor: "#2563EB"
+  borderColor: "#1D4ED8"
   focusColor: "#60A5FA"
   titleColor: "#2563EB"
   graphicsColor: "#2563EB"
