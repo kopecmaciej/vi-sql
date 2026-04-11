@@ -72,13 +72,13 @@ func (p *Peeker) setLayout() {
 }
 
 func (p *Peeker) setStyle() {
-	style := &p.App.GetStyles().RowPeeker
-	p.ViewModal.SetStyle(p.App.GetStyles())
-	p.SetHighlightColor(style.HighlightColor.Color())
+	styles := p.App.GetStyles()
+	p.ViewModal.SetStyle(styles)
+	p.SetHighlightColor(styles.Others.PeekerHighlightColor.Color())
 	p.SetDocumentColors(
-		style.KeyColor.Color(),
-		style.ValueColor.Color(),
-		style.BracketColor.Color(),
+		styles.Global.TitleColor.Color(),
+		styles.Global.TextColor.Color(),
+		styles.Global.SecondaryTextColor.Color(),
 	)
 }
 

@@ -129,20 +129,20 @@ func (m *Modal) SetStyle(style *config.Styles) {
 	SetCommonStyle(m.Box, style)
 	m.SetBackgroundColor(style.Global.BackgroundColor.Color())
 	m.SetTextColor(style.Global.TextColor.Color())
-	m.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
+	m.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
 	m.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 
 func (v *ViewModal) SetStyle(style *config.Styles) {
 	SetCommonStyle(v.ViewModal, style)
-	v.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
+	v.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
 	v.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 
 func (f *FormModal) SetStyle(style *config.Styles) {
 	SetCommonStyle(f.FormModal, style)
 	SetCommonStyle(f.FormModal.Form, style)
-	f.Form.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
+	f.Form.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
 	f.Form.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 

@@ -49,7 +49,7 @@ func (f *Form) ApplyDropdownNavKeys(k *config.KeyBindings) {
 
 func (f *Form) SetStyle(style *config.Styles) {
 	SetCommonStyle(f.Form, style)
-	f.SetButtonBackgroundColor(style.Others.ButtonsBackgroundColor.Color())
+	f.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
 	f.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 

@@ -57,10 +57,11 @@ func (i *InputBar) setLayout() {
 }
 
 func (i *InputBar) setStyle() {
-	i.SetStyle(i.App.GetStyles())
-	i.style = &i.App.GetStyles().InputBar
-	i.SetLabelColor(i.style.LabelColor.Color())
-	i.SetFieldTextColor(i.style.InputColor.Color())
+	styles := i.App.GetStyles()
+	i.SetStyle(styles)
+	i.style = &styles.InputBar
+	i.SetLabelColor(styles.Global.SecondaryTextColor.Color())
+	i.SetFieldTextColor(styles.Global.TextColor.Color())
 
 	a := i.style.Autocomplete
 	background := a.BackgroundColor.Color()

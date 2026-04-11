@@ -27,7 +27,7 @@ func NewResultsBar() *ResultsBar {
 func (r *ResultsBar) SetStyle(styles *config.Styles) {
 	r.styles = styles
 	r.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	r.SetTextColor(styles.Data.StatusTextColor.Color())
+	r.SetTextColor(styles.Global.SecondaryTextColor.Color())
 }
 
 // Render updates the bar text from the given table state and query metadata.

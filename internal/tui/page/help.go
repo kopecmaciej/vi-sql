@@ -140,26 +140,25 @@ func (h *Help) setLayout() {
 
 func (h *Help) setStyle() {
 	h.style = &h.App.GetStyles().Help
-	h.SetStyle(h.App.GetStyles())
-	h.leftFlex.SetStyle(h.App.GetStyles())
-	h.rightFlex.SetStyle(h.App.GetStyles())
-	h.sectionList.SetStyle(h.App.GetStyles())
-	h.keysTable.SetStyle(h.App.GetStyles())
-	h.hintBar.SetStyle(h.App.GetStyles())
-	h.searchInput.SetStyle(h.App.GetStyles())
-
 	s := h.App.GetStyles()
+	h.SetStyle(s)
+	h.leftFlex.SetStyle(s)
+	h.rightFlex.SetStyle(s)
+	h.sectionList.SetStyle(s)
+	h.keysTable.SetStyle(s)
+	h.hintBar.SetStyle(s)
+	h.searchInput.SetStyle(s)
+
 	h.capturePanel.SetBackgroundColor(s.Global.BackgroundColor.Color())
 	h.capturePanel.SetBorderColor(s.Global.BorderColor.Color())
 	h.capturePanel.SetTitleColor(s.Global.TitleColor.Color())
 	h.captureDisplay.SetBackgroundColor(s.Global.BackgroundColor.Color())
 	h.captureDisplay.SetTextColor(s.Global.TextColor.Color())
 
-	textColor := h.App.GetStyles().Global.TextColor.Color()
-	selectedFg := h.style.SelectedTextColor.Color()
+	selectedFg := s.Global.BackgroundColor.Color()
 	selectedBg := h.style.SelectedBackgroundColor.Color()
 
-	h.sectionList.SetMainTextColor(textColor)
+	h.sectionList.SetMainTextColor(s.Global.TextColor.Color())
 	h.sectionList.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(selectedFg).
 		Background(selectedBg))
@@ -169,7 +168,7 @@ func (h *Help) setStyle() {
 		Background(selectedBg))
 
 	h.keysTable.SetScrollBarStyle(
-		tcell.StyleDefault.Foreground(h.style.ScrollBarThumbColor.Color()),
+		tcell.StyleDefault.Foreground(s.Global.SecondaryTextColor.Color()),
 		tcell.StyleDefault.Foreground(h.style.ScrollBarTrackColor.Color()),
 	)
 }
@@ -345,7 +344,7 @@ func (h *Help) saveEdit() {
 	h.exitEditMode()
 
 	h.keysTable.SetCell(row, 0,
-		tview.NewTableCell(formatHelpKeyString(newKey)).SetTextColor(h.style.KeyColor.Color()))
+		tview.NewTableCell(formatHelpKeyString(newKey)).SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color()))
 	h.keysTable.Select(row, 0)
 }
 
@@ -485,9 +484,9 @@ func (h *Help) renderKeysForSection(idx int) {
 	for row, key := range section.Keys {
 		keyString := formatHelpKeyString(key)
 		h.keysTable.SetCell(row, 0,
-			tview.NewTableCell(keyString).SetTextColor(h.style.KeyColor.Color()))
+			tview.NewTableCell(keyString).SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color()))
 		h.keysTable.SetCell(row, 1,
-			tview.NewTableCell(key.Description).SetTextColor(h.style.DescriptionColor.Color()))
+			tview.NewTableCell(key.Description).SetTextColor(h.App.GetStyles().Global.TextColor.Color()))
 	}
 	h.keysTable.ScrollToBeginning()
 	if h.keysTable.GetRowCount() > 0 {

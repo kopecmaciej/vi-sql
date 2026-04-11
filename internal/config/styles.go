@@ -19,20 +19,15 @@ type (
 	Style string
 
 	Styles struct {
-		Global      GlobalStyles     `yaml:"global"`
-		Welcome     FormStyle        `yaml:"welcome"`
-		Connection  ConnectionStyle  `yaml:"connection"`
-		Footer      FooterStyle      `yaml:"footer"`
-		TabBar      TabBarStyle      `yaml:"tabBar"`
-		Schemas     SchemasStyle     `yaml:"schemas"`
-		Data        DataStyle        `yaml:"data"`
-		RowPeeker   RowPeekerStyle   `yaml:"rowPeeker"`
-		InputBar    InputBarStyle    `yaml:"inputBar"`
-		History     HistoryStyle     `yaml:"history"`
-		Help        HelpStyle        `yaml:"help"`
-		Others      OthersStyle      `yaml:"others"`
-		StyleChange StyleChangeStyle `yaml:"styleChange"`
-		SQLEditor   SQLEditorStyle   `yaml:"sqlEditor"`
+		Global     GlobalStyles    `yaml:"global"`
+		Symbols    SymbolsStyle    `yaml:"-"` // loaded from icons.yaml, not from theme YAML
+		Connection ConnectionStyle `yaml:"connection"`
+		Data       DataStyle       `yaml:"data"`
+		TabBar     TabBarStyle     `yaml:"tabBar"`
+		InputBar   InputBarStyle   `yaml:"inputBar"`
+		Help       HelpStyle       `yaml:"help"`
+		Others     OthersStyle     `yaml:"others"`
+		SQLEditor  SQLEditorStyle  `yaml:"sqlEditor"`
 	}
 
 	GlobalStyles struct {
@@ -45,65 +40,27 @@ type (
 		FocusColor                  Style `yaml:"focusColor"`
 		TitleColor                  Style `yaml:"titleColor"`
 		GraphicsColor               Style `yaml:"graphicsColor"`
-	}
-
-	FormStyle struct {
-		FormLabelColor           Style `yaml:"formLabelColor"`
-		FormInputColor           Style `yaml:"formInputColor"`
-		FormInputBackgroundColor Style `yaml:"formInputBackgroundColor"`
+		DimColor                    Style `yaml:"dimColor"`
 	}
 
 	ConnectionStyle struct {
-		FormStyle                    `yaml:",inline"`
-		ListTextColor                Style `yaml:"listTextColor"`
-		ListSelectedTextColor        Style `yaml:"listSelectedTextColor"`
-		ListSelectedBackgroundColor  Style `yaml:"listSelectedBackgroundColor"`
-		ListSecondaryTextColor       Style `yaml:"listSecondaryTextColor"`
-		ListSecondaryBackgroundColor Style `yaml:"listSecondaryBackgroundColor"`
-	}
-
-	FooterStyle struct {
-		KeyColor       Style `yaml:"keyColor"`
-		ValueColor     Style `yaml:"valueColor"`
-		ActiveSymbol   Style `yaml:"activeSymbol"`
-		InactiveSymbol Style `yaml:"inactiveSymbol"`
-	}
-
-	TabBarStyle struct {
-		ActiveTextColor       Style `yaml:"activeTextColor"`
-		ActiveBackgroundColor Style `yaml:"activeBackgroundColor"`
-	}
-
-	SchemasStyle struct {
-		NodeTextColor    Style `yaml:"nodeTextColor"`
-		LeafTextColor    Style `yaml:"leafTextColor"`
-		NodeSymbolColor  Style `yaml:"nodeSymbolColor"`
-		LeafSymbolColor  Style `yaml:"leafSymbolColor"`
-		OpenNodeSymbol   Style `yaml:"openNodeSymbol"`
-		ClosedNodeSymbol Style `yaml:"closedNodeSymbol"`
-		LeafSymbol       Style `yaml:"leafSymbol"`
+		ListTextColor               Style `yaml:"listTextColor"`
+		ListSelectedTextColor       Style `yaml:"listSelectedTextColor"`
+		ListSelectedBackgroundColor Style `yaml:"listSelectedBackgroundColor"`
+		ListSecondaryTextColor      Style `yaml:"listSecondaryTextColor"`
 	}
 
 	DataStyle struct {
-		StatusTextColor          Style `yaml:"statusTextColor"`
-		HeaderRowBackgroundColor Style `yaml:"headerRowColor"`
-		ColumnKeyColor           Style `yaml:"columnKeyColor"`
-		ColumnTypeColor          Style `yaml:"columnTypeColor"`
-		CellTextColor            Style `yaml:"cellTextColor"`
-		SelectedRowColor         Style `yaml:"selectedRowColor"`
-		MultiSelectedRowColor    Style `yaml:"multiSelectedRowColor"`
+		CellTextColor         Style `yaml:"cellTextColor"`
+		SelectedRowColor      Style `yaml:"selectedRowColor"`
+		MultiSelectedRowColor Style `yaml:"multiSelectedRowColor"`
 	}
 
-	RowPeekerStyle struct {
-		KeyColor       Style `yaml:"keyColor"`
-		ValueColor     Style `yaml:"valueColor"`
-		BracketColor   Style `yaml:"bracketColor"`
-		HighlightColor Style `yaml:"highlightColor"`
+	TabBarStyle struct {
+		ActiveTextColor Style `yaml:"activeTextColor"`
 	}
 
 	InputBarStyle struct {
-		LabelColor   Style             `yaml:"labelColor"`
-		InputColor   Style             `yaml:"inputColor"`
 		Autocomplete AutocompleteStyle `yaml:"autocomplete"`
 	}
 
@@ -116,37 +73,18 @@ type (
 		BorderColor           Style `yaml:"borderColor"`
 	}
 
-	HistoryStyle struct {
-		TextColor               Style `yaml:"textColor"`
-		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
-		TimestampColor          Style `yaml:"timestampColor"`
-		HeaderTextColor         Style `yaml:"headerTextColor"`
-		HeaderBackgroundColor   Style `yaml:"headerBackgroundColor"`
-	}
-
 	HelpStyle struct {
-		HeaderColor             Style `yaml:"headerColor"`
-		KeyColor                Style `yaml:"keyColor"`
-		DescriptionColor        Style `yaml:"descriptionColor"`
-		ScrollBarThumbColor     Style `yaml:"scrollBarThumbColor"`
 		ScrollBarTrackColor     Style `yaml:"scrollBarTrackColor"`
-		SelectedTextColor       Style `yaml:"selectedTextColor"`
 		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
 	}
 
 	OthersStyle struct {
-		ButtonsTextColor                    Style `yaml:"buttonsTextColor"`
-		ButtonsBackgroundColor              Style `yaml:"buttonsBackgroundColor"`
-		DeleteButtonSelectedBackgroundColor Style `yaml:"deleteButtonSelectedBackgroundColor"`
-		ModalTextColor                      Style `yaml:"modalTextColor"`
-		ModalSecondaryTextColor             Style `yaml:"modalSecondaryTextColor"`
-		SeparatorSymbol                     Style `yaml:"separatorSymbol"`
+		LeafSymbolColor                     Style `yaml:"leafSymbolColor"`
 		SeparatorColor                      Style `yaml:"separatorColor"`
-	}
-
-	StyleChangeStyle struct {
-		TextColor               Style `yaml:"textColor"`
-		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
+		ButtonsTextColor                    Style `yaml:"buttonsTextColor"`
+		DeleteButtonSelectedBackgroundColor Style `yaml:"deleteButtonSelectedBackgroundColor"`
+		TableHeaderTextColor                Style `yaml:"tableHeaderTextColor"`
+		PeekerHighlightColor                Style `yaml:"peekerHighlightColor"`
 	}
 
 	SQLEditorStyle struct {
@@ -170,69 +108,27 @@ func (s *Styles) loadDefaults() {
 		FocusColor:                  "#60A5FA",
 		TitleColor:                  "#2563EB",
 		GraphicsColor:               "#2563EB",
-	}
-
-	s.Welcome = FormStyle{
-		FormLabelColor:           "#FDE68A",
-		FormInputColor:           "#E2E8F0",
-		FormInputBackgroundColor: "#1E293B",
+		DimColor:                    "#64748B",
 	}
 
 	s.Connection = ConnectionStyle{
-		FormStyle: FormStyle{
-			FormLabelColor:           "#FDE68A",
-			FormInputColor:           "#E2E8F0",
-			FormInputBackgroundColor: "#1E293B",
-		},
-		ListTextColor:                "#F1FA8C",
-		ListSelectedTextColor:        "#F1FA8C",
-		ListSelectedBackgroundColor:  "#2563EB",
-		ListSecondaryTextColor:       "#2563EB",
-		ListSecondaryBackgroundColor: "#0F172A",
-	}
-
-	s.Footer = FooterStyle{
-		KeyColor:       "#FDE68A",
-		ValueColor:     "#2563EB",
-		ActiveSymbol:   "●",
-		InactiveSymbol: "○",
-	}
-
-	s.TabBar = TabBarStyle{
-		ActiveTextColor:       "#FDE68A",
-		ActiveBackgroundColor: "#2563EB",
-	}
-
-	s.Schemas = SchemasStyle{
-		NodeTextColor:    "#2563EB",
-		LeafTextColor:    "#E2E8F0",
-		NodeSymbolColor:  "#FDE68A",
-		LeafSymbolColor:  "#2563EB",
-		OpenNodeSymbol:   "▾",
-		ClosedNodeSymbol: "▸",
-		LeafSymbol:       "⊞",
+		ListTextColor:               "#F1FA8C",
+		ListSelectedTextColor:       "#F1FA8C",
+		ListSelectedBackgroundColor: "#2563EB",
+		ListSecondaryTextColor:      "#2563EB",
 	}
 
 	s.Data = DataStyle{
-		StatusTextColor:          "#FDE68A",
-		HeaderRowBackgroundColor: "#1E293B",
-		ColumnKeyColor:           "#FDE68A",
-		ColumnTypeColor:          "#2563EB",
-		CellTextColor:            "#2563EB",
-		SelectedRowColor:         "#60A5FA",
-		MultiSelectedRowColor:    "#1D4ED8",
+		CellTextColor:         "#2563EB",
+		SelectedRowColor:      "#60A5FA",
+		MultiSelectedRowColor: "#1D4ED8",
 	}
 
-	s.RowPeeker = RowPeekerStyle{
-		KeyColor:       "#2563EB",
-		ValueColor:     "#E2E8F0",
-		BracketColor:   "#FDE68A",
-		HighlightColor: "#3A4963",
+	s.TabBar = TabBarStyle{
+		ActiveTextColor: "#FDE68A",
 	}
 
 	s.InputBar = InputBarStyle{
-		LabelColor: "#FDE68A",
-		InputColor: "#E2E8F0",
 		Autocomplete: AutocompleteStyle{
 			BackgroundColor:       "#1E293B",
 			TextColor:             "#E2E8F0",
@@ -243,37 +139,18 @@ func (s *Styles) loadDefaults() {
 		},
 	}
 
-	s.History = HistoryStyle{
-		TextColor:               "#E2E8F0",
-		SelectedBackgroundColor: "#2563EB",
-		TimestampColor:          "#64748B",
-		HeaderTextColor:         "#94A3B8",
-		HeaderBackgroundColor:   "#1E293B",
-	}
-
 	s.Help = HelpStyle{
-		HeaderColor:             "#2563EB",
-		KeyColor:                "#FDE68A",
-		DescriptionColor:        "#E2E8F0",
-		ScrollBarThumbColor:     "#FDE68A",
 		ScrollBarTrackColor:     "#4A5568",
-		SelectedTextColor:       "#0F172A",
 		SelectedBackgroundColor: "#FDE68A",
 	}
 
 	s.Others = OthersStyle{
-		ButtonsTextColor:                    "#FDE68A",
-		ButtonsBackgroundColor:              "#2563EB",
-		DeleteButtonSelectedBackgroundColor: "#DA3312",
-		ModalTextColor:                      "#FDE68A",
-		ModalSecondaryTextColor:             "#2563EB",
-		SeparatorSymbol:                     "|",
+		LeafSymbolColor:                     "#2563EB",
 		SeparatorColor:                      "#334155",
-	}
-
-	s.StyleChange = StyleChangeStyle{
-		TextColor:               "#E2E8F0",
-		SelectedBackgroundColor: "#2563EB",
+		ButtonsTextColor:                    "#FDE68A",
+		DeleteButtonSelectedBackgroundColor: "#DA3312",
+		TableHeaderTextColor:                "#94A3B8",
+		PeekerHighlightColor:                "#3A4963",
 	}
 
 	s.SQLEditor = SQLEditorStyle{
@@ -295,6 +172,11 @@ func LoadStyles(styleName string, useBetterSymbols bool) (*Styles, error) {
 	defaultStyles.loadDefaults()
 
 	if os.Getenv("ENV") == "vi-dev" {
+		symbols, err := LoadIcons(useBetterSymbols)
+		if err != nil {
+			return nil, err
+		}
+		defaultStyles.Symbols = *symbols
 		return defaultStyles, nil
 	}
 
@@ -313,11 +195,12 @@ func LoadStyles(styleName string, useBetterSymbols bool) (*Styles, error) {
 		return nil, fmt.Errorf("failed to load config file: %w", err)
 	}
 
-	if !useBetterSymbols {
-		styles.Schemas.OpenNodeSymbol = defaultStyles.Schemas.OpenNodeSymbol
-		styles.Schemas.ClosedNodeSymbol = defaultStyles.Schemas.ClosedNodeSymbol
-		styles.Schemas.LeafSymbol = defaultStyles.Schemas.LeafSymbol
+	symbols, err := LoadIcons(useBetterSymbols)
+	if err != nil {
+		return nil, err
 	}
+	styles.Symbols = *symbols
+
 	return styles, nil
 }
 
@@ -431,15 +314,12 @@ func ExtractStyles() error {
 		if entry.IsDir() {
 			continue
 		}
-		dest := stylesDir + "/" + entry.Name()
-		if _, err := os.Stat(dest); err == nil {
-			continue
-		}
 		content, err := stylesFS.ReadFile("styles/" + entry.Name())
 		if err != nil {
 			log.Error().Err(err).Str("File", entry.Name()).Msg("styles: failed to read embedded style file")
 			return fmt.Errorf("failed to read embedded style file: %w", err)
 		}
+		dest := stylesDir + "/" + entry.Name()
 		if err := os.WriteFile(dest, content, 0644); err != nil {
 			log.Error().Err(err).Str("File", entry.Name()).Msg("styles: failed to write style file")
 			return fmt.Errorf("failed to write style file: %w", err)

@@ -48,9 +48,9 @@ func (iem *InlineEditModal) setLayout() {
 func (iem *InlineEditModal) setStyle() {
 	styles := iem.App.GetStyles()
 	iem.SetStyle(styles)
-	iem.Form.SetFieldTextColor(styles.Connection.FormInputColor.Color())
-	iem.Form.SetFieldBackgroundColor(styles.Connection.FormInputBackgroundColor.Color())
-	iem.Form.SetLabelColor(styles.Connection.FormLabelColor.Color())
+	iem.Form.SetFieldTextColor(styles.Global.TextColor.Color())
+	iem.Form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	iem.Form.SetLabelColor(styles.Global.SecondaryTextColor.Color())
 }
 
 func (iem *InlineEditModal) setKeybindings() {

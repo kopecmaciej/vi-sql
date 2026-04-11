@@ -15,7 +15,6 @@ type StyleChangeModal struct {
 	*core.BaseElement
 	*core.List
 
-	style         *config.StyleChangeStyle
 	applyStyle    func(styleName string) error
 	originalStyle string
 }
@@ -50,17 +49,17 @@ func (sc *StyleChangeModal) setLayout() {
 }
 
 func (sc *StyleChangeModal) setStyle() {
-	sc.style = &sc.App.GetStyles().StyleChange
-	globalBackground := sc.App.GetStyles().Global.BackgroundColor.Color()
+	styles := sc.App.GetStyles()
+	globalBackground := styles.Global.BackgroundColor.Color()
 
 	mainStyle := tcell.StyleDefault.
-		Foreground(sc.style.TextColor.Color()).
+		Foreground(styles.Global.TextColor.Color()).
 		Background(globalBackground)
 	sc.SetMainTextStyle(mainStyle)
 
 	selectedStyle := tcell.StyleDefault.
 		Foreground(globalBackground).
-		Background(sc.style.SelectedBackgroundColor.Color())
+		Background(styles.Global.MoreContrastBackgroundColor.Color())
 	sc.SetSelectedStyle(selectedStyle)
 }
 

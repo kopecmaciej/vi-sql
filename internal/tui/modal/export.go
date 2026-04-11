@@ -80,12 +80,12 @@ func (e *ExportModal) showFormatStep(ctx context.Context, query, schema, table s
 	fmtModal.SetBorderPadding(0, 0, 1, 1)
 
 	mainStyle := tcell.StyleDefault.
-		Foreground(e.style.ModalTextColor.Color()).
+		Foreground(e.App.GetStyles().Global.SecondaryTextColor.Color()).
 		Background(bg)
 	fmtModal.SetMainTextStyle(mainStyle)
 
 	secondaryStyle := tcell.StyleDefault.
-		Foreground(e.style.ModalSecondaryTextColor.Color()).
+		Foreground(e.App.GetStyles().Global.TitleColor.Color()).
 		Background(bg)
 	fmtModal.SetSecondaryTextStyle(secondaryStyle)
 
@@ -126,7 +126,7 @@ func (e *ExportModal) showPathStep(ctx context.Context, format util.ExportFormat
 	pathModal.SetBorderColor(s.Global.BorderColor.Color())
 	pathModal.SetFieldBackgroundColor(s.Global.ContrastBackgroundColor.Color())
 	pathModal.SetFieldTextColor(s.Global.TextColor.Color())
-	pathModal.SetLabelColor(e.style.ModalTextColor.Color())
+	pathModal.SetLabelColor(e.App.GetStyles().Global.SecondaryTextColor.Color())
 	pathModal.SetInputLabel("File: ")
 	pathModal.SetText(e.defaultFilename(format, table))
 

@@ -282,7 +282,7 @@ func (c *Data) setStyle() {
 	c.table.SetStyle(styles)
 
 	c.table.SetBordersColor(styles.Others.SeparatorColor.Color())
-	c.table.SetSeparator(styles.Others.SeparatorSymbol.Rune())
+	c.table.SetSeparator(styles.Symbols.Separator.Rune())
 
 	multiSelectedStyle := tcell.StyleDefault.
 		Background(c.style.MultiSelectedRowColor.Color()).
@@ -616,9 +616,9 @@ func (c *Data) renderTableView(rows []database.Row) {
 	typeMap := make(map[string]string)
 	boolCols := make(map[string]bool)
 	pkCols := make(map[string]bool)
-	betterSymbols := c.App.GetConfig().Styles.BetterSymbols
+	symbols := c.App.GetStyles().Symbols
 	for _, col := range c.columns {
-		typeMap[col.Name] = database.TypeSymbol(col.DataType, betterSymbols)
+		typeMap[col.Name] = symbols.TypeSymbol(col.DataType)
 		if col.DataType == "boolean" {
 			boolCols[col.Name] = true
 		}
@@ -633,21 +633,21 @@ func (c *Data) renderTableView(rows []database.Row) {
 		if t, ok := typeMap[name]; ok {
 			pkPrefix := ""
 			if pkCols[name] {
-				if betterSymbols {
-					pkPrefix = fmt.Sprintf("[%s]\uF084 ", c.style.ColumnKeyColor.String())
+				if c.App.GetConfig().Styles.BetterSymbols {
+					pkPrefix = fmt.Sprintf("[%s]\uF084 ", c.App.GetStyles().Global.SecondaryTextColor.String())
 				} else {
-					pkPrefix = fmt.Sprintf("[%s]* ", c.style.ColumnKeyColor.String())
+					pkPrefix = fmt.Sprintf("[%s]* ", c.App.GetStyles().Global.SecondaryTextColor.String())
 				}
 			}
 			headerText = fmt.Sprintf("%s[%s]%s [%s]%s ",
 				pkPrefix,
-				c.style.ColumnKeyColor.String(), name,
-				c.style.ColumnTypeColor.String(), t)
+				c.App.GetStyles().Global.SecondaryTextColor.String(), name,
+				c.App.GetStyles().Global.MoreContrastBackgroundColor.String(), t)
 		}
 		c.table.SetCell(0, col, tview.NewTableCell(headerText).
 			SetReference(name).
 			SetSelectable(false).
-			SetBackgroundColor(c.style.HeaderRowBackgroundColor.Color()).
+			SetBackgroundColor(c.App.GetStyles().Global.ContrastBackgroundColor.Color()).
 			SetAlign(tview.AlignCenter))
 	}
 

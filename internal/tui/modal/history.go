@@ -33,7 +33,6 @@ type History struct {
 	*core.BaseElement
 	*core.Flex
 
-	style       *config.HistoryStyle
 	entries     []historyEntry // all entries, newest-first
 	filtered    []historyEntry // currently visible subset
 	table       *tview.Table
@@ -91,7 +90,6 @@ func (h *History) setLayout() {
 }
 
 func (h *History) setStyle() {
-	h.style = &h.App.GetStyles().History
 	styles := h.App.GetStyles()
 	globalBg := styles.Global.BackgroundColor.Color()
 
@@ -100,7 +98,7 @@ func (h *History) setStyle() {
 	h.table.SetBackgroundColor(globalBg)
 	selectedStyle := tcell.StyleDefault.
 		Foreground(globalBg).
-		Background(h.style.SelectedBackgroundColor.Color())
+		Background(styles.Global.MoreContrastBackgroundColor.Color())
 	h.table.SetSelectedStyle(selectedStyle)
 
 	h.preview.SetStyle(styles)
@@ -243,11 +241,12 @@ func (h *History) renderTable() {
 		h.updatePreview(row)
 	})
 
+	styles := h.App.GetStyles()
 	headers := []string{"  #  ", "  TIMESTAMP   ", "  QUERY"}
 	for col, header := range headers {
 		h.table.SetCell(0, col, tview.NewTableCell(header).
-			SetTextColor(h.style.HeaderTextColor.Color()).
-			SetBackgroundColor(h.style.HeaderBackgroundColor.Color()).
+			SetTextColor(styles.Others.TableHeaderTextColor.Color()).
+			SetBackgroundColor(styles.Global.ContrastBackgroundColor.Color()).
 			SetSelectable(false))
 	}
 
@@ -259,9 +258,9 @@ func (h *History) renderTable() {
 		}
 		preview := buildPreview(e.Query)
 
-		h.table.SetCell(i+1, 0, tview.NewTableCell(num).SetTextColor(h.style.TextColor.Color()))
-		h.table.SetCell(i+1, 1, tview.NewTableCell(date).SetTextColor(h.style.TimestampColor.Color()))
-		h.table.SetCell(i+1, 2, tview.NewTableCell(preview).SetTextColor(h.style.TextColor.Color()))
+		h.table.SetCell(i+1, 0, tview.NewTableCell(num).SetTextColor(styles.Global.TextColor.Color()))
+		h.table.SetCell(i+1, 1, tview.NewTableCell(date).SetTextColor(styles.Global.DimColor.Color()))
+		h.table.SetCell(i+1, 2, tview.NewTableCell(preview).SetTextColor(styles.Global.TextColor.Color()))
 	}
 
 	if len(h.filtered) > 0 {

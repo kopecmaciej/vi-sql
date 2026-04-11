@@ -27,7 +27,6 @@ type Footer struct {
 	*core.BaseElement
 	*core.Table
 
-	style          *config.FooterStyle
 	keys           []config.Key
 	currentFocus   tview.Identifier
 	expanded       bool
@@ -57,7 +56,6 @@ func (f *Footer) setLayout() {
 }
 
 func (f *Footer) setStyle() {
-	f.style = &f.App.GetStyles().Footer
 	f.SetStyle(f.App.GetStyles())
 }
 
@@ -176,13 +174,13 @@ func (f *Footer) handleEvents() {
 
 func (f *Footer) keyCell(text string) *tview.TableCell {
 	cell := tview.NewTableCell(text + " ")
-	cell.SetTextColor(f.style.KeyColor.Color())
+	cell.SetTextColor(f.App.GetStyles().Global.SecondaryTextColor.Color())
 	return cell
 }
 
 func (f *Footer) valueCell(text string) *tview.TableCell {
 	cell := tview.NewTableCell(text)
-	cell.SetTextColor(f.style.ValueColor.Color())
+	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color())
 	return cell
 }
 

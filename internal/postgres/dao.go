@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/rs/zerolog/log"
 )
@@ -631,9 +632,14 @@ func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset in
 	defer rows.Close()
 
 	fieldDescs := rows.FieldDescriptions()
+	typeMap := pgtype.NewMap()
 	cols := make([]database.ColumnInfo, len(fieldDescs))
 	for i, fd := range fieldDescs {
-		cols[i] = database.ColumnInfo{Name: fd.Name, Ordinal: i + 1}
+		dataType := ""
+		if t, ok := typeMap.TypeForOID(fd.DataTypeOID); ok {
+			dataType = t.Name
+		}
+		cols[i] = database.ColumnInfo{Name: fd.Name, DataType: dataType, Ordinal: i + 1}
 	}
 
 	result, err := scanTextRows(rows)

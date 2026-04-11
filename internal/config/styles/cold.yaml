@@ -8,51 +8,19 @@ global:
   focusColor: "#60A5FA"
   titleColor: "#2563EB"
   graphicsColor: "#2563EB"
-welcome:
-  formLabelColor: "#FDE68A"
-  formInputColor: "#E2E8F0"
-  formInputBackgroundColor: "#1E293B"
+  dimColor: "#64748B"
 connection:
-  formLabelColor: "#FDE68A"
-  formInputColor: "#E2E8F0"
-  formInputBackgroundColor: "#1E293B"
   listTextColor: "#F1FA8C"
   listSelectedTextColor: "#F1FA8C"
   listSelectedBackgroundColor: "#2563EB"
   listSecondaryTextColor: "#2563EB"
-  listSecondaryBackgroundColor: "#0F172A"
-footer:
-  keyColor: "#FDE68A"
-  valueColor: "#2563EB"
-  activeSymbol: ●
-  inactiveSymbol: ○
-tabBar:
-  activeTextColor: "#FDE68A"
-  activeBackgroundColor: "#2563EB"
-schemas:
-  nodeTextColor: "#2563EB"
-  leafTextColor: "#E2E8F0"
-  nodeSymbolColor: "#FDE68A"
-  leafSymbolColor: "#2563EB"
-  openNodeSymbol: "󰦾 "
-  closedNodeSymbol: "󰆼 "
-  leafSymbol: "󰓫 "
 data:
-  statusTextColor: "#FDE68A"
-  headerRowColor: "#1E293B"
-  columnKeyColor: "#FDE68A"
-  columnTypeColor: "#2563EB"
   cellTextColor: "#2563EB"
   selectedRowColor: "#60A5FA"
   multiSelectedRowColor: "#1D4ED8"
-rowPeeker:
-  keyColor: "#2563EB"
-  valueColor: "#E2E8F0"
-  bracketColor: "#FDE68A"
-  highlightColor: "#3A4963"
+tabBar:
+  activeTextColor: "#FDE68A"
 inputBar:
-  labelColor: "#FDE68A"
-  inputColor: "#E2E8F0"
   autocomplete:
     backgroundColor: "#1E293B"
     textColor: "#E2E8F0"
@@ -60,26 +28,14 @@ inputBar:
     activeTextColor: "#0F172A"
     secondaryTextColor: "#FDE68A"
     borderColor: "#60A5FA"
-history:
-  textColor: "#E2E8F0"
-  selectedBackgroundColor: "#2563EB"
 help:
-  headerColor: "#2563EB"
-  keyColor: "#FDE68A"
-  descriptionColor: "#E2E8F0"
-  scrollBarThumbColor: "#FDE68A"
   scrollBarTrackColor: "#4A5568"
 others:
-  buttonsTextColor: "#FDE68A"
-  buttonsBackgroundColor: "#2563EB"
-  deleteButtonSelectedBackgroundColor: "#DA3312"
-  modalTextColor: "#FDE68A"
-  modalSecondaryTextColor: "#2563EB"
-  separatorSymbol: "|"
+  leafSymbolColor: "#2563EB"
   separatorColor: "#334155"
-styleChange:
-  textColor: "#E2E8F0"
-  selectedBackgroundColor: "#2563EB"
+  buttonsTextColor: "#FDE68A"
+  deleteButtonSelectedBackgroundColor: "#DA3312"
+  peekerHighlightColor: "#3A4963"
 sqlEditor:
   keywordColor: "#60A5FA"
   stringColor: "#4ADE80"

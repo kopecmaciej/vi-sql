@@ -520,13 +520,13 @@ func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset in
 	}
 	defer rows.Close()
 
-	colNames, err := rows.Columns()
+	colTypes, err := rows.ColumnTypes()
 	if err != nil {
 		return "", nil, nil, err
 	}
-	cols := make([]database.ColumnInfo, len(colNames))
-	for i, c := range colNames {
-		cols[i] = database.ColumnInfo{Name: c, Ordinal: i + 1}
+	cols := make([]database.ColumnInfo, len(colTypes))
+	for i, ct := range colTypes {
+		cols[i] = database.ColumnInfo{Name: ct.Name(), DataType: strings.ToLower(ct.DatabaseTypeName()), Ordinal: i + 1}
 	}
 
 	result, err := scanRows(rows)

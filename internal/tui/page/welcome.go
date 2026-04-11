@@ -6,7 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
-	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
@@ -22,8 +21,6 @@ type Welcome struct {
 
 	form    *core.Form
 	hintBar *widget.HintBar
-
-	style *config.FormStyle
 
 	onSubmit func()
 }
@@ -92,14 +89,14 @@ func (w *Welcome) setLayout() {
 }
 
 func (w *Welcome) setStyle() {
-	w.style = &w.App.GetStyles().Welcome
-	w.Flex.SetStyle(w.App.GetStyles())
-	w.form.SetStyle(w.App.GetStyles())
-	w.hintBar.SetStyle(w.App.GetStyles())
+	styles := w.App.GetStyles()
+	w.Flex.SetStyle(styles)
+	w.form.SetStyle(styles)
+	w.hintBar.SetStyle(styles)
 
-	w.form.SetFieldTextColor(w.style.FormInputColor.Color())
-	w.form.SetFieldBackgroundColor(w.style.FormInputBackgroundColor.Color())
-	w.form.SetLabelColor(w.style.FormLabelColor.Color())
+	w.form.SetFieldTextColor(styles.Global.TextColor.Color())
+	w.form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	w.form.SetLabelColor(styles.Global.SecondaryTextColor.Color())
 }
 
 func (w *Welcome) handleEvents() {

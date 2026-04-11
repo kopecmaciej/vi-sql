@@ -69,15 +69,14 @@ func (cf *ConnectionForm) Init(app *core.App) {
 }
 
 func (cf *ConnectionForm) setStyle() {
-	cf.SetStyle(cf.App.GetStyles())
-	cf.form.SetStyle(cf.App.GetStyles())
-	cf.hintBar.SetStyle(cf.App.GetStyles())
+	styles := cf.App.GetStyles()
+	cf.SetStyle(styles)
+	cf.form.SetStyle(styles)
+	cf.hintBar.SetStyle(styles)
 
-	style := &cf.App.GetStyles().Connection
-
-	cf.form.SetFieldTextColor(style.FormInputColor.Color())
-	cf.form.SetFieldBackgroundColor(style.FormInputBackgroundColor.Color())
-	cf.form.SetLabelColor(style.FormLabelColor.Color())
+	cf.form.SetFieldTextColor(styles.Global.TextColor.Color())
+	cf.form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	cf.form.SetLabelColor(styles.Global.SecondaryTextColor.Color())
 
 }
 

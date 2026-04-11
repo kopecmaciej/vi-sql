@@ -66,7 +66,7 @@ func (t *TopBar) updateConnText() {
 	styles := t.App.GetStyles()
 	conn := t.App.GetConfig().GetCurrentConnection()
 	if conn == nil {
-		t.connText.SetText(fmt.Sprintf("[%s]not connected[-] ", styles.Footer.ValueColor.String()))
+		t.connText.SetText(fmt.Sprintf("[%s]not connected[-] ", styles.Global.TitleColor.String()))
 		return
 	}
 
@@ -83,7 +83,7 @@ func (t *TopBar) updateConnText() {
 		}
 	}
 
-	valColor := styles.Footer.ValueColor.String()
+	valColor := styles.Global.TitleColor.String()
 	t.connText.SetText(fmt.Sprintf("[%s]%s:%d[-] ", valColor, host, port))
 }
 

@@ -1,0 +1,17 @@
+# vi-sql icon configuration
+# Edit this file to customize the symbols used in the UI.
+# Set betterSymbols: false in config.yaml to use ASCII fallbacks for the tree icons.
+openNode: "󰦾 "
+closedNode: "󰆼 "
+leaf: "󰓫 "
+separator: "|"
+typeTimestamp: ""
+typeDate: ""
+typeTime: ""
+typeNumber: ""
+typeBool: ""
+typeJSON: ""
+typeUUID: ""
+typeText: ""
+typeBinary: ""
+typeDefault: ""

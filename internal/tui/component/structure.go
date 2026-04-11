@@ -161,8 +161,8 @@ func (s *Structure) renderColumns(columns []database.ColumnInfo, pkCols map[stri
 	for i, h := range headers {
 		s.table.SetCell(0, i, tview.NewTableCell(" "+h+" ").
 			SetSelectable(false).
-			SetTextColor(styles.Data.ColumnKeyColor.Color()).
-			SetBackgroundColor(styles.Data.HeaderRowBackgroundColor.Color()).
+			SetTextColor(styles.Global.SecondaryTextColor.Color()).
+			SetBackgroundColor(styles.Global.ContrastBackgroundColor.Color()).
 			SetAlign(tview.AlignCenter))
 	}
 
@@ -189,7 +189,7 @@ func (s *Structure) renderColumns(columns []database.ColumnInfo, pkCols map[stri
 		}
 
 		s.table.SetCell(r+1, 0, tview.NewTableCell(" "+col.Name+" ").
-			SetTextColor(styles.Data.ColumnKeyColor.Color()))
+			SetTextColor(styles.Global.SecondaryTextColor.Color()))
 		s.table.SetCell(r+1, 1, tview.NewTableCell(" "+col.DataType+" ").
 			SetTextColor(styles.Global.TextColor.Color()))
 		s.table.SetCell(r+1, 2, tview.NewTableCell(" "+nullable+" ").
@@ -197,7 +197,7 @@ func (s *Structure) renderColumns(columns []database.ColumnInfo, pkCols map[stri
 		s.table.SetCell(r+1, 3, tview.NewTableCell(" "+def+" ").
 			SetTextColor(styles.Global.TextColor.Color()))
 		s.table.SetCell(r+1, 4, tview.NewTableCell(" "+strings.Join(constraints, ", ")+" ").
-			SetTextColor(styles.Data.ColumnTypeColor.Color()))
+			SetTextColor(styles.Global.MoreContrastBackgroundColor.Color()))
 	}
 
 	if len(columns) > 0 {

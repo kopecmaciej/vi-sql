@@ -141,7 +141,7 @@ func (t *TabBar) Render() {
 		if i == t.active {
 			cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
 			cell.SetAttributes(tcell.AttrBold)
-			cell.SetBackgroundColor(styles.TabBar.ActiveBackgroundColor.Color())
+			cell.SetBackgroundColor(styles.Global.MoreContrastBackgroundColor.Color())
 		} else {
 			cell.SetTextColor(styles.Global.TextColor.Color())
 		}

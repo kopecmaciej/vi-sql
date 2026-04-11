@@ -1,91 +1,46 @@
 global:
-    backgroundColor: '#0C110C'
-    contrastBackgroundColor: '#121A12'
-    moreContrastBackgroundColor: '#1A6B32'
-    textColor: '#B9F6CA'
-    secondaryTextColor: '#FF8F00'
-    borderColor: '#2E7D46'
-    focusColor: '#00E676'
-    titleColor: '#1A6B32'
-    graphicsColor: '#1A6B32'
-welcome:
-    formLabelColor: '#FF8F00'
-    formInputColor: '#B9F6CA'
-    formInputBackgroundColor: '#121A12'
+  backgroundColor: "#0C110C"
+  contrastBackgroundColor: "#121A12"
+  moreContrastBackgroundColor: "#1A6B32"
+  textColor: "#B9F6CA"
+  secondaryTextColor: "#FF8F00"
+  borderColor: "#2E7D46"
+  focusColor: "#00E676"
+  titleColor: "#1A6B32"
+  graphicsColor: "#1A6B32"
+  dimColor: "#2E7D46"
 connection:
-    formLabelColor: '#FF8F00'
-    formInputBackgroundColor: '#121A12'
-    formInputColor: '#B9F6CA'
-    listTextColor: '#FF8F00'
-    listSelectedTextColor: '#FF8F00'
-    listSelectedBackgroundColor: '#1A6B32'
-    listSecondaryTextColor: '#00E676'
-    listSecondaryBackgroundColor: '#0C110C'
-footer:
-    keyColor: '#FF8F00'
-    valueColor: '#00E676'
-    activeSymbol: ●
-    inactiveSymbol: ○
-tabBar:
-    activeTextColor: '#FF8F00'
-    activeBackgroundColor: '#1A6B32'
-schemas:
-    nodeTextColor: '#00E676'
-    leafTextColor: '#B9F6CA'
-    nodeSymbolColor: '#FF8F00'
-    leafSymbolColor: '#1A6B32'
-    openNodeSymbol: "\U000F09BE "
-    closedNodeSymbol: "\U000F01BC "
-    leafSymbol: "\U000F04EB "
+  listTextColor: "#FF8F00"
+  listSelectedTextColor: "#FF8F00"
+  listSelectedBackgroundColor: "#1A6B32"
+  listSecondaryTextColor: "#00E676"
 data:
-    statusTextColor: '#FF8F00'
-    headerRowColor: '#121A12'
-    columnKeyColor: '#FF8F00'
-    columnTypeColor: '#00E676'
-    cellTextColor: '#00E676'
-    selectedRowColor: '#69FF47'
-    multiSelectedRowColor: '#145A2A'
-rowPeeker:
-    keyColor: '#00E676'
-    valueColor: '#B9F6CA'
-    bracketColor: '#FF8F00'
-    highlightColor: '#1A3A1A'
+  cellTextColor: "#00E676"
+  selectedRowColor: "#69FF47"
+  multiSelectedRowColor: "#145A2A"
+tabBar:
+  activeTextColor: "#FF8F00"
 inputBar:
-    labelColor: '#FF8F00'
-    inputColor: '#B9F6CA'
-    autocomplete:
-        backgroundColor: '#121A12'
-        textColor: '#B9F6CA'
-        activeBackgroundColor: '#1A6B32'
-        activeTextColor: '#0C110C'
-        secondaryTextColor: '#FF8F00'
-        borderColor: '#00E676'
-history:
-    textColor: '#B9F6CA'
-    selectedBackgroundColor: '#1A6B32'
+  autocomplete:
+    backgroundColor: "#121A12"
+    textColor: "#B9F6CA"
+    activeBackgroundColor: "#1A6B32"
+    activeTextColor: "#0C110C"
+    secondaryTextColor: "#FF8F00"
+    borderColor: "#00E676"
 help:
-    headerColor: '#00E676'
-    keyColor: '#FF8F00'
-    descriptionColor: '#B9F6CA'
-    scrollBarThumbColor: '#FF8F00'
-    scrollBarTrackColor: '#1A3A1A'
-    selectedTextColor: '#0F172A'
-    selectedBackgroundColor: '#FDE68A'
+  scrollBarTrackColor: "#1A3A1A"
+  selectedBackgroundColor: "#FDE68A"
 others:
-    buttonsTextColor: '#FF8F00'
-    buttonsBackgroundColor: '#1A6B32'
-    deleteButtonSelectedBackgroundColor: '#DA3312'
-    modalTextColor: '#FF8F00'
-    modalSecondaryTextColor: '#00E676'
-    separatorSymbol: '|'
-    separatorColor: '#1A3A1A'
-styleChange:
-    textColor: '#B9F6CA'
-    selectedBackgroundColor: '#1A6B32'
+  leafSymbolColor: "#1A6B32"
+  separatorColor: "#1A3A1A"
+  buttonsTextColor: "#FF8F00"
+  deleteButtonSelectedBackgroundColor: "#DA3312"
+  peekerHighlightColor: "#1A3A1A"
 sqlEditor:
-    keywordColor: '#60A5FA'
-    stringColor: '#4ADE80'
-    numberColor: '#FB923C'
-    commentColor: '#64748B'
-    operatorColor: '#FDE68A'
-    identifierColor: '#E2E8F0'
+  keywordColor: "#60A5FA"
+  stringColor: "#4ADE80"
+  numberColor: "#FB923C"
+  commentColor: "#64748B"
+  operatorColor: "#FDE68A"
+  identifierColor: "#E2E8F0"

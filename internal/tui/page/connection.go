@@ -87,7 +87,7 @@ func (c *Connection) setStyle() {
 
 	secondaryStyle := tcell.StyleDefault.
 		Foreground(c.style.ListSecondaryTextColor.Color()).
-		Background(c.style.ListSecondaryBackgroundColor.Color()).
+		Background(c.App.GetStyles().Global.BackgroundColor.Color()).
 		Italic(true)
 	c.list.SetSecondaryTextStyle(secondaryStyle)
 	c.list.SetSelectedStyle(tcell.StyleDefault.

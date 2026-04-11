@@ -8,51 +8,19 @@ global:
   focusColor: "#3D6B35"
   titleColor: "#3D6B35"
   graphicsColor: "#3D6B35"
-welcome:
-  formLabelColor: "#A07828"
-  formInputColor: "#2C2018"
-  formInputBackgroundColor: "#E8DFC8"
+  dimColor: "#A09070"
 connection:
-  formLabelColor: "#A07828"
-  formInputColor: "#2C2018"
-  formInputBackgroundColor: "#E8DFC8"
   listTextColor: "#A07828"
   listSelectedTextColor: "#F5F0E8"
   listSelectedBackgroundColor: "#3D6B35"
   listSecondaryTextColor: "#5A8A4A"
-  listSecondaryBackgroundColor: "#F5F0E8"
-footer:
-  keyColor: "#A07828"
-  valueColor: "#3D6B35"
-  activeSymbol: ●
-  inactiveSymbol: ○
-tabBar:
-  activeTextColor: "#F5F0E8"
-  activeBackgroundColor: "#3D6B35"
-schemas:
-  nodeTextColor: "#3D6B35"
-  leafTextColor: "#2C2018"
-  nodeSymbolColor: "#A07828"
-  leafSymbolColor: "#5A8A4A"
-  openNodeSymbol: "󰦾 "
-  closedNodeSymbol: "󰆼 "
-  leafSymbol: "󰓫 "
 data:
-  statusTextColor: "#A07828"
-  headerRowColor: "#E8DFC8"
-  columnKeyColor: "#A07828"
-  columnTypeColor: "#3D6B35"
   cellTextColor: "#2C2018"
   selectedRowColor: "#C8DDB8"
   multiSelectedRowColor: "#B0CC98"
-rowPeeker:
-  keyColor: "#3D6B35"
-  valueColor: "#2C2018"
-  bracketColor: "#A07828"
-  highlightColor: "#E8DFC8"
+tabBar:
+  activeTextColor: "#F5F0E8"
 inputBar:
-  labelColor: "#A07828"
-  inputColor: "#2C2018"
   autocomplete:
     backgroundColor: "#E8DFC8"
     textColor: "#2C2018"
@@ -60,28 +28,15 @@ inputBar:
     activeTextColor: "#F5F0E8"
     secondaryTextColor: "#A07828"
     borderColor: "#5A8A4A"
-history:
-  textColor: "#2C2018"
-  selectedBackgroundColor: "#C8DDB8"
 help:
-  headerColor: "#3D6B35"
-  keyColor: "#A07828"
-  descriptionColor: "#2C2018"
-  scrollBarThumbColor: "#A07828"
   scrollBarTrackColor: "#C8B898"
-  selectedTextColor: "#F5F0E8"
   selectedBackgroundColor: "#3D6B35"
 others:
-  buttonsTextColor: "#F5F0E8"
-  buttonsBackgroundColor: "#3D6B35"
-  deleteButtonSelectedBackgroundColor: "#A8321A"
-  modalTextColor: "#A07828"
-  modalSecondaryTextColor: "#3D6B35"
-  separatorSymbol: "|"
+  leafSymbolColor: "#5A8A4A"
   separatorColor: "#C8B898"
-styleChange:
-  textColor: "#2C2018"
-  selectedBackgroundColor: "#C8DDB8"
+  buttonsTextColor: "#F5F0E8"
+  deleteButtonSelectedBackgroundColor: "#A8321A"
+  peekerHighlightColor: "#E8DFC8"
 sqlEditor:
   keywordColor: "#3D6B35"
   stringColor: "#5A8A4A"
