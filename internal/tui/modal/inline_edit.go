@@ -48,9 +48,21 @@ func (iem *InlineEditModal) setLayout() {
 func (iem *InlineEditModal) setStyle() {
 	styles := iem.App.GetStyles()
 	iem.SetStyle(styles)
-	iem.Form.SetFieldTextColor(styles.Global.TextColor.Color())
-	iem.Form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	fieldBg := styles.Global.ContrastBackgroundColor.Color()
+	fieldFg := styles.Global.TextColor.Color()
+	iem.Form.SetFieldTextColor(fieldFg)
+	iem.Form.SetFieldBackgroundColor(fieldBg)
 	iem.Form.SetLabelColor(styles.Global.SecondaryTextColor.Color())
+
+	if iem.Form.GetFormItemCount() > 0 {
+		switch item := iem.Form.GetFormItem(0).(type) {
+		case *tview.InputField:
+			item.SetFieldBackgroundColor(fieldBg)
+			item.SetFieldTextColor(fieldFg)
+		case *tview.TextArea:
+			item.SetTextStyle(tcell.StyleDefault.Background(fieldBg).Foreground(fieldFg))
+		}
+	}
 }
 
 func (iem *InlineEditModal) setKeybindings() {
@@ -120,18 +132,24 @@ func (iem *InlineEditModal) Render(fieldName, currentValue string) {
 	iem.Form.Clear(true)
 	iem.fieldName = fieldName
 
+	styles := iem.App.GetStyles()
+	fieldBg := styles.Global.ContrastBackgroundColor.Color()
+	fieldFg := styles.Global.TextColor.Color()
+
 	if len(currentValue) > 100 {
-		iem.Form.AddFormItem(
-			tview.NewTextArea().
-				SetText(currentValue, true).
-				SetWrap(true).
-				SetSize(8, 0),
-		)
+		ta := tview.NewTextArea().
+			SetText(currentValue, true).
+			SetWrap(true).
+			SetSize(8, 0)
+		ta.SetTextStyle(tcell.StyleDefault.Background(fieldBg).Foreground(fieldFg))
+		iem.Form.AddFormItem(ta)
 	} else {
 		iem.Form.AddFormItem(
 			tview.NewInputField().
 				SetText(currentValue).
-				SetFieldWidth(0),
+				SetFieldWidth(0).
+				SetFieldBackgroundColor(fieldBg).
+				SetFieldTextColor(fieldFg),
 		)
 	}
 
