@@ -19,18 +19,21 @@ type (
 		label string
 		value string
 	}
+
+	Footer struct {
+		*core.BaseElement
+		*core.Table
+
+		keys           []config.Key
+		currentFocus   tview.Identifier
+		expanded       bool
+		centered       bool
+		onHeightChange func()
+	}
 )
 
-// Footer is a 1-row key-binding bar at the bottom of the main page.
-// It can be expanded (toggled) to show all keybindings in a multi-column grid.
-type Footer struct {
-	*core.BaseElement
-	*core.Table
-
-	keys           []config.Key
-	currentFocus   tview.Identifier
-	expanded       bool
-	onHeightChange func()
+func (f *Footer) SetCentered(centered bool) {
+	f.centered = centered
 }
 
 func NewFooter() *Footer {
@@ -148,6 +151,18 @@ func (f *Footer) Render() {
 		return
 	}
 
+	if f.centered {
+		f.Table.SetCell(0, 0, tview.NewTableCell("").SetExpansion(1))
+		col := 1
+		for _, key := range k {
+			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
+		f.Table.SetCell(0, col, tview.NewTableCell("").SetExpansion(1))
+		return
+	}
+
 	col := 0
 	for _, key := range k {
 		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
@@ -173,20 +188,47 @@ func (f *Footer) handleEvents() {
 }
 
 func (f *Footer) keyCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text + " ")
+	cell := tview.NewTableCell(text)
 	cell.SetTextColor(f.App.GetStyles().Global.SecondaryTextColor.Color())
 	return cell
 }
 
 func (f *Footer) valueCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text)
+	cell := tview.NewTableCell(text + " ")
 	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color())
 	return cell
+}
+
+// SetKeys sets static keybinding hints, bypassing the focus-based lookup.
+// Static keys persist when focus moves to an element with no registered keys.
+func (f *Footer) SetKeys(keys []config.Key) {
+	f.keys = keys
+	f.Table.Clear()
+	if f.centered {
+		f.Table.SetCell(0, 0, tview.NewTableCell("").SetExpansion(1))
+		col := 1
+		for _, key := range keys {
+			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
+		f.Table.SetCell(0, col, tview.NewTableCell("").SetExpansion(1))
+	} else {
+		col := 0
+		for _, key := range keys {
+			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
+	}
 }
 
 // UpdateKeys returns the keybindings for the currently focused element.
 func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	if f.currentFocus == "" {
+		if len(f.keys) > 0 {
+			return f.keys, nil
+		}
 		return nil, nil
 	}
 
@@ -201,18 +243,18 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 
 	switch {
 	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort"):
-		// Dynamic input bar IDs from Data tabs (e.g. "QueryTab-1-filter")
 		focus = "InputBar"
 	case focus == "FilterBar" || focus == "SortBar":
-		// Static IDs (e.g. SchemaTree's filter bar)
 		focus = "InputBar"
 	case strings.HasPrefix(focus, "QueryTab-"):
-		// TableMode Data tab inner table
 		focus = "Data"
 	}
 
 	orderedKeys, err := f.App.GetKeys().GetKeysForElement(string(focus))
 	if err != nil {
+		if len(f.keys) > 0 {
+			return f.keys, nil
+		}
 		return nil, err
 	}
 

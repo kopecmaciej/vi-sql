@@ -24,19 +24,19 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		FocusUp: Key{
 			Keys:        []string{"Ctrl+k", "Backtab"},
-			Description: "Focus up component/form field",
+			Description: "Focus up",
 		},
 		FocusDown: Key{
 			Keys:        []string{"Ctrl+j", "Tab"},
-			Description: "Focus down component/form field",
+			Description: "Focus down",
 		},
 		FocusLeft: Key{
 			Keys:        []string{"Ctrl+h", "Backtab"},
-			Description: "Focus left component",
+			Description: "Focus left",
 		},
 		FocusRight: Key{
 			Keys:        []string{"Ctrl+l", "Tab"},
-			Description: "Focus right component",
+			Description: "Focus right",
 		},
 		AutocompleteUp: Key{
 			Keys:        []string{"Ctrl+p", "Up"},
@@ -84,7 +84,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		NewTab: Key{
 			Keys:        []string{"Ctrl+a"},
-			Description: "New query tab",
+			Description: "New tab",
 		},
 		CloseTab: Key{
 			Keys:        []string{"Ctrl+x"},
@@ -190,7 +190,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		CopyValue: Key{
 			Runes:       []string{"c"},
-			Description: "Copy highlighted",
+			Description: "Copy",
 		},
 		CopyRow: Key{
 			Runes:       []string{"C"},
@@ -234,7 +234,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		ExportData: Key{
 			Keys:        []string{"Ctrl+m"},
-			Description: "Export data to file",
+			Description: "Export data",
 		},
 	}
 
@@ -282,7 +282,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		EditKey: Key{
 			Runes:       []string{"e"},
-			Description: "Edit keybinding",
+			Description: "Edit key",
 		},
 	}
 
@@ -325,7 +325,7 @@ func (k *KeyBindings) loadDefaults() {
 	k.History = HistoryKeys{
 		ClearHistory: Key{
 			Keys:        []string{"Ctrl+d"},
-			Description: "Clear all history",
+			Description: "Clear history",
 		},
 		AcceptEntry: Key{
 			Keys:        []string{"Enter", "Space"},
@@ -416,11 +416,11 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		Expand: Key{
 			Keys:        []string{"Ctrl+e"},
-			Description: "Expand/collapse editor",
+			Description: "Resize editor",
 		},
 		OpenHistory: Key{
 			Keys:        []string{"Ctrl+r"},
-			Description: "Open query history",
+			Description: "Query history",
 		},
 	}
 }

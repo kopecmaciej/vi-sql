@@ -46,7 +46,9 @@ func (a *App) Init() error {
 	}
 	a.setKeybindings()
 
-	a.connection.Init(a.App)
+	if err := a.connection.Init(a.App); err != nil {
+		return err
+	}
 	return nil
 }
 

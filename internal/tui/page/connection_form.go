@@ -8,8 +8,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
@@ -23,8 +23,8 @@ type ConnectionForm struct {
 	*core.BaseElement
 	*core.Flex
 
-	form    *core.Form
-	hintBar *widget.HintBar
+	form   *core.Form
+	footer *component.Footer
 
 	editConn      *config.SQLConfig // nil == add mode
 	editOrigName  string
@@ -39,7 +39,7 @@ func NewConnectionForm(conn *config.SQLConfig) *ConnectionForm {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		form:        core.NewForm(),
-		hintBar:     widget.NewHintBar(),
+		footer:      component.NewFooter(),
 	}
 
 	cf.SetIdentifier(ConnectionFormPageId)
@@ -63,21 +63,24 @@ func (cf *ConnectionForm) SetOnCancelFunc(fn func()) {
 	cf.onCancel = fn
 }
 
-func (cf *ConnectionForm) Init(app *core.App) {
+func (cf *ConnectionForm) Init(app *core.App) error {
 	cf.App = app
+	if err := cf.footer.Init(app); err != nil {
+		return err
+	}
 	cf.setStyle()
+	return nil
 }
 
 func (cf *ConnectionForm) setStyle() {
 	styles := cf.App.GetStyles()
 	cf.SetStyle(styles)
 	cf.form.SetStyle(styles)
-	cf.hintBar.SetStyle(styles)
 
 	cf.form.SetFieldTextColor(styles.Global.TextColor.Color())
 	cf.form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
 	cf.form.SetLabelColor(styles.Global.SecondaryTextColor.Color())
-
+	cf.footer.SetCentered(true)
 }
 
 func (cf *ConnectionForm) Render() {
@@ -99,20 +102,19 @@ func (cf *ConnectionForm) Render() {
 	centerFlex.AddItem(tview.NewBox(), 0, 1, false)
 
 	cf.AddItem(centerFlex, 0, 1, true)
-	cf.renderHints()
-	cf.AddItem(cf.hintBar, 1, 0, false)
-	cf.AddItem(tview.NewBox(), 1, 0, false)
+	cf.renderFooter()
+	cf.AddItem(cf.footer, 2, 0, false)
 
 	cf.App.SetFocus(cf.form)
 }
 
-func (cf *ConnectionForm) renderHints() {
+func (cf *ConnectionForm) renderFooter() {
 	k := cf.App.GetKeys()
-	cf.hintBar.SetHints([]widget.Hint{
-		{Key: k.Navigation.FocusUp.String(), Desc: "field up"},
-		{Key: k.Navigation.FocusDown.String(), Desc: "field down"},
-		{Key: k.Connection.ConnectionForm.SaveConnection.String(), Desc: "save"},
-		{Key: "Esc", Desc: "cancel"},
+	cf.footer.SetKeys([]config.Key{
+		k.Navigation.FocusUp,
+		k.Navigation.FocusDown,
+		k.Connection.ConnectionForm.SaveConnection,
+		{Keys: []string{"Esc"}, Description: "cancel"},
 	})
 }
 

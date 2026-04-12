@@ -7,8 +7,8 @@ import (
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -19,8 +19,8 @@ type Connection struct {
 	*core.BaseElement
 	*core.Flex
 
-	list    *core.List
-	hintBar *widget.HintBar
+	list   *core.List
+	footer *component.Footer
 
 	style *config.ConnectionStyle
 
@@ -32,22 +32,26 @@ func NewConnection() *Connection {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		list:        core.NewList(),
-		hintBar:     widget.NewHintBar(),
+		footer:      component.NewFooter(),
 	}
+	c.footer.SetCentered(true)
 
 	c.SetIdentifier(ConnectionPageId)
 
 	return c
 }
 
-func (c *Connection) Init(app *core.App) {
+func (c *Connection) Init(app *core.App) error {
 	c.App = app
 
+	if err := c.footer.Init(app); err != nil {
+		return err
+	}
 	c.setLayout()
 	c.setStyle()
 	c.setKeybindings()
-
 	c.handleEvents()
+	return nil
 }
 
 func (c *Connection) handleEvents() {
@@ -75,7 +79,6 @@ func (c *Connection) setLayout() {
 func (c *Connection) setStyle() {
 	c.SetStyle(c.App.GetStyles())
 	c.list.SetStyle(c.App.GetStyles())
-	c.hintBar.SetStyle(c.App.GetStyles())
 
 	c.style = &c.App.GetStyles().Connection
 
@@ -115,7 +118,10 @@ func (c *Connection) setKeybindings() {
 
 func (c *Connection) openAddForm() {
 	form := NewConnectionForm(nil)
-	form.Init(c.App)
+	if err := form.Init(c.App); err != nil {
+		showError(c.App.Pages, "Failed to init connection form", err)
+		return
+	}
 	form.SetOnSaveFunc(func() {
 		c.App.Pages.RemovePage(ConnectionFormPageId)
 		c.Render()
@@ -143,7 +149,10 @@ func (c *Connection) openEditForm() {
 	}
 
 	form := NewConnectionForm(conn)
-	form.Init(c.App)
+	if err := form.Init(c.App); err != nil {
+		showError(c.App.Pages, "Failed to init connection form", err)
+		return
+	}
 	form.SetOnSaveFunc(func() {
 		c.App.Pages.RemovePage(ConnectionFormPageId)
 		c.Render()
@@ -168,9 +177,8 @@ func (c *Connection) Render() {
 	centerFlex.AddItem(tview.NewBox(), 0, 1, false)
 
 	c.AddItem(centerFlex, 0, 1, true)
-	c.renderHints()
-	c.AddItem(c.hintBar, 1, 0, false)
-	c.AddItem(tview.NewBox(), 1, 0, false)
+	c.renderFooter()
+	c.AddItem(c.footer, 2, 0, false)
 
 	if page, _ := c.App.Pages.GetFrontPage(); page == ConnectionPageId {
 		if c.list.GetItemCount() > 1 {
@@ -182,14 +190,14 @@ func (c *Connection) Render() {
 	}
 }
 
-func (c *Connection) renderHints() {
+func (c *Connection) renderFooter() {
 	k := c.App.GetKeys()
-	c.hintBar.SetHints([]widget.Hint{
-		{Key: k.Connection.ConnectionList.SetConnection.String(), Desc: "connect"},
-		{Key: k.Connection.ConnectionList.AddConnection.String(), Desc: "add"},
-		{Key: k.Connection.ConnectionList.EditConnection.String(), Desc: "edit"},
-		{Key: k.Connection.ConnectionList.DeleteConnection.String(), Desc: "delete"},
-		{Key: k.Global.FullScreenHelp.String(), Desc: "help"},
+	c.footer.SetKeys([]config.Key{
+		k.Connection.ConnectionList.SetConnection,
+		k.Connection.ConnectionList.AddConnection,
+		k.Connection.ConnectionList.EditConnection,
+		k.Connection.ConnectionList.DeleteConnection,
+		k.Global.FullScreenHelp,
 	})
 }
 

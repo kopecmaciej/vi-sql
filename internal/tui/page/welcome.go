@@ -6,9 +6,10 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
+	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -19,8 +20,8 @@ type Welcome struct {
 	*core.BaseElement
 	*core.Flex
 
-	form    *core.Form
-	hintBar *widget.HintBar
+	form   *core.Form
+	footer *component.Footer
 
 	onSubmit func()
 }
@@ -30,7 +31,7 @@ func NewWelcome() *Welcome {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		form:        core.NewForm(),
-		hintBar:     widget.NewHintBar(),
+		footer:      component.NewFooter(),
 	}
 
 	w.SetIdentifier(WelcomePageId)
@@ -41,10 +42,12 @@ func NewWelcome() *Welcome {
 func (w *Welcome) Init(app *core.App) error {
 	w.App = app
 
+	if err := w.footer.Init(app); err != nil {
+		return err
+	}
 	w.setLayout()
 	w.setStyle()
 	w.form.ApplyFormNavKeys(app.GetKeys())
-
 	w.handleEvents()
 
 	return nil
@@ -55,6 +58,7 @@ func (w *Welcome) setLayout() {
 	w.form.SetTitle(" Welcome to Vi-SQL ")
 	w.form.SetTitleAlign(tview.AlignCenter)
 	w.form.SetButtonsAlign(tview.AlignCenter)
+	w.footer.SetCentered(true)
 
 	w.form.AddButton("Save and Connect", func() {
 		err := w.saveConfig()
@@ -92,7 +96,6 @@ func (w *Welcome) setStyle() {
 	styles := w.App.GetStyles()
 	w.Flex.SetStyle(styles)
 	w.form.SetStyle(styles)
-	w.hintBar.SetStyle(styles)
 
 	w.form.SetFieldTextColor(styles.Global.TextColor.Color())
 	w.form.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
@@ -122,21 +125,20 @@ func (w *Welcome) Render() {
 	centerFlex.AddItem(tview.NewBox(), 0, 1, false)
 
 	w.AddItem(centerFlex, 0, 1, true)
-	w.renderHints()
-	w.AddItem(w.hintBar, 1, 0, false)
-	w.AddItem(tview.NewBox(), 1, 0, false)
+	w.renderFooter()
+	w.AddItem(w.footer, 2, 0, false)
 
 	if page, _ := w.App.Pages.GetFrontPage(); page == WelcomePageId {
 		w.App.SetFocus(w)
 	}
 }
 
-func (w *Welcome) renderHints() {
+func (w *Welcome) renderFooter() {
 	k := w.App.GetKeys()
-	w.hintBar.SetHints([]widget.Hint{
-		{Key: k.Navigation.FocusUp.String(), Desc: "form up"},
-		{Key: k.Navigation.FocusDown.String(), Desc: "form down"},
-		{Key: k.Connection.ConnectionForm.SaveConnection.String(), Desc: "save"},
+	w.footer.SetKeys([]config.Key{
+		k.Navigation.FocusUp,
+		k.Navigation.FocusDown,
+		k.Connection.ConnectionForm.SaveConnection,
 	})
 }
 

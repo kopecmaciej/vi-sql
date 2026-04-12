@@ -8,8 +8,8 @@ import (
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
-	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -32,10 +32,10 @@ type Help struct {
 	leftFlex  *core.Flex
 	rightFlex *core.Flex
 
-	sectionList    *core.List
-	keysTable      *core.Table
-	hintBar        *widget.HintBar
-	searchInput    *core.InputField
+	sectionList *core.List
+	keysTable   *core.Table
+	footer      *component.Footer
+	searchInput *core.InputField
 
 	// capture-based key edit
 	capturePanel   *tview.Flex
@@ -58,7 +58,7 @@ func NewHelp() *Help {
 		rightFlex:      core.NewFlex(),
 		sectionList:    core.NewList(),
 		keysTable:      core.NewTable(),
-		hintBar:        widget.NewHintBar(),
+		footer:         component.NewFooter(),
 		searchInput:    core.NewInputField(),
 		capturePanel:   tview.NewFlex(),
 		captureDisplay: tview.NewTextView(),
@@ -71,6 +71,9 @@ func NewHelp() *Help {
 }
 
 func (h *Help) init() error {
+	if err := h.footer.Init(h.App); err != nil {
+		return err
+	}
 	h.setLayout()
 	h.setStyle()
 	h.setKeybindings()
@@ -135,7 +138,7 @@ func (h *Help) setLayout() {
 	h.rightFlex.AddItem(h.keysTable, 0, 1, false)
 
 	h.Flex.AddItem(contentFlex, 0, 1, true)
-	h.Flex.AddItem(h.hintBar, 1, 0, false)
+	h.Flex.AddItem(h.footer, 2, 0, false)
 }
 
 func (h *Help) setStyle() {
@@ -146,7 +149,6 @@ func (h *Help) setStyle() {
 	h.rightFlex.SetStyle(s)
 	h.sectionList.SetStyle(s)
 	h.keysTable.SetStyle(s)
-	h.hintBar.SetStyle(s)
 	h.searchInput.SetStyle(s)
 
 	h.capturePanel.SetBackgroundColor(s.Global.BackgroundColor.Color())
@@ -420,17 +422,17 @@ func (h *Help) Render() {
 	if len(h.filteredSections) > 0 {
 		h.renderKeysForSection(0)
 	}
-	h.renderHints()
+	h.renderFooter()
 }
 
-func (h *Help) renderHints() {
+func (h *Help) renderFooter() {
 	k := h.App.GetKeys()
-	h.hintBar.SetHints([]widget.Hint{
-		{Key: k.Navigation.FocusRight.String(), Desc: "→ panel"},
-		{Key: k.Navigation.FocusLeft.String(), Desc: "← panel"},
-		{Key: k.Help.Search.String(), Desc: "search"},
-		{Key: k.Help.EditKey.String(), Desc: "edit key"},
-		{Key: k.Help.Close.String(), Desc: "close"},
+	h.footer.SetKeys([]config.Key{
+		k.Navigation.FocusRight,
+		k.Navigation.FocusLeft,
+		k.Help.Search,
+		k.Help.EditKey,
+		k.Help.Close,
 	})
 }
 

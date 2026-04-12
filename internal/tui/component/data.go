@@ -953,10 +953,20 @@ func (c *Data) handleHideColumn(ctx context.Context, col int) *tcell.EventKey {
 	if columnName == "" {
 		columnName = headerCell.Text
 	}
+	row, _ := c.table.GetSelection()
 	c.stateMap.AddHiddenColumn(c.state.Schema, c.state.Table, columnName)
 	if err := c.updateData(ctx, true); err != nil {
 		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
+		return nil
 	}
+	newCol := col
+	if newColCount := c.table.GetColumnCount(); newCol >= newColCount {
+		newCol = newColCount - 1
+	}
+	if newCol < 0 {
+		newCol = 0
+	}
+	c.table.Select(row, newCol)
 	return nil
 }
 
