@@ -361,6 +361,22 @@ func TestTruncateTable(t *testing.T) {
 	assert.Empty(t, rows, "table should be empty after TRUNCATE")
 }
 
+func TestRenameColumn(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	require.NoError(t, dao.CreateTable(ctx, "main",
+		"CREATE TABLE rename_col_test (id INTEGER PRIMARY KEY, old_name TEXT)"))
+
+	err := dao.RenameColumn(ctx, "main", "rename_col_test", "old_name", "new_name")
+	require.NoError(t, err)
+
+	names, err := dao.GetTableColumnNames(ctx, "main", "rename_col_test")
+	require.NoError(t, err)
+	assert.Contains(t, names, "new_name")
+	assert.NotContains(t, names, "old_name")
+}
+
 // --- Indexes ---
 
 func TestCreateIndex_GetIndexes_DropIndex(t *testing.T) {

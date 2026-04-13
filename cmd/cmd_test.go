@@ -33,10 +33,6 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// ---------------------------------------------------------------------------
-// validateDirectNavigateFormat
-// ---------------------------------------------------------------------------
-
 func TestValidateDirectNavigateFormat(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -63,10 +59,6 @@ func TestValidateDirectNavigateFormat(t *testing.T) {
 		})
 	}
 }
-
-// ---------------------------------------------------------------------------
-// listAvailableConnections
-// ---------------------------------------------------------------------------
 
 func TestListAvailableConnections_NoConnections(t *testing.T) {
 	cfg := &config.Config{}
@@ -119,10 +111,8 @@ func TestListAvailableConnections_CurrentConnectionMarked(t *testing.T) {
 		}
 	}
 
-	// prod is the current connection — its line starts with '*'
 	assert.True(t, strings.HasPrefix(strings.TrimLeft(prodLine, " "), "*"),
 		"prod line should be marked with *: %q", prodLine)
-	// dev is not current — no '*' at the start
 	assert.False(t, strings.HasPrefix(strings.TrimLeft(devLine, " "), "*"),
 		"dev line should not be marked: %q", devLine)
 }
@@ -135,14 +125,10 @@ func TestListAvailableConnections_ColumnAlignment(t *testing.T) {
 		},
 	}
 	out := captureStdout(t, func() { listAvailableConnections(cfg) })
-	// Both connection names must appear in the output.
+
 	assert.Contains(t, out, "short")
 	assert.Contains(t, out, "a-very-long-connection-name")
 }
-
-// ---------------------------------------------------------------------------
-// logging
-// ---------------------------------------------------------------------------
 
 func TestLogging_CreatesFile(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -171,10 +157,6 @@ func TestLogging_AppendsToExistingFile(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "previous")
 }
-
-// ---------------------------------------------------------------------------
-// rootCmd flag registration
-// ---------------------------------------------------------------------------
 
 func TestRootCmdFlags_AllRegistered(t *testing.T) {
 	type flagSpec struct {

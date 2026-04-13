@@ -477,6 +477,34 @@ func TestListRows_CountCallback(t *testing.T) {
 	}
 }
 
+func TestGetEstimatedRowCount(t *testing.T) {
+	ctx := context.Background()
+
+	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	require.NoError(t, err)
+	require.NotEmpty(t, schemas[0].Tables)
+
+	count, err := testDao.GetEstimatedRowCount(ctx, schemas[0].Schema, schemas[0].Tables[0])
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, int64(0))
+}
+
+func TestRenameColumn(t *testing.T) {
+	ctx := context.Background()
+
+	require.NoError(t, testDao.CreateTable(ctx, "public",
+		"CREATE TABLE rename_col_pg (id SERIAL PRIMARY KEY, old_name TEXT)"))
+	defer testDao.DropTable(ctx, "public", "rename_col_pg") //nolint:errcheck
+
+	err := testDao.RenameColumn(ctx, "public", "rename_col_pg", "old_name", "new_name")
+	require.NoError(t, err)
+
+	names, err := testDao.GetTableColumnNames(ctx, "public", "rename_col_pg")
+	require.NoError(t, err)
+	assert.Contains(t, names, "new_name")
+	assert.NotContains(t, names, "old_name")
+}
+
 // --- ListQueryRows ---
 
 func TestListQueryRows_WithPagination(t *testing.T) {
