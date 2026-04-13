@@ -175,7 +175,7 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 		SELECT
 			tc.constraint_name,
 			tc.constraint_type,
-			array_agg(kcu.column_name ORDER BY kcu.ordinal_position),
+			COALESCE(array_agg(kcu.column_name ORDER BY kcu.ordinal_position) FILTER (WHERE kcu.column_name IS NOT NULL), '{}'),
 			COALESCE(cc.check_clause, '')
 		FROM information_schema.table_constraints tc
 		LEFT JOIN information_schema.key_column_usage kcu

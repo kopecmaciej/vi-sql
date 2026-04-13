@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -29,9 +30,11 @@ func TestMain(m *testing.M) {
 		tcpostgres.WithUsername("test"),
 		tcpostgres.WithPassword("test"),
 		tcpostgres.WithInitScripts(testutil.SamplePostgresPath()),
-		wait.ForLog("database system is ready to accept connections").
-			WithOccurrence(2).
-			WithStartupTimeout(60*time.Second),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(60*time.Second),
+		),
 	)
 	if err != nil {
 		panic("failed to start postgres container: " + err.Error())
@@ -198,7 +201,6 @@ func TestExplainQuery_ReturnsOutput(t *testing.T) {
 func TestCreateIndex_GetIndexes_DropIndex(t *testing.T) {
 	ctx := context.Background()
 
-	// Create a temporary table for this test.
 	_, err := testDao.ExecuteStatement(ctx,
 		`CREATE TABLE IF NOT EXISTS public.idx_test (id SERIAL PRIMARY KEY, name TEXT)`)
 	require.NoError(t, err)
@@ -325,7 +327,6 @@ func TestDefaultCreateTableDDL_ContainsTableName(t *testing.T) {
 func TestInsertRow_GetRow_UpdateRow_DeleteRow(t *testing.T) {
 	ctx := context.Background()
 
-	// Use a dedicated table so this test is self-contained.
 	_, err := testDao.ExecuteStatement(ctx,
 		`CREATE TABLE IF NOT EXISTS public.crud_pg_test (
 			id    SERIAL PRIMARY KEY,
@@ -334,17 +335,14 @@ func TestInsertRow_GetRow_UpdateRow_DeleteRow(t *testing.T) {
 	require.NoError(t, err)
 	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.crud_pg_test`) //nolint:errcheck
 
-	// InsertRow.
 	newRow := database.Row{"label": "hello"}
 	pk, err := testDao.InsertRow(ctx, "public", "crud_pg_test", newRow)
 	require.NoError(t, err)
 
-	// GetRow — retrieve by the PK returned from InsertRow.
 	row, err := testDao.GetRow(ctx, "public", "crud_pg_test", pk)
 	require.NoError(t, err)
 	assert.Equal(t, "hello", row["label"])
 
-	// UpdateRow.
 	updated := make(database.Row)
 	for k, v := range row {
 		updated[k] = v
@@ -353,12 +351,10 @@ func TestInsertRow_GetRow_UpdateRow_DeleteRow(t *testing.T) {
 	err = testDao.UpdateRow(ctx, "public", "crud_pg_test", pk, row, updated)
 	require.NoError(t, err)
 
-	// Verify update persisted.
 	after, err := testDao.GetRow(ctx, "public", "crud_pg_test", pk)
 	require.NoError(t, err)
 	assert.Equal(t, "world", after["label"])
 
-	// DeleteRows.
 	err = testDao.DeleteRows(ctx, "public", "crud_pg_test", []database.PrimaryKey{pk})
 	require.NoError(t, err)
 
