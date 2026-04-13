@@ -144,7 +144,7 @@ func TestListRows_BasicPagination(t *testing.T) {
 	state.Limit = 3
 	state.Offset = 0
 
-	_, rows, err := dao.ListRows(ctx, state, "", "", nil, nil)
+	_, rows, err := dao.ListRows(ctx, state, "", "", nil, ctx, nil)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), 3)
 	assert.NotEmpty(t, rows)
@@ -159,7 +159,7 @@ func TestListRows_WithWhere(t *testing.T) {
 	state.Limit = 100
 	state.Offset = 0
 
-	_, rows, err := dao.ListRows(ctx, state, "status = 'active'", "", nil, nil)
+	_, rows, err := dao.ListRows(ctx, state, "status = 'active'", "", nil, ctx, nil)
 	require.NoError(t, err)
 	for _, row := range rows {
 		assert.Equal(t, "active", row["status"])
@@ -175,7 +175,7 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	state.Limit = 100
 	state.Offset = 0
 
-	_, rows, err := dao.ListRows(ctx, state, "", "email ASC", nil, nil)
+	_, rows, err := dao.ListRows(ctx, state, "", "email ASC", nil, ctx, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	for i := 1; i < len(rows); i++ {
@@ -222,7 +222,7 @@ func TestUpdateRow_ChangedField(t *testing.T) {
 	// Get an existing row first.
 	state := database.NewTableState("main", "users")
 	state.Limit = 1
-	_, rows, err := dao.ListRows(ctx, state, "", "", nil, nil)
+	_, rows, err := dao.ListRows(ctx, state, "", "", nil, ctx, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 
@@ -293,7 +293,7 @@ func TestListQueryRows_WithPagination(t *testing.T) {
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	_, rows, cols, err := dao.ListQueryRows(ctx, "SELECT id, email FROM users", 2, 0, nil)
+	_, rows, cols, err := dao.ListQueryRows(ctx, "SELECT id, email FROM users", 2, 0, ctx, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, cols)
 	assert.LessOrEqual(t, len(rows), 2)
@@ -356,7 +356,7 @@ func TestTruncateTable(t *testing.T) {
 
 	state := database.NewTableState("main", "trunc_test")
 	state.Limit = 100
-	_, rows, err := dao.ListRows(ctx, state, "", "", nil, nil)
+	_, rows, err := dao.ListRows(ctx, state, "", "", nil, ctx, nil)
 	require.NoError(t, err)
 	assert.Empty(t, rows, "table should be empty after TRUNCATE")
 }
