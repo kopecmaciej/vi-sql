@@ -152,7 +152,7 @@ func TestListRows_BasicPagination(t *testing.T) {
 	require.NotEmpty(t, schemas[0].Tables)
 
 	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
-	state.Limit = 3
+	state.BatchSize = 3
 
 	_, rows, err := testDao.ListRows(ctx, state, "", "", nil, nil)
 	require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestExecuteStatement_CreateDrop(t *testing.T) {
 func TestExplainQuery_ReturnsOutput(t *testing.T) {
 	ctx := context.Background()
 
-	plan, err := testDao.ExplainQuery(ctx, "SELECT 1")
+	plan, err := testDao.ExplainPlan(ctx, "SELECT 1")
 	require.NoError(t, err)
 	assert.NotEmpty(t, plan)
 }
@@ -272,7 +272,7 @@ func TestTruncateTable(t *testing.T) {
 	require.NoError(t, err)
 
 	state := database.NewTableState("public", "trunc_pg_test")
-	state.Limit = 100
+	state.BatchSize = 100
 	_, rows, err := testDao.ListRows(ctx, state, "", "", nil, nil)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
@@ -380,7 +380,7 @@ func TestListRows_WithWhere(t *testing.T) {
 	require.NoError(t, err)
 
 	state := database.NewTableState("public", "filter_pg_test")
-	state.Limit = 100
+	state.BatchSize = 100
 
 	_, rows, err := testDao.ListRows(ctx, state, "status = 'active'", "", nil, nil)
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	require.NoError(t, err)
 
 	state := database.NewTableState("public", "order_pg_test")
-	state.Limit = 100
+	state.BatchSize = 100
 
 	_, rows, err := testDao.ListRows(ctx, state, "", "label ASC", nil, nil)
 	require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestListRows_CountCallback(t *testing.T) {
 	require.NotEmpty(t, schemas[0].Tables)
 
 	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
-	state.Limit = 10
+	state.BatchSize = 10
 
 	callbackCh := make(chan int64, 1)
 	_, _, err = testDao.ListRows(ctx, state, "", "", nil, func(n int64) {
