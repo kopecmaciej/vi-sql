@@ -150,16 +150,6 @@ func IsExplainQuery(sql string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "EXPLAIN")
 }
 
-// HasLimitClause reports whether sql contains a LIMIT keyword.
-func HasLimitClause(sql string) bool {
-	for _, tok := range Tokenize(sql) {
-		if tok.Type == TokenKeyword && strings.ToUpper(tok.Value) == "LIMIT" {
-			return true
-		}
-	}
-	return false
-}
-
 // AutocompleteEntry is a suggestion returned by BuildSQLAutocomplete.
 // Main is the text to insert; Secondary is a hint shown alongside it.
 type AutocompleteEntry struct {

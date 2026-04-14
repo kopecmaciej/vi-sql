@@ -715,7 +715,7 @@ func (c *Data) renderTableView(rows []database.Row) {
 func (c *Data) filterBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
-			c.state.RawSQL = database.RebuildSelectSQLPreserveLimit(c.state.RawSQL, text, c.state.OrderBy)
+			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, text, c.state.OrderBy)
 		}
 		c.state.SetWhere(text)
 		err := c.updateData(ctx, false)
@@ -738,7 +738,7 @@ func (c *Data) filterBarHandler(ctx context.Context) {
 func (c *Data) sortBarHandler(ctx context.Context) {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
-			c.state.RawSQL = database.RebuildSelectSQLPreserveLimit(c.state.RawSQL, c.state.Where, text)
+			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, text)
 		}
 		c.state.SetOrderBy(text)
 		err := c.updateData(ctx, false)
@@ -972,7 +972,7 @@ func (c *Data) handleSortByColumn(ctx context.Context, col int) *tcell.EventKey 
 	}
 
 	if c.mode == QueryMode && c.state.RawSQL != "" {
-		c.state.RawSQL = database.RebuildSelectSQLPreserveLimit(c.state.RawSQL, c.state.Where, newSort)
+		c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, newSort)
 	}
 	c.state.SetOrderBy(newSort)
 	if err := c.updateData(ctx, false); err != nil {

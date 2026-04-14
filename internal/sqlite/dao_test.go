@@ -463,3 +463,72 @@ func TestDefaultCreateTableDDL_ContainsTableName(t *testing.T) {
 	ddl := dao.DefaultCreateTableDDL("main", "my_table")
 	assert.Contains(t, ddl, "my_table")
 }
+
+// --- ListQueryRows ---
+
+func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	const batch = 3
+	_, rows, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users", batch, 0, nil)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
+	assert.NotEmpty(t, rows)
+
+	// Second page must have rows too (fixture has 6 users).
+	_, rows2, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users", batch, batch, nil)
+	require.NoError(t, err)
+	assert.Len(t, rows2, batch, "second page should also have a full batch")
+}
+
+func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	const userLimit = 5
+	const batch = 2
+
+	_, page1, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, 0, nil)
+	require.NoError(t, err)
+	assert.Len(t, page1, batch, "first page should return batch rows")
+
+	_, page2, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, batch, nil)
+	require.NoError(t, err)
+	assert.Len(t, page2, batch, "second page should return batch rows")
+
+	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
+	_, page3, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, batch*2, nil)
+	require.NoError(t, err)
+	assert.Len(t, page3, 1, "last page should have the remainder row")
+}
+
+func TestListQueryRows_CountCallback_RespectsUserLimit(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	countCh := make(chan int64, 1)
+	_, _, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users LIMIT 5", 10, 0, func(n int64) {
+		countCh <- n
+	})
+	require.NoError(t, err)
+
+	count := <-countCh
+	assert.Equal(t, int64(5), count, "count should be bounded by the user LIMIT")
+}
+
+// TestListQueryRows_ExplainBypasses verifies that EXPLAIN queries are still
+// executed as-is without any pagination wrapper.
+func TestListQueryRows_Explain_Bypasses(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	_, rows, _, err := dao.ListQueryRows(ctx, "EXPLAIN SELECT * FROM users", 10, 0, nil)
+	require.NoError(t, err)
+	// SQLite EXPLAIN returns opcode rows — just verify no error and non-empty result.
+	assert.NotEmpty(t, rows)
+}

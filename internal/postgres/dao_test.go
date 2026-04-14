@@ -74,8 +74,6 @@ func TestListSchemasWithTables_MultipleSchemas(t *testing.T) {
 	for i, s := range schemas {
 		schemaNames[i] = s.Schema
 	}
-	// The postgres sample fixture creates auth, store, and other schemas.
-	// At minimum public should exist.
 	assert.NotEmpty(t, schemaNames)
 }
 
@@ -94,13 +92,9 @@ func TestListSchemasWithTables_WithFilter(t *testing.T) {
 func TestGetTableColumns_WithPGTypes(t *testing.T) {
 	ctx := context.Background()
 
-	// The sample fixture uses public schema tables.
-	// Find any table that exists and check columns.
 	schemas, err := testDao.ListSchemasWithTables(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas)
-
-	// Use the first table from the first schema.
 	require.NotEmpty(t, schemas[0].Tables)
 	schema := schemas[0].Schema
 	table := schemas[0].Tables[0]
@@ -518,4 +512,60 @@ func TestListQueryRows_WithPagination(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, cols)
 	assert.LessOrEqual(t, len(rows), 2)
+}
+
+func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
+	ctx := context.Background()
+
+	const batch = 3
+	_, rows, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0, nil)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
+	assert.NotEmpty(t, rows)
+
+	// auth.users has 1001 rows, so page 2 must also be full.
+	_, rows2, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch, nil)
+	require.NoError(t, err)
+	assert.Len(t, rows2, batch, "second page should also have a full batch")
+}
+
+func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
+	ctx := context.Background()
+
+	const userLimit = 5
+	const batch = 2
+
+	_, page1, _, err := testDao.ListQueryRows(ctx,
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, 0, nil)
+	require.NoError(t, err)
+	assert.Len(t, page1, batch, "first page should return batch rows")
+
+	_, page2, _, err := testDao.ListQueryRows(ctx,
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch, nil)
+	require.NoError(t, err)
+	assert.Len(t, page2, batch, "second page should return batch rows")
+
+	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
+	_, page3, _, err := testDao.ListQueryRows(ctx,
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch*2, nil)
+	require.NoError(t, err)
+	assert.Len(t, page3, 1, "last page should have the remainder row")
+}
+
+func TestListQueryRows_CountCallback_RespectsUserLimit(t *testing.T) {
+	ctx := context.Background()
+
+	countCh := make(chan int64, 1)
+	_, _, _, err := testDao.ListQueryRows(ctx,
+		`SELECT * FROM "auth"."users" LIMIT 5`, 10, 0, func(n int64) {
+			countCh <- n
+		})
+	require.NoError(t, err)
+
+	select {
+	case count := <-countCh:
+		assert.Equal(t, int64(5), count, "count should be bounded by the user LIMIT")
+	case <-time.After(3 * time.Second):
+		t.Fatal("count callback was not invoked within 3s")
+	}
 }

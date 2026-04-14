@@ -4,124 +4,18 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
-func ParseValueByType(value string, dataType string) (any, error) {
-	if strings.EqualFold(value, "NULL") || strings.EqualFold(value, "null") {
-		return nil, nil
-	}
-
-	dt := strings.ToLower(dataType)
-
-	switch {
-	case strings.Contains(dt, "int"):
-		return strconv.ParseInt(value, 10, 64)
-	case strings.Contains(dt, "numeric") || strings.Contains(dt, "decimal") ||
-		strings.Contains(dt, "real") || strings.Contains(dt, "double") || dt == "float":
-		return strconv.ParseFloat(value, 64)
-	case strings.Contains(dt, "bool"):
-		return strconv.ParseBool(value)
-	case strings.Contains(dt, "timestamp") || strings.Contains(dt, "date"):
-		return parseTimeValue(value)
-	default:
-		return value, nil
-	}
-}
-
-func parseTimeValue(value string) (time.Time, error) {
-	formats := []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05",
-		"2006-01-02 15:04:05",
-		"2006-01-02",
-	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, value); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("cannot parse time value: %s", value)
-}
-
-// ExtractSelectClauses parses a simple one-line SELECT and returns the WHERE
-// and ORDER BY clause bodies (without the keywords). Handles LIMIT as a
-// terminator so trailing pagination hints are not included.
-func ExtractSelectClauses(sql string) (where, orderBy string) {
+// extractClauseInt finds " KEYWORD N" in sql (case-insensitive) and returns N.
+// N must be > 0 to be considered present.
+func extractClauseInt(sql, keyword string) (int64, bool) {
 	upper := strings.ToUpper(sql)
-
-	find := func(kw string) int {
-		// Require a space before and after the keyword to avoid matching
-		// inside identifiers (e.g. "password WHERE ..." vs "ELSEWHERE").
-		idx := strings.Index(upper, " "+kw+" ")
-		if idx >= 0 {
-			return idx + 1 // point at start of keyword, not the leading space
-		}
-		return -1
-	}
-
-	wherePos := find("WHERE")
-	orderByPos := find("ORDER BY")
-	limitPos := find("LIMIT")
-
-	end := len(sql)
-	if limitPos >= 0 && limitPos < end {
-		end = limitPos
-	}
-
-	if orderByPos >= 0 && orderByPos < end {
-		orderBy = strings.TrimSpace(sql[orderByPos+8 : end]) // len("ORDER BY") == 8
-		end = orderByPos
-	}
-
-	if wherePos >= 0 && wherePos < end {
-		where = strings.TrimSpace(sql[wherePos+5 : end]) // len("WHERE") == 5
-	}
-
-	return where, orderBy
-}
-
-// RebuildSelectSQL replaces the WHERE and ORDER BY clauses in a simple
-// one-line SELECT, preserving everything before the first modifier clause.
-// Pass empty strings to omit a clause.
-func RebuildSelectSQL(sql, newWhere, newOrderBy string) string {
-	upper := strings.ToUpper(sql)
-
-	find := func(kw string) int {
-		idx := strings.Index(upper, " "+kw+" ")
-		if idx >= 0 {
-			return idx
-		}
-		return -1
-	}
-
-	cutPos := len(sql)
-	for _, pos := range []int{find("WHERE"), find("ORDER BY"), find("LIMIT")} {
-		if pos >= 0 && pos < cutPos {
-			cutPos = pos
-		}
-	}
-
-	base := strings.TrimSpace(sql[:cutPos])
-	if newWhere != "" {
-		base += " WHERE " + newWhere
-	}
-	if newOrderBy != "" {
-		base += " ORDER BY " + newOrderBy
-	}
-	return base
-}
-
-// ExtractLimitValue parses the LIMIT N integer from a SQL string.
-// Returns (n, true) if a LIMIT clause is present, (0, false) otherwise.
-func ExtractLimitValue(sql string) (int64, bool) {
-	upper := strings.ToUpper(sql)
-	idx := strings.Index(upper, " LIMIT ")
+	marker := " " + strings.ToUpper(keyword) + " "
+	idx := strings.Index(upper, marker)
 	if idx < 0 {
 		return 0, false
 	}
-	rest := strings.TrimSpace(sql[idx+7:])
-	// Take only the leading digits (stop at whitespace or semicolon).
+	rest := strings.TrimSpace(sql[idx+len(marker):])
 	end := 0
 	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
 		end++
@@ -136,13 +30,36 @@ func ExtractLimitValue(sql string) (int64, bool) {
 	return n, true
 }
 
-// RebuildSelectSQLPreserveLimit rebuilds WHERE and ORDER BY clauses like
-// RebuildSelectSQL, but re-appends LIMIT N if the original SQL had one.
-func RebuildSelectSQLPreserveLimit(sql, newWhere, newOrderBy string) string {
-	limitVal, hasLimit := ExtractLimitValue(sql)
-	result := RebuildSelectSQL(sql, newWhere, newOrderBy)
-	if hasLimit {
-		result += fmt.Sprintf(" LIMIT %d", limitVal)
+// ExtractLimitValue returns the LIMIT N integer from a SQL string, if present.
+func ExtractLimitValue(sql string) (int64, bool) {
+	return extractClauseInt(sql, "LIMIT")
+}
+
+// RebuildSelectSQL replaces the WHERE and ORDER BY clauses in a SELECT,
+// then re-appends any LIMIT / OFFSET from the original query.
+// Pass empty strings to omit a clause.
+func RebuildSelectSQL(sql, newWhere, newOrderBy string) string {
+	upper := strings.ToUpper(sql)
+
+	cutPos := len(sql)
+	for _, kw := range []string{" WHERE ", " ORDER BY ", " LIMIT "} {
+		if idx := strings.Index(upper, kw); idx >= 0 && idx < cutPos {
+			cutPos = idx
+		}
+	}
+
+	result := strings.TrimSpace(sql[:cutPos])
+	if newWhere != "" {
+		result += " WHERE " + newWhere
+	}
+	if newOrderBy != "" {
+		result += " ORDER BY " + newOrderBy
+	}
+	if limit, ok := extractClauseInt(sql, "LIMIT"); ok {
+		result += fmt.Sprintf(" LIMIT %d", limit)
+		if offset, ok := extractClauseInt(sql, "OFFSET"); ok {
+			result += fmt.Sprintf(" OFFSET %d", offset)
+		}
 	}
 	return result
 }

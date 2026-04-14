@@ -84,10 +84,6 @@ type Config struct {
 	ConfigPath         string       `yaml:"-"`
 }
 
-func LoadConfig() (*Config, error) {
-	return LoadConfigWithVersion("1.0.0", "")
-}
-
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 	defaultConfig := &Config{}
 	defaultConfig.loadDefaults(version)
