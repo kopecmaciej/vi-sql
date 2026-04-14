@@ -11,14 +11,38 @@ import (
 type App struct {
 	*tview.Application
 
-	Pages         *Pages
-	driver        database.Driver
-	formatter     database.ValueFormatter
-	manager       *manager.ElementManager
-	styles        *config.Styles
-	config        *config.Config
-	keys          *config.KeyBindings
-	previousFocus tview.Primitive
+	Pages            *Pages
+	driver           database.Driver
+	formatter        database.ValueFormatter
+	manager          *manager.ElementManager
+	styles           *config.Styles
+	config           *config.Config
+	keys             *config.KeyBindings
+	previousFocus    tview.Primitive
+	openStyleModal      func()
+	openConnectionPage  func()
+}
+
+// SetOpenStyleModalFunc stores a callback for opening the style-change modal.
+// Called by tui.App during initialisation so components in page/ can trigger it.
+func (a *App) SetOpenStyleModalFunc(fn func()) { a.openStyleModal = fn }
+
+// OpenStyleModal invokes the style-change modal if one has been registered.
+func (a *App) OpenStyleModal() {
+	if a.openStyleModal != nil {
+		a.openStyleModal()
+	}
+}
+
+// SetOpenConnectionPageFunc stores a callback for navigating to the connection page.
+// Called by tui.App during initialisation so components in page/ can trigger it.
+func (a *App) SetOpenConnectionPageFunc(fn func()) { a.openConnectionPage = fn }
+
+// OpenConnectionPage invokes the connection page callback if one has been registered.
+func (a *App) OpenConnectionPage() {
+	if a.openConnectionPage != nil {
+		a.openConnectionPage()
+	}
 }
 
 func NewApp(appConfig *config.Config) *App {

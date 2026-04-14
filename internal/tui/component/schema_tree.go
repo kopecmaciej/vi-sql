@@ -544,6 +544,11 @@ func (s *SchemaTree) closeCreateTableModal() {
 	s.createTableModal.Hide()
 }
 
+// OpenCreateTable opens the create-table modal for the currently selected schema.
+func (s *SchemaTree) OpenCreateTable(ctx context.Context) {
+	s.showAddTableModal(ctx)
+}
+
 func (s *SchemaTree) closeInputModal() {
 	s.inputModal.SetText("")
 	s.App.Pages.RemovePage(SchemaInputModalId)

@@ -94,6 +94,10 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+b"},
 			Description: "Focus schema tree",
 		},
+		OpenActions: Key{
+			Keys:        []string{"Ctrl+p"},
+			Description: "Open actions",
+		},
 	}
 
 	k.Schema = SchemaKeys{

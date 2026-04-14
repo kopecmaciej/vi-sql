@@ -42,6 +42,8 @@ type Main struct {
 	// queryTabNums tracks which "Query N" numbers are currently in use,
 	// so closed tabs release their number for reuse.
 	queryTabNums map[int]bool
+
+	actionsModal *modal.ActionsModal
 }
 
 func NewMain() *Main {
@@ -55,6 +57,7 @@ func NewMain() *Main {
 		structureTabs: make(map[string]*component.Structure),
 		indexTabs:     make(map[string]*component.Indexes),
 		queryTabNums:  make(map[int]bool),
+		actionsModal:  modal.NewActionsModal(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -93,6 +96,9 @@ func (m *Main) initComponents() error {
 		return err
 	}
 	if err := m.schemas.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.actionsModal.Init(m.App); err != nil {
 		return err
 	}
 
@@ -208,6 +214,14 @@ func (m *Main) nextQueryTabNum() int {
 		if !m.queryTabNums[n] {
 			return n
 		}
+	}
+}
+
+// openNewQueryTabWithQuery creates a new query tab pre-filled with query.
+func (m *Main) openNewQueryTabWithQuery(query string) {
+	m.openNewQueryTab()
+	if len(m.queryTabs) > 0 {
+		m.queryTabs[len(m.queryTabs)-1].SetEditorText(query)
 	}
 }
 
@@ -417,6 +431,9 @@ func (m *Main) setKeybindings() {
 		case k.Contains(k.Global.ServerInfo, event.Name()):
 			m.showServerInfo()
 			return nil
+		case k.Contains(k.Global.OpenActions, event.Name()):
+			m.openActionsModal()
+			return nil
 		case k.Contains(k.Global.NewTab, event.Name()):
 			m.openNewQueryTab()
 			return nil
@@ -437,6 +454,77 @@ func (m *Main) setFocusToActiveTab() {
 	} else {
 		m.App.SetFocus(active)
 	}
+}
+
+func (m *Main) openActionsModal() {
+	k := m.App.GetKeys()
+	ctx := context.Background()
+
+	entries := []modal.ActionEntry{
+		{
+			Label:   "Server info",
+			KeyHint: k.Global.ServerInfo.String(),
+			Handler: m.showServerInfo,
+		},
+		{
+			Label:   "Change style",
+			KeyHint: k.Global.ChangeStyle.String(),
+			Handler: m.App.OpenStyleModal,
+		},
+		{
+			Label:   "Connection page",
+			KeyHint: k.Global.OpenConnection.String(),
+			Handler: m.App.OpenConnectionPage,
+		},
+		{
+			Label:   "New tab",
+			KeyHint: k.Global.NewTab.String(),
+			Handler: m.openNewQueryTab,
+		},
+		{
+			Label:   "Close tab",
+			KeyHint: k.Global.CloseTab.String(),
+			Handler: m.closeActiveTab,
+		},
+		{
+			Label:   "Create table",
+			KeyHint: k.Schema.AddTable.String(),
+			Handler: func() { m.schemas.OpenCreateTable(ctx) },
+		},
+	}
+
+	if data, ok := m.topBar.GetActiveComponent().(*component.Data); ok {
+		hasResults := data.HasResults()
+
+		var historyHandler func()
+		if data.IsQueryTab() {
+			historyHandler = data.OpenHistory
+		} else {
+			historyHandler = func() { data.OpenHistoryWithCallback(m.openNewQueryTabWithQuery) }
+		}
+
+		entries = append(entries,
+			modal.ActionEntry{
+				Label:    "Export data",
+				KeyHint:  k.Data.ExportData.String(),
+				Handler:  func() { data.OpenExport(ctx) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
+				Label:    "Explain viewer",
+				KeyHint:  k.Data.ExplainQuery.String(),
+				Handler:  func() { data.OpenExplain(ctx) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
+				Label:   "History",
+				KeyHint: k.SQLQueryEditor.OpenHistory.String(),
+				Handler: historyHandler,
+			},
+		)
+	}
+
+	m.actionsModal.Open(entries)
 }
 
 func (m *Main) showServerInfo() {

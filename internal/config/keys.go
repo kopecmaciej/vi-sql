@@ -66,6 +66,7 @@ type (
 		NewTab          Key `yaml:"newTab"`
 		CloseTab        Key `yaml:"closeTab"`
 		FocusSchemaTree Key `yaml:"focusSchemaTree"`
+		OpenActions     Key `yaml:"openActions"`
 	}
 
 	SchemaKeys struct {

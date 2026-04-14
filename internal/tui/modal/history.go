@@ -80,6 +80,9 @@ func (h *History) handleEvents() {
 // SetOnAccept sets the callback invoked when the user accepts a history entry.
 func (h *History) SetOnAccept(fn func(query string)) { h.onAccept = fn }
 
+// GetOnAccept returns the current onAccept callback.
+func (h *History) GetOnAccept() func(query string) { return h.onAccept }
+
 // SetOnClose sets the callback invoked when the user closes the modal.
 func (h *History) SetOnClose(fn func()) { h.onClose = fn }
 

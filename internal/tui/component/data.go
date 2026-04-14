@@ -453,6 +453,16 @@ func (c *Data) IsCleanQueryTab() bool {
 	return c.mode == QueryMode && c.state.Table == ""
 }
 
+// HasResults reports whether the tab currently has query results loaded.
+func (c *Data) HasResults() bool {
+	return c.state != nil && (c.state.Table != "" || c.state.RawSQL != "")
+}
+
+// SetEditorText pre-fills the SQL query editor with the given text.
+func (c *Data) SetEditorText(text string) {
+	c.sqlQueryEditor.SetText(text, true)
+}
+
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).
 func (c *Data) GetFocusPrimitive() tview.Primitive {
@@ -1413,6 +1423,32 @@ func (c *Data) buildExportQuery() string {
 		q += " ORDER BY " + c.state.OrderBy
 	}
 	return q
+}
+
+// OpenExport opens the export dialog for the current table or query.
+func (c *Data) OpenExport(ctx context.Context) {
+	if c.state.Table == "" && c.state.RawSQL == "" {
+		return
+	}
+	c.exportModal.Show(ctx, c.buildExportQuery(), c.state.Schema, c.state.Table)
+}
+
+// OpenExplain runs EXPLAIN on the last executed query and shows the viewer.
+func (c *Data) OpenExplain(ctx context.Context) {
+	if c.state.LastQuery != "" {
+		go c.runExplain(ctx, c.state.LastQuery)
+	}
+}
+
+// OpenHistory opens the SQL history modal.
+func (c *Data) OpenHistory() {
+	c.sqlQueryEditor.OpenHistory()
+}
+
+// OpenHistoryWithCallback opens the SQL history modal and temporarily
+// overrides the onAccept callback. The original callback is restored on close.
+func (c *Data) OpenHistoryWithCallback(onAccept func(query string)) {
+	c.sqlQueryEditor.OpenHistoryWithCallback(onAccept)
 }
 
 // isSelectQuery returns true when sql is a statement that returns rows.

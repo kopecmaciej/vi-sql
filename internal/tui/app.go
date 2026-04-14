@@ -40,6 +40,9 @@ func NewApp(appConfig *config.Config) *App {
 func (a *App) Init() error {
 	a.SetRoot(a.Pages, true).EnableMouse(true)
 
+	a.App.SetOpenStyleModalFunc(a.ShowStyleChangeModal)
+	a.App.SetOpenConnectionPageFunc(a.renderConnection)
+
 	err := a.help.Init(a.App)
 	if err != nil {
 		return err

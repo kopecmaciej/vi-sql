@@ -380,3 +380,24 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		e.TextArea.InputHandler()(event, setFocus)
 	})
 }
+
+// OpenHistory renders the SQL history modal.
+func (e *SQLQueryEditor) OpenHistory() {
+	if e.history != nil {
+		e.history.Render()
+	}
+}
+
+// OpenHistoryWithCallback renders the SQL history modal and temporarily
+// overrides the onAccept callback. The original callback is restored on close.
+func (e *SQLQueryEditor) OpenHistoryWithCallback(onAccept func(query string)) {
+	if e.history == nil {
+		return
+	}
+	original := e.history.GetOnAccept()
+	e.history.SetOnAccept(onAccept)
+	e.history.SetOnClose(func() {
+		e.history.SetOnAccept(original)
+	})
+	e.history.Render()
+}
