@@ -1,6 +1,57 @@
 package config
 
 func (k *KeyBindings) loadDefaults() {
+	k.Common = CommonKeys{
+		Close: Key{
+			Keys:        []string{"Esc"},
+			Description: "Close",
+		},
+		Delete: Key{
+			Keys:        []string{"Ctrl+d"},
+			Description: "Delete",
+		},
+		Add: Key{
+			Runes:       []string{"a"},
+			Description: "Add",
+		},
+		Edit: Key{
+			Runes:       []string{"e"},
+			Description: "Edit",
+		},
+		Filter: Key{
+			Runes:       []string{"/"},
+			Description: "Filter",
+		},
+		Select: Key{
+			Keys:        []string{"Enter", "Space"},
+			Description: "Select",
+		},
+		Copy: Key{
+			Runes:       []string{"c"},
+			Description: "Copy",
+		},
+		Save: Key{
+			Keys:        []string{"Ctrl+s"},
+			Description: "Save",
+		},
+		Refresh: Key{
+			Keys:        []string{"Ctrl+r"},
+			Description: "Refresh",
+		},
+		Execute: Key{
+			Keys:        []string{"Ctrl+Enter"},
+			Description: "Execute",
+		},
+		Clear: Key{
+			Keys:        []string{"Ctrl+u"},
+			Description: "Clear",
+		},
+		Paste: Key{
+			Keys:        []string{"Ctrl+v"},
+			Description: "Paste",
+		},
+	}
+
 	k.Navigation = NavigationKeys{
 		MoveUp: Key{
 			Runes:       []string{"k"},
@@ -108,14 +159,6 @@ func (k *KeyBindings) loadDefaults() {
 	}
 
 	k.Schema = SchemaKeys{
-		FilterBar: Key{
-			Runes:       []string{"/"},
-			Description: "Filter bar",
-		},
-		ClearFilter: Key{
-			Keys:        []string{"Ctrl+u"},
-			Description: "Clear filter",
-		},
 		ExpandAll: Key{
 			Runes:       []string{"E"},
 			Description: "Expand all",
@@ -124,14 +167,6 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"W"},
 			Description: "Collapse all",
 		},
-		AddTable: Key{
-			Runes:       []string{"a"},
-			Description: "Add table",
-		},
-		DeleteTable: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete table",
-		},
 		RenameTable: Key{
 			Runes:       []string{"R"},
 			Description: "Rename table",
@@ -139,21 +174,6 @@ func (k *KeyBindings) loadDefaults() {
 		ExpandTable: Key{
 			Runes:       []string{"e"},
 			Description: "Expand table",
-		},
-	}
-
-	k.InputBar = InputBarKeys{
-		Exit: Key{
-			Keys:        []string{"Esc"},
-			Description: "Close",
-		},
-		ClearInput: Key{
-			Keys:        []string{"Ctrl+u"},
-			Description: "Clear",
-		},
-		Paste: Key{
-			Keys:        []string{"Ctrl+v"},
-			Description: "Paste",
 		},
 	}
 
@@ -171,25 +191,13 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+e"},
 			Description: "$EDITOR",
 		},
-		AddRow: Key{
-			Runes:       []string{"a"},
-			Description: "Add new",
-		},
 		EditRow: Key{
 			Runes:       []string{"E"},
 			Description: "Edit",
 		},
-		InlineEdit: Key{
-			Runes:       []string{"e"},
-			Description: "Inline edit",
-		},
 		DuplicateRow: Key{
 			Runes:       []string{"D"},
 			Description: "Duplicate",
-		},
-		DeleteRow: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete",
 		},
 		MultipleSelect: Key{
 			Runes:       []string{"V"},
@@ -199,21 +207,9 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Esc"},
 			Description: "Clear selection",
 		},
-		CopyValue: Key{
-			Runes:       []string{"c"},
-			Description: "Copy",
-		},
 		CopyRow: Key{
 			Runes:       []string{"C"},
 			Description: "Copy row",
-		},
-		Refresh: Key{
-			Keys:        []string{"Ctrl+r"},
-			Description: "Refresh",
-		},
-		ToggleFilterBar: Key{
-			Runes:       []string{"/"},
-			Description: "Filter bar",
 		},
 		ToggleSortBar: Key{
 			Runes:       []string{"s"},
@@ -250,56 +246,12 @@ func (k *KeyBindings) loadDefaults() {
 	}
 
 	k.ExplainViewer = ExplainViewerKeys{
-		Close: Key{
-			Keys:        []string{"Esc"},
-			Description: "Close",
-		},
 		ToggleMode: Key{
 			Runes:       []string{"t"},
 			Description: "Toggle ANALYZE mode",
 		},
 	}
 
-	k.Connection.ConnectionForm = ConnectionFormKeys{
-		SaveConnection: Key{
-			Keys:        []string{"Ctrl+s"},
-			Description: "Save",
-		},
-	}
-
-	k.Connection.ConnectionList = ConnectionListKeys{
-		AddConnection: Key{
-			Runes:       []string{"a"},
-			Description: "Add new",
-		},
-		DeleteConnection: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete",
-		},
-		EditConnection: Key{
-			Runes:       []string{"e"},
-			Description: "Edit",
-		},
-		SetConnection: Key{
-			Keys:        []string{"Enter", "Space"},
-			Description: "Set selected",
-		},
-	}
-
-	k.Help = HelpKeys{
-		Close: Key{
-			Keys:        []string{"Esc"},
-			Description: "Close",
-		},
-		Search: Key{
-			Runes:       []string{"/"},
-			Description: "Search",
-		},
-		EditKey: Key{
-			Runes:       []string{"e"},
-			Description: "Edit key",
-		},
-	}
 
 	k.Peeker = PeekerKeys{
 		MoveToTop: Key{
@@ -309,10 +261,6 @@ func (k *KeyBindings) loadDefaults() {
 		MoveToBottom: Key{
 			Runes:       []string{"G"},
 			Description: "Go to bottom",
-		},
-		CopyValue: Key{
-			Runes:       []string{"c"},
-			Description: "Copy value",
 		},
 		CopyHighlight: Key{
 			Runes:       []string{"C"},
@@ -331,28 +279,15 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Full screen",
 		},
 		Exit: Key{
-			Keys:        []string{"Esc"},
 			Runes:       []string{"q"},
-			Description: "Close",
+			Description: "Close (q)",
 		},
 	}
 
 	k.History = HistoryKeys{
-		ClearHistory: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Clear history",
-		},
-		AcceptEntry: Key{
-			Keys:        []string{"Enter", "Space"},
-			Description: "Accept entry",
-		},
-		CloseHistory: Key{
-			Keys:        []string{"Esc", "Ctrl+y"},
-			Description: "Close",
-		},
-		DeleteEntry: Key{
-			Runes:       []string{"d"},
-			Description: "Delete entry",
+		PurgeHistory: Key{
+			Keys:        []string{"Alt+d"},
+			Description: "Purge history",
 		},
 		CopyQuery: Key{
 			Runes:       []string{"c"},
@@ -360,22 +295,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 	}
 
-	k.Index = IndexKeys{
-		AddIndex: Key{
-			Runes:       []string{"a"},
-			Description: "Add index",
-		},
-		DeleteIndex: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete index",
-		},
-	}
-
 	k.IndexAddForm = IndexAddFormKeys{
-		ExitForm: Key{
-			Keys:        []string{"Esc"},
-			Description: "Close",
-		},
 		ToggleSQLMode: Key{
 			Keys:        []string{"Ctrl+e"},
 			Description: "SQL mode",
@@ -384,51 +304,16 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+a"},
 			Description: "Add column",
 		},
-		CreateIndex: Key{
-			Keys:        []string{"Ctrl+s"},
-			Description: "Create index",
-		},
 	}
 
 	k.Structure = StructureKeys{
-		Refresh: Key{
-			Keys:        []string{"Ctrl+r"},
-			Description: "Refresh",
-		},
 		RenameColumn: Key{
 			Runes:       []string{"R"},
 			Description: "Rename column",
 		},
 	}
 
-	k.CreateTable = CreateTableKeys{
-		AddColumn: Key{
-			Runes:       []string{"a"},
-			Description: "Add column",
-		},
-		DeleteColumn: Key{
-			Runes:       []string{"d"},
-			Description: "Delete column",
-		},
-		Execute: Key{
-			Keys:        []string{"Ctrl+s"},
-			Description: "Create table",
-		},
-		Cancel: Key{
-			Keys:        []string{"Esc"},
-			Description: "Close",
-		},
-	}
-
 	k.SQLQueryEditor = SQLQueryEditorKeys{
-		Execute: Key{
-			Keys:        []string{"Ctrl+Enter"},
-			Description: "Execute",
-		},
-		Clear: Key{
-			Keys:        []string{"Ctrl+u"},
-			Description: "Clear",
-		},
 		Expand: Key{
 			Keys:        []string{"Ctrl+e"},
 			Description: "Resize editor",

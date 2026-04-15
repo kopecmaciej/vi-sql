@@ -77,7 +77,7 @@ func (w *Welcome) setLayout() {
 
 	w.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		k := w.App.GetKeys()
-		if k.Contains(k.Connection.ConnectionForm.SaveConnection, event.Name()) {
+		if k.Contains(k.Common.Save, event.Name()) {
 			err := w.saveConfig()
 			if err != nil {
 				showError(w.App.Pages, "Error while saving config", err)
@@ -138,7 +138,7 @@ func (w *Welcome) renderFooter() {
 	w.footer.SetKeys([]config.Key{
 		k.Navigation.FocusUp,
 		k.Navigation.FocusDown,
-		k.Connection.ConnectionForm.SaveConnection,
+		k.Common.Save,
 	})
 }
 

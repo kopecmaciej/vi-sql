@@ -25,21 +25,32 @@ type (
 
 	KeyBindings struct {
 		Navigation     NavigationKeys     `yaml:"navigation"`
+		Common         CommonKeys         `yaml:"common"`
 		Global         GlobalKeys         `yaml:"global"`
 		Main           MainKeys           `yaml:"main"`
-		Help           HelpKeys           `yaml:"help"`
-		Connection     ConnectionKeys     `yaml:"connection"`
 		Schema         SchemaKeys         `yaml:"schema"`
-		InputBar       InputBarKeys       `yaml:"inputBar"`
 		Data           DataKeys           `yaml:"data"`
 		Peeker         PeekerKeys         `yaml:"peeker"`
 		SQLQueryEditor SQLQueryEditorKeys `yaml:"sqlQueryEditor"`
-		Index          IndexKeys          `yaml:"index"`
 		IndexAddForm   IndexAddFormKeys   `yaml:"indexAddForm"`
 		Structure      StructureKeys      `yaml:"structure"`
 		History        HistoryKeys        `yaml:"history"`
-		CreateTable    CreateTableKeys    `yaml:"createTable"`
 		ExplainViewer  ExplainViewerKeys  `yaml:"explainViewer"`
+	}
+
+	CommonKeys struct {
+		Close   Key `yaml:"close"`
+		Delete  Key `yaml:"delete"`
+		Add     Key `yaml:"add"`
+		Edit    Key `yaml:"edit"`
+		Copy    Key `yaml:"copy"`
+		Save    Key `yaml:"save"`
+		Filter  Key `yaml:"filter"`
+		Select  Key `yaml:"select"`
+		Refresh Key `yaml:"refresh"`
+		Execute Key `yaml:"execute"`
+		Clear   Key `yaml:"clear"`
+		Paste   Key `yaml:"paste"`
 	}
 
 	NavigationKeys struct {
@@ -75,35 +86,19 @@ type (
 	}
 
 	SchemaKeys struct {
-		FilterBar   Key `yaml:"filterBar"`
-		ClearFilter Key `yaml:"clearFilter"`
 		ExpandAll   Key `yaml:"expandAll"`
 		CollapseAll Key `yaml:"collapseAll"`
-		AddTable    Key `yaml:"addTable"`
-		DeleteTable Key `yaml:"deleteTable"`
 		RenameTable Key `yaml:"renameTable"`
 		ExpandTable Key `yaml:"expandTable"`
-	}
-
-	InputBarKeys struct {
-		Exit       Key `yaml:"exit"`
-		ClearInput Key `yaml:"clearInput"`
-		Paste      Key `yaml:"paste"`
 	}
 
 	DataKeys struct {
 		PeekRow            Key `yaml:"peekRow"`
 		FullPagePeek       Key `yaml:"fullPagePeek"`
 		TermEditor         Key `yaml:"termEditor"`
-		AddRow             Key `yaml:"addRow"`
 		EditRow            Key `yaml:"editRow"`
-		InlineEdit         Key `yaml:"inlineEdit"`
 		DuplicateRow       Key `yaml:"duplicateRow"`
-		DeleteRow          Key `yaml:"deleteRow"`
-		CopyValue          Key `yaml:"copyValue"`
 		CopyRow            Key `yaml:"copyRow"`
-		Refresh            Key `yaml:"refresh"`
-		ToggleFilterBar    Key `yaml:"toggleFilterBar"`
 		NextPage           Key `yaml:"nextPage"`
 		PreviousPage       Key `yaml:"previousPage"`
 		ToggleSortBar      Key `yaml:"toggleSortBar"`
@@ -117,30 +112,7 @@ type (
 	}
 
 	ExplainViewerKeys struct {
-		Close      Key `yaml:"close"`
 		ToggleMode Key `yaml:"toggleMode"`
-	}
-
-	ConnectionKeys struct {
-		ConnectionForm ConnectionFormKeys `yaml:"connectionForm"`
-		ConnectionList ConnectionListKeys `yaml:"connectionList"`
-	}
-
-	ConnectionFormKeys struct {
-		SaveConnection Key `yaml:"saveConnection"`
-	}
-
-	ConnectionListKeys struct {
-		AddConnection    Key `yaml:"addConnection"`
-		DeleteConnection Key `yaml:"deleteConnection"`
-		EditConnection   Key `yaml:"editConnection"`
-		SetConnection    Key `yaml:"setConnection"`
-	}
-
-	HelpKeys struct {
-		Close   Key `yaml:"close"`
-		Search  Key `yaml:"search"`
-		EditKey Key `yaml:"editKey"`
 	}
 
 	PeekerKeys struct {
@@ -155,40 +127,20 @@ type (
 	}
 
 	HistoryKeys struct {
-		ClearHistory Key `yaml:"clearHistory"`
-		AcceptEntry  Key `yaml:"acceptEntry"`
-		CloseHistory Key `yaml:"closeHistory"`
-		DeleteEntry  Key `yaml:"deleteEntry"`
+		PurgeHistory Key `yaml:"purgeHistory"`
 		CopyQuery    Key `yaml:"copyQuery"`
 	}
 
-	IndexKeys struct {
-		AddIndex    Key `yaml:"addIndex"`
-		DeleteIndex Key `yaml:"deleteIndex"`
-	}
-
 	IndexAddFormKeys struct {
-		ExitForm      Key `yaml:"exitForm"`
 		ToggleSQLMode Key `yaml:"toggleSQLMode"`
 		AddColumn     Key `yaml:"addColumn"`
-		CreateIndex   Key `yaml:"createIndex"`
 	}
 
 	StructureKeys struct {
-		Refresh      Key `yaml:"refresh"`
 		RenameColumn Key `yaml:"renameColumn"`
 	}
 
-	CreateTableKeys struct {
-		AddColumn    Key `yaml:"addColumn"`
-		DeleteColumn Key `yaml:"deleteColumn"`
-		Execute      Key `yaml:"execute"`
-		Cancel       Key `yaml:"cancel"`
-	}
-
 	SQLQueryEditorKeys struct {
-		Execute     Key `yaml:"execute"`
-		Clear       Key `yaml:"clear"`
 		Expand      Key `yaml:"expand"`
 		OpenHistory Key `yaml:"openHistory"`
 	}
@@ -200,16 +152,30 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	d := kb.Data
 	return []Key{
 		d.PeekRow, d.FullPagePeek,
-		d.CopyValue, d.CopyRow,
-		d.Refresh, d.NextPage, d.PreviousPage,
+		kb.Common.Copy, d.CopyRow,
+		kb.Common.Refresh, d.NextPage, d.PreviousPage,
 		d.ExplainQuery,
 		d.ExportData,
 	}
 }
 
 // keyGroupParents defines optional single-parent inheritance for key groups.
-// GetKeysForElement prepends the parent's keys before the child's own keys,
+// GetKeysForElement prepends the parent's keys before the child's own keys.
 var keyGroupParents = map[string]string{} // eg: "ChildKeys": "ParentKeys"
+
+// componentCommonKeys lists which CommonKeys fields each component exposes in
+// the footer. Only the named fields are shown — this avoids displaying
+// irrelevant common keys (e.g. Execute in the schema tree).
+var componentCommonKeys = map[string][]string{
+	"Data":           {"Add", "Edit", "Delete", "Copy", "Filter", "Refresh"},
+	"Schema":         {"Add", "Delete", "Filter"},
+	"Peeker":         {"Copy", "Close"},
+	"Index":          {"Add", "Delete", "Save", "Close"},
+	"Structure":      {"Refresh"},
+	"History":        {"Select", "Delete", "Close"},
+	"SQLQueryEditor": {"Execute", "Clear", "Paste"},
+	"InputBar":       {"Execute", "Clear", "Paste", "Close"},
+}
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
 # keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space])
@@ -305,12 +271,46 @@ func (kb KeyBindings) GetKeysForElement(elementId string) ([]OrderedKeys, error)
 		}
 	}
 
+	if commonKeys := kb.GetCommonKeysFor(elementId); len(commonKeys) > 0 {
+		result = append(result, OrderedKeys{
+			Element: "Common",
+			Keys:    commonKeys,
+		})
+	}
+
 	result = append(result, OrderedKeys{
 		Element: elementId,
 		Keys:    extractKeysFromStruct(field),
 	})
 
 	return result, nil
+}
+
+// GetCommonKeysFor returns the Common keys declared for the given component in
+// componentCommonKeys. Returns nil if no mapping exists.
+func (kb KeyBindings) GetCommonKeysFor(elementId string) []Key {
+	names, ok := componentCommonKeys[elementId]
+	if !ok {
+		return nil
+	}
+	cv := reflect.ValueOf(kb.Common)
+	ct := cv.Type()
+	var keys []Key
+	for i := 0; i < cv.NumField(); i++ {
+		if sliceContains(names, ct.Field(i).Name) {
+			keys = append(keys, cv.Field(i).Interface().(Key))
+		}
+	}
+	return keys
+}
+
+func sliceContains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func (kb *KeyBindings) ConvertStrKeyToTcellKey(key string) (tcell.Key, bool) {

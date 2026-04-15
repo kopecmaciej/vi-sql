@@ -78,7 +78,7 @@ func (s *Structure) setKeybindings() {
 	k := s.App.GetKeys()
 	s.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Structure.Refresh, event.Name()):
+		case k.Contains(k.Common.Refresh, event.Name()):
 			s.loadData(context.Background(), false)
 			return nil
 		case k.Contains(k.Structure.RenameColumn, event.Name()):

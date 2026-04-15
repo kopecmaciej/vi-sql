@@ -98,7 +98,7 @@ func (p *Peeker) setKeybindings() {
 				modal.ShowError(p.App.Pages, "Error copying full line", err)
 			}
 			return nil
-		case k.Contains(k.Peeker.CopyValue, event.Name()):
+		case k.Contains(k.Common.Copy, event.Name()):
 			if err := p.ViewModal.CopySelectedLine(clipboard.WriteAll, "value"); err != nil {
 				log.Error().Err(err).Msg("Error copying value")
 				modal.ShowError(p.App.Pages, "Error copying value", err)
@@ -114,7 +114,7 @@ func (p *Peeker) setKeybindings() {
 			p.ViewModal.SetFullScreen(!p.ViewModal.IsFullScreen())
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Peeker.Exit, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()) || k.Contains(k.Peeker.Exit, event.Name()):
 			p.App.Pages.RemovePage(p.GetIdentifier())
 			return nil
 		}

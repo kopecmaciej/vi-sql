@@ -506,7 +506,7 @@ func (m *Main) openActionsModal() {
 		},
 		{
 			Label:   "Create table",
-			KeyHint: k.Schema.AddTable.String(),
+			KeyHint: k.Common.Add.String(),
 			Handler: func() { m.schemas.OpenCreateTable(ctx) },
 		},
 	}

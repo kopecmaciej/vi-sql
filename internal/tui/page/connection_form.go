@@ -113,7 +113,7 @@ func (cf *ConnectionForm) renderFooter() {
 	cf.footer.SetKeys([]config.Key{
 		k.Navigation.FocusUp,
 		k.Navigation.FocusDown,
-		k.Connection.ConnectionForm.SaveConnection,
+		k.Common.Save,
 		{Keys: []string{"Esc"}, Description: "cancel"},
 	})
 }
@@ -171,7 +171,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
 		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
 		cf.form.AddTextView("Example", "postgresql://user:password@host:port/db?options", 0, 1, true, false)
-		pasteKey := cf.App.GetKeys().InputBar.Paste.String()
+		pasteKey := cf.App.GetKeys().Common.Paste.String()
 		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste (%s): DSN, $DSN_ENV or use form", pasteKey), 0, 1, true, false)
 		cf.form.AddTextView(" ", "----------------------------------------------", 0, 1, true, false)
 
@@ -247,7 +247,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		case event.Key() == tcell.KeyEscape:
 			cf.cancel()
 			return nil
-		case k.Contains(k.Connection.ConnectionForm.SaveConnection, event.Name()):
+		case k.Contains(k.Common.Save, event.Name()):
 			_, buttonIdx := cf.form.GetFocusedItemIndex()
 			if buttonIdx >= 0 && buttonIdx < cf.form.GetButtonCount() {
 				if cf.form.GetButton(buttonIdx).GetLabel() == "Cancel" {

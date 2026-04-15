@@ -93,17 +93,17 @@ func (idx *Indexes) setKeybindings() {
 
 	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Index.AddIndex, event.Name()):
+		case k.Contains(k.Common.Add, event.Name()):
 			if !idx.isAddFormVisible {
 				idx.showAddForm()
 				return nil
 			}
-		case k.Contains(k.Index.DeleteIndex, event.Name()):
+		case k.Contains(k.Common.Delete, event.Name()):
 			if !idx.isAddFormVisible {
 				idx.showDeleteIndexModal(context.Background())
 				return nil
 			}
-		case k.Contains(k.IndexAddForm.ExitForm, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			if idx.isAddFormVisible {
 				idx.closeAddForm()
 				return nil
@@ -119,7 +119,7 @@ func (idx *Indexes) setKeybindings() {
 				idx.addColumn()
 				return nil
 			}
-		case k.Contains(k.IndexAddForm.CreateIndex, event.Name()):
+		case k.Contains(k.Common.Save, event.Name()):
 			if idx.isAddFormVisible {
 				idx.handleCreate()
 				return nil

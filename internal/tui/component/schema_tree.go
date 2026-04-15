@@ -130,10 +130,10 @@ func (s *SchemaTree) setKeybindings() {
 		case k.Contains(k.Schema.CollapseAll, event.Name()):
 			s.collapseAllNodes(openNodeSymbol, closedNodeSymbol)
 			return nil
-		case k.Contains(k.Schema.AddTable, event.Name()):
+		case k.Contains(k.Common.Add, event.Name()):
 			s.showAddTableModal(ctx)
 			return nil
-		case k.Contains(k.Schema.DeleteTable, event.Name()):
+		case k.Contains(k.Common.Delete, event.Name()):
 			s.showDeleteTableModal(ctx)
 			return nil
 		case k.Contains(k.Schema.RenameTable, event.Name()):
@@ -145,11 +145,11 @@ func (s *SchemaTree) setKeybindings() {
 				current.SetExpanded(!current.IsExpanded())
 			}
 			return nil
-		case k.Contains(k.Schema.FilterBar, event.Name()):
+		case k.Contains(k.Common.Filter, event.Name()):
 			s.filterBar.Enable()
 			s.renderLayout()
 			return nil
-		case k.Contains(k.Schema.ClearFilter, event.Name()):
+		case k.Contains(k.Common.Clear, event.Name()):
 			s.clearFilter()
 			return nil
 		}

@@ -331,7 +331,7 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		}
 
 		switch {
-		case k.Contains(k.SQLQueryEditor.Execute, event.Name()):
+		case k.Contains(k.Common.Execute, event.Name()):
 			execute()
 			return
 		case k.Contains(k.Navigation.FocusDown, event.Name()):
@@ -356,7 +356,7 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.InputBar.Paste, event.Name()):
+		case k.Contains(k.Common.Paste, event.Name()):
 			_, pasteFunc := util.GetClipboard()
 			if text := pasteFunc(); text != "" {
 				cursorPos := len(e.GetTextBeforeCursor())
@@ -368,7 +368,7 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				e.onExpand()
 			}
 			return
-		case k.Contains(k.SQLQueryEditor.Clear, event.Name()):
+		case k.Contains(k.Common.Clear, event.Name()):
 			e.SetText("", true)
 			return
 		case k.Contains(k.SQLQueryEditor.OpenHistory, event.Name()):

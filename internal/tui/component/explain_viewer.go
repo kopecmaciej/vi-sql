@@ -83,7 +83,7 @@ func (e *ExplainViewer) setKeybindings() {
 	k := e.App.GetKeys()
 	e.tree.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.ExplainViewer.Close, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			if e.doneFunc != nil {
 				e.doneFunc()
 			}

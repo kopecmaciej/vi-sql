@@ -22,6 +22,8 @@ type InputBar struct {
 	columnKeys     []string
 	schemas        []database.SchemaWithTables
 	defaultText    string
+	acceptFunc     func(string)
+	rejectFunc     func()
 }
 
 func NewInputBar(barId tview.Identifier, label string) *InputBar {
@@ -87,7 +89,18 @@ func (i *InputBar) setKeybindings() {
 		k := i.App.GetKeys()
 
 		switch {
-		case k.Contains(k.InputBar.ClearInput, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
+			if i.rejectFunc != nil {
+				i.Toggle("")
+				i.rejectFunc()
+			}
+			return nil
+		case k.Contains(k.Common.Execute, event.Name()):
+			if i.acceptFunc != nil {
+				i.acceptFunc(i.GetText())
+			}
+			return nil
+		case k.Contains(k.Common.Clear, event.Name()):
 			i.SetText("")
 			if i.defaultText != "" {
 				go i.SetWordAtCursor(i.defaultText)
@@ -114,18 +127,8 @@ func (i *InputBar) SetDefaultText(text string) {
 }
 
 func (i *InputBar) DoneFuncHandler(accept func(string), reject func()) {
-	i.SetDoneFunc(func(key tcell.Key) {
-		switch key {
-		case tcell.KeyEsc:
-			i.Toggle("")
-			reject()
-		case tcell.KeyEnter:
-			// Do not toggle here — accept is responsible for disabling the bar
-			// on success. On failure the bar stays enabled so focus can return to it.
-			text := i.GetText()
-			accept(text)
-		}
-	})
+	i.acceptFunc = accept
+	i.rejectFunc = reject
 }
 
 func (i *InputBar) EnableAutocomplete() {

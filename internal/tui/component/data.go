@@ -311,11 +311,11 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			return c.handlePeekRow(ctx, row, false)
 		case k.Contains(k.Data.FullPagePeek, event.Name()):
 			return c.handlePeekRow(ctx, row, true)
-		case k.Contains(k.Data.CopyValue, event.Name()):
+		case k.Contains(k.Common.Copy, event.Name()):
 			return c.handleCopyCell(row, col)
 		case k.Contains(k.Data.CopyRow, event.Name()):
 			return c.handleCopyRow(row)
-		case k.Contains(k.Data.Refresh, event.Name()):
+		case k.Contains(k.Common.Refresh, event.Name()):
 			return c.handleRefresh(ctx)
 		case k.Contains(k.Data.TermEditor, event.Name()):
 			if c.mode == QueryMode {
@@ -358,19 +358,19 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		// CRUD keybindings — only available in TableMode.
 		if c.mode == TableMode {
 			switch {
-			case k.Contains(k.Data.InlineEdit, event.Name()):
+			case k.Contains(k.Common.Edit, event.Name()):
 				return c.handleInlineEdit(ctx, row, col)
 			case k.Contains(k.Data.EditRow, event.Name()):
 				return c.handleEditRow(ctx, row)
-			case k.Contains(k.Data.AddRow, event.Name()):
+			case k.Contains(k.Common.Add, event.Name()):
 				c.handleAddRow(ctx)
 				return nil
 			case k.Contains(k.Data.DuplicateRow, event.Name()):
 				c.handleDuplicateRow(ctx, row)
 				return nil
-			case k.Contains(k.Data.DeleteRow, event.Name()):
+			case k.Contains(k.Common.Delete, event.Name()):
 				return c.handleDeleteRow(ctx, row, col)
-			case k.Contains(k.Data.ToggleFilterBar, event.Name()):
+			case k.Contains(k.Common.Filter, event.Name()):
 				return c.handleToggleFilter()
 			case k.Contains(k.Data.ToggleSortBar, event.Name()):
 				return c.handleToggleSort()

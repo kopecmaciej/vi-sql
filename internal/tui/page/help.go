@@ -19,9 +19,9 @@ const (
 // sectionOrder defines the preferred display order for key sections.
 // Sections absent from this list are appended at the end.
 var sectionOrder = []string{
-	"Navigation", "Global", "Help", "Connection",
-	"Main", "Schema", "InputBar", "Data",
-	"Peeker", "SQLQueryEditor", "Index", "IndexAddForm", "Structure", "History",
+	"Navigation", "Common", "Global", "Help", "Connection",
+	"Main", "Schema", "Data",
+	"Peeker", "SQLQueryEditor", "IndexAddForm", "Structure", "History",
 }
 
 type Help struct {
@@ -184,13 +184,13 @@ func (h *Help) setKeybindings() {
 
 	h.sectionList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Help.Close, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
 		case k.Contains(k.Navigation.FocusRight, event.Name()):
 			h.App.SetFocusInternal(h.keysTable)
 			return nil
-		case k.Contains(k.Help.Search, event.Name()):
+		case k.Contains(k.Common.Filter, event.Name()):
 			h.enterSearchMode()
 			return nil
 		case k.Contains(k.Navigation.MoveDown, event.Name()):
@@ -208,13 +208,13 @@ func (h *Help) setKeybindings() {
 
 	h.keysTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Help.Close, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
 		case k.Contains(k.Navigation.FocusLeft, event.Name()):
 			h.App.SetFocusInternal(h.sectionList)
 			return nil
-		case k.Contains(k.Help.EditKey, event.Name()):
+		case k.Contains(k.Common.Edit, event.Name()):
 			row, _ := h.keysTable.GetSelection()
 			h.enterEditMode(row)
 			return nil
@@ -430,9 +430,9 @@ func (h *Help) renderFooter() {
 	h.footer.SetKeys([]config.Key{
 		k.Navigation.FocusRight,
 		k.Navigation.FocusLeft,
-		k.Help.Search,
-		k.Help.EditKey,
-		k.Help.Close,
+		k.Common.Filter,
+		k.Common.Edit,
+		k.Common.Close,
 	})
 }
 

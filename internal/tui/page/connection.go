@@ -102,13 +102,13 @@ func (c *Connection) setKeybindings() {
 	k := c.App.GetKeys()
 	c.list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Connection.ConnectionList.AddConnection, event.Name()):
+		case k.Contains(k.Common.Add, event.Name()):
 			c.openAddForm()
 			return nil
-		case k.Contains(k.Connection.ConnectionList.DeleteConnection, event.Name()):
+		case k.Contains(k.Common.Delete, event.Name()):
 			c.deleteCurrConnection()
 			return nil
-		case k.Contains(k.Connection.ConnectionList.EditConnection, event.Name()):
+		case k.Contains(k.Common.Edit, event.Name()):
 			c.openEditForm()
 			return nil
 		}
@@ -193,10 +193,10 @@ func (c *Connection) Render() {
 func (c *Connection) renderFooter() {
 	k := c.App.GetKeys()
 	c.footer.SetKeys([]config.Key{
-		k.Connection.ConnectionList.SetConnection,
-		k.Connection.ConnectionList.AddConnection,
-		k.Connection.ConnectionList.EditConnection,
-		k.Connection.ConnectionList.DeleteConnection,
+		k.Common.Select,
+		k.Common.Add,
+		k.Common.Edit,
+		k.Common.Delete,
 		k.Global.FullScreenHelp,
 	})
 }

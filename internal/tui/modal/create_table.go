@@ -134,7 +134,7 @@ func (m *CreateTableModal) setKeybindings() {
 		case k.Contains(k.Navigation.FocusDown, event.Name()):
 			m.focusTarget(focusColumns)
 			return nil
-		case k.Contains(k.CreateTable.Cancel, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			m.handleCancel()
 			return nil
 		}
@@ -152,16 +152,16 @@ func (m *CreateTableModal) setKeybindings() {
 		case k.Contains(k.Navigation.FocusDown, event.Name()):
 			m.focusTarget(focusPreview)
 			return nil
-		case k.Contains(k.CreateTable.AddColumn, event.Name()):
+		case k.Contains(k.Common.Add, event.Name()):
 			m.addColumn()
 			return nil
-		case k.Contains(k.CreateTable.DeleteColumn, event.Name()):
+		case k.Contains(k.Common.Delete, event.Name()):
 			m.deleteColumn()
 			return nil
-		case k.Contains(k.CreateTable.Execute, event.Name()):
+		case k.Contains(k.Common.Save, event.Name()):
 			m.handleExecute()
 			return nil
-		case k.Contains(k.CreateTable.Cancel, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			m.handleCancel()
 			return nil
 		}
@@ -180,10 +180,10 @@ func (m *CreateTableModal) setKeybindings() {
 		case k.Contains(k.Navigation.FocusUp, event.Name()):
 			m.focusTarget(focusColumns)
 			return nil
-		case k.Contains(k.CreateTable.Execute, event.Name()):
+		case k.Contains(k.Common.Save, event.Name()):
 			m.handleExecute()
 			return nil
-		case k.Contains(k.CreateTable.Cancel, event.Name()):
+		case k.Contains(k.Common.Close, event.Name()):
 			m.handleCancel()
 			return nil
 		}

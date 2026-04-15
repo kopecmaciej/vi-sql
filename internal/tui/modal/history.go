@@ -143,7 +143,7 @@ func (h *History) setKeybindings() {
 
 	h.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case keys.Contains(keys.History.AcceptEntry, event.Name()):
+		case keys.Contains(keys.Common.Select, event.Name()):
 			row, _ := h.table.GetSelection()
 			h.App.Pages.RemovePage(HistoryModalId)
 			if h.onAccept != nil {
@@ -152,15 +152,15 @@ func (h *History) setKeybindings() {
 				}
 			}
 			return nil
-		case keys.Contains(keys.History.CloseHistory, event.Name()):
+		case keys.Contains(keys.Common.Close, event.Name()):
 			h.App.Pages.RemovePage(HistoryModalId)
 			if h.onClose != nil {
 				h.onClose()
 			}
 			return nil
-		case keys.Contains(keys.History.ClearHistory, event.Name()):
+		case keys.Contains(keys.History.PurgeHistory, event.Name()):
 			return h.clearHistory()
-		case keys.Contains(keys.History.DeleteEntry, event.Name()):
+		case keys.Contains(keys.Common.Delete, event.Name()):
 			h.deleteCurrentEntry()
 			return nil
 		case keys.Contains(keys.History.CopyQuery, event.Name()):

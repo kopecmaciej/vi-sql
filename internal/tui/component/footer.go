@@ -250,6 +250,13 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		focus = "Data"
 	}
 
+	// InputBar is no longer a KeyBindings field — serve its Common keys directly.
+	if focus == "InputBar" {
+		keys := f.App.GetKeys().GetCommonKeysFor("InputBar")
+		f.keys = keys
+		return keys, nil
+	}
+
 	orderedKeys, err := f.App.GetKeys().GetKeysForElement(string(focus))
 	if err != nil {
 		if len(f.keys) > 0 {
