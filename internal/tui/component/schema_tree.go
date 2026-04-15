@@ -204,20 +204,22 @@ func (s *SchemaTree) renderTree(schemas []database.SchemaWithTables, expand bool
 		s.tree.SetCurrentNode(children[0])
 	}
 	if expand {
-		rootNode.ExpandAll()
+		for _, schemaNode := range rootNode.GetChildren() {
+			schemaNode.SetExpanded(true)
+		}
 	}
 }
 
 func (s *SchemaTree) renderLayout() {
 	s.Flex.Clear()
 
-	var focusTarget tview.Primitive = s
+	var focusTarget tview.Primitive = s.tree
 	if s.filterBar.IsEnabled() {
 		s.Flex.AddItem(s.filterBar, 3, 0, false)
 		focusTarget = s.filterBar
 	}
 	s.Flex.AddItem(s.tree, 0, 1, true)
-	s.App.SetFocus(focusTarget)
+	s.App.SetFocusInternal(focusTarget)
 }
 
 func (s *SchemaTree) IsFocused() bool {
@@ -445,14 +447,22 @@ func (s *SchemaTree) updateLeafSymbol(node *tview.TreeNode) {
 }
 
 func (s *SchemaTree) filterBarHandler() {
-	acceptFunc := func(text string) {
+	acceptFunc := func(_ string) {
 		s.filterBar.Disable()
-		s.filter(text)
-	}
-	rejectFunc := func() {
 		s.renderLayout()
 	}
+	rejectFunc := func() {
+		s.clearFilter()
+	}
 	s.filterBar.DoneFuncHandler(acceptFunc, rejectFunc)
+	s.filterBar.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			acceptFunc(s.filterBar.GetText())
+		}
+	})
+	s.filterBar.SetChangedFunc(func(text string) {
+		s.filter(text)
+	})
 }
 
 func (s *SchemaTree) clearFilter() {
