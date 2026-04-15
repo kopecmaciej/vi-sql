@@ -110,6 +110,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Close app",
 		},
 		FullScreenHelp: Key{
+			Keys:        []string{"F1"},
 			Runes:       []string{"?"},
 			Description: "Help page",
 		},
@@ -251,7 +252,6 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Toggle ANALYZE mode",
 		},
 	}
-
 
 	k.Peeker = PeekerKeys{
 		MoveToTop: Key{

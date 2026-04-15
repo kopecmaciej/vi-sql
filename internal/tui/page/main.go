@@ -206,6 +206,7 @@ func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error 
 		return err
 	}
 	tab.SetEditorSchemas(m.lastSchemas)
+	tab.SetOnOpenQueryTab(m.openNewQueryTabAndFocusEditor)
 	m.queryTabs = append(m.queryTabs, tab)
 	m.topBar.AddDynamicTab(table, tab)
 	m.rebuildInnerFlex()
@@ -233,6 +234,13 @@ func (m *Main) openNewQueryTabWithQuery(query string) {
 	if len(m.queryTabs) > 0 {
 		m.queryTabs[len(m.queryTabs)-1].SetEditorText(query)
 	}
+}
+
+// openNewQueryTabAndFocusEditor creates a blank query tab and focuses its SQL editor.
+// Used as the callback for Ctrl+e in TableMode when the built-in editor is enabled.
+func (m *Main) openNewQueryTabAndFocusEditor() {
+	m.openNewQueryTab()
+	m.setFocusToActiveTab()
 }
 
 // openNewQueryTab creates a blank read-only query tab.
