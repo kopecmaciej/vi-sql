@@ -75,6 +75,10 @@ func (e *SQLQueryEditor) setStyle() {
 	e.TextArea.SetTitle(" SQL Editor ")
 	e.TextArea.SetTitleAlign(tview.AlignCenter)
 	e.TextArea.SetBorderPadding(0, 0, 1, 1)
+	e.TextArea.SetLineNumbers(true)
+	e.TextArea.SetLineNumberStyle(tcell.StyleDefault.
+		Foreground(styles.Global.BorderColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 
 	a := styles.InputBar.Autocomplete
 	acBackground := a.BackgroundColor.Color()
