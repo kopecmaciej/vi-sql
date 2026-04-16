@@ -40,8 +40,8 @@ func TestMissingKeysFilledInMemory(t *testing.T) {
 		"Global.CloseApp should be filled from defaults")
 	assert.NotEmpty(t, loaded.Data.PeekRow.Runes,
 		"Content.PeekRow should be filled from defaults")
-	assert.NotEmpty(t, loaded.Schema.FilterBar.Runes,
-		"Schema.FilterBar should be filled from defaults")
+	assert.NotEmpty(t, loaded.Schema.ExpandAll.Runes,
+		"Schema.ExpandAll should be filled from defaults")
 }
 
 func TestMissingKeysWrittenBackToFile(t *testing.T) {
@@ -61,8 +61,8 @@ func TestMissingKeysWrittenBackToFile(t *testing.T) {
 		"Global.CloseApp.Keys should be written back to disk")
 	assert.NotEmpty(t, onDisk.Data.PeekRow.Runes,
 		"Content.PeekRow.Runes should be written back to disk")
-	assert.NotEmpty(t, onDisk.Schema.FilterBar.Runes,
-		"Schema.FilterBar.Runes should be written back to disk")
+	assert.NotEmpty(t, onDisk.Schema.ExpandAll.Runes,
+		"Schema.ExpandAll.Runes should be written back to disk")
 }
 
 func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {

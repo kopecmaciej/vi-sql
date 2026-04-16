@@ -10,10 +10,10 @@ import (
 
 // RowLine represents a single row field displayed in the ViewModal.
 type RowLine struct {
-	Key         string
-	Type        string
-	Value       string
-	IsPK        bool
+	Key   string
+	Type  string
+	Value string
+	IsPK  bool
 	// PrettyValue holds a pre-formatted multi-line representation of Value
 	// (e.g. indented JSON or XML). When non-empty it is used instead of
 	// word-wrapping Value in the expanded view.
@@ -50,6 +50,7 @@ type ViewModal struct {
 	// topOffset overrides the default top-margin calculation so the modal
 	// can be pushed below a dynamically-sized header.
 	topOffset int
+	centered  bool
 
 	isFullScreen bool
 

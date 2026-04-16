@@ -46,8 +46,8 @@ func TestFooter_Render_ShowsSchemaKeys(t *testing.T) {
 	app.SetRoot(footer, true)
 	testutil.DrawAndSync(app, sim)
 
-	// Default schema keybindings include "Filter bar" and "Expand all".
-	assert.True(t, testutil.ScreenContains(sim, "Filter bar"),
+	// Default schema keybindings include "Expand all".
+	assert.True(t, testutil.ScreenContains(sim, "Expand all"),
 		"screen should show schema keybindings\nscreen:\n%v", testutil.ScreenFull(sim))
 }
 
