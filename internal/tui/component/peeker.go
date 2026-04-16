@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
@@ -21,6 +23,8 @@ const (
 	PeekerId = "Peeker"
 )
 
+var peekerCounter int32
+
 // Peeker displays a single database row in a vertical key/type/value format.
 type Peeker struct {
 	*core.BaseElement
@@ -30,12 +34,14 @@ type Peeker struct {
 }
 
 func NewPeeker() *Peeker {
+	n := atomic.AddInt32(&peekerCounter, 1)
+	id := tview.Identifier(fmt.Sprintf("%s-%d", PeekerId, n))
 	p := &Peeker{
 		BaseElement: core.NewBaseElement(),
 		ViewModal:   core.NewViewModal(),
 	}
 
-	p.SetIdentifier(PeekerId)
+	p.SetIdentifier(id)
 	p.SetAfterInitFunc(p.init)
 
 	return p
@@ -51,7 +57,7 @@ func (p *Peeker) init() error {
 }
 
 func (p *Peeker) handleEvents() {
-	go p.HandleEvents(PeekerId, func(event manager.EventMsg) {
+	go p.HandleEvents(p.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			p.setStyle()
@@ -68,6 +74,7 @@ func (p *Peeker) setLayout() {
 	p.SetTitle(" Row Details ")
 	p.SetTitleAlign(tview.AlignLeft)
 
+	p.ViewModal.SetCentered(true)
 	p.ViewModal.AddButtons([]string{"Close"})
 }
 

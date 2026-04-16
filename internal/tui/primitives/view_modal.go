@@ -205,9 +205,15 @@ func (m *ViewModal) IsFullScreen() bool {
 }
 
 // SetTopOffset sets the y position where the modal starts, allowing it to
-// sit below a dynamically-sized header. Has no effect in full-screen mode.
+// sit below a dynamically-sized header. Has no effect in full-screen or centered mode.
 func (m *ViewModal) SetTopOffset(y int) {
 	m.topOffset = y
+}
+
+// SetCentered positions the modal at 80% of the screen, centered both horizontally
+// and vertically. When true, topOffset is ignored.
+func (m *ViewModal) SetCentered(v bool) {
+	m.centered = v
 }
 
 // --- Focus ---
@@ -383,12 +389,26 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 			width = screenWidth - 4
 		}
 		x = (screenWidth - width) / 2
-		y = m.topOffset
+		if m.centered {
+			centeredH := screenHeight * 4 / 5
+			if centeredH < 10 {
+				centeredH = screenHeight
+			}
+			y = (screenHeight - centeredH) / 2
+		} else {
+			y = m.topOffset
+		}
 	}
 
 	maxVisualLines := screenHeight - y - m.marginBottom
 	if m.isFullScreen {
 		maxVisualLines = screenHeight - m.marginBottom
+	} else if m.centered {
+		centeredH := screenHeight * 4 / 5
+		if centeredH < 10 {
+			centeredH = screenHeight
+		}
+		maxVisualLines = centeredH - m.marginBottom
 	}
 	if maxVisualLines < 1 {
 		maxVisualLines = 1

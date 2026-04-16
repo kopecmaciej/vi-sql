@@ -2,6 +2,7 @@ package component
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
@@ -12,6 +13,8 @@ import (
 )
 
 const SQLEditModalId = "SQLEditModal"
+
+var sqlEditModalCounter int32
 
 // SQLEditModal is a centered overlay (≈80% of screen) containing a
 // SQLQueryEditor with line numbers. It is used for add/edit/duplicate row
@@ -25,12 +28,14 @@ type SQLEditModal struct {
 }
 
 func NewSQLEditModal() *SQLEditModal {
+	n := atomic.AddInt32(&sqlEditModalCounter, 1)
+	id := tview.Identifier(fmt.Sprintf("%s-%d", SQLEditModalId, n))
 	m := &SQLEditModal{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		editor:      NewSQLQueryEditor(),
 	}
-	m.SetIdentifier(SQLEditModalId)
+	m.SetIdentifier(id)
 	m.SetAfterInitFunc(m.init)
 	return m
 }
@@ -46,24 +51,22 @@ func (m *SQLEditModal) init() error {
 }
 
 func (m *SQLEditModal) setLayout() {
-	styles := m.App.GetStyles()
-
-	// Outer container provides the border and title.
+	// Structure only — no colors or style properties here.
 	m.Flex.SetDirection(tview.FlexRow)
 	m.Flex.SetBorder(true)
-	core.SetCommonStyle(m.Flex, styles)
-
-	// Editor fills the space; remove its own border to avoid double borders.
 	m.editor.TextArea.SetBorder(false)
-	m.editor.TextArea.SetBorderPadding(0, 0, 1, 1)
-	m.editor.TextArea.SetLineNumbers(true)
-
 	m.Flex.AddItem(m.editor, 0, 1, true)
 }
 
 func (m *SQLEditModal) setStyle() {
 	styles := m.App.GetStyles()
+	// 1. Style own container.
 	core.SetCommonStyle(m.Flex, styles)
+	// 2. Propagate to inner editor so all its colors (autocomplete, highlighting,
+	//    line numbers, etc.) are updated.
+	m.editor.setStyle()
+	// 3. Re-apply property overrides that the modal controls.
+	m.editor.TextArea.SetBorder(false)
 	m.setLineNumberStyle(styles)
 }
 
@@ -75,7 +78,7 @@ func (m *SQLEditModal) setLineNumberStyle(styles *config.Styles) {
 }
 
 func (m *SQLEditModal) handleEvents() {
-	go m.HandleEvents(SQLEditModalId, func(event manager.EventMsg) {
+	go m.HandleEvents(m.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			m.setStyle()

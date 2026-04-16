@@ -248,6 +248,14 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		focus = "InputBar"
 	case strings.HasPrefix(focus, "QueryTab-"):
 		focus = "Data"
+	case strings.HasPrefix(focus, SQLQueryEditorId+"-"):
+		focus = SQLQueryEditorId
+	case strings.HasPrefix(focus, PeekerId+"-"):
+		focus = string(PeekerId)
+	case strings.HasPrefix(focus, ExplainViewerId+"-"):
+		focus = ExplainViewerId
+	case strings.HasPrefix(focus, SQLEditModalId+"-"):
+		focus = SQLEditModalId
 	}
 
 	// InputBar is no longer a KeyBindings field — serve its Common keys directly.

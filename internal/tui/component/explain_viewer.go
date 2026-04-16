@@ -3,6 +3,7 @@ package component
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
@@ -16,6 +17,8 @@ const (
 	ExplainViewerId = "ExplainViewer"
 )
 
+var explainViewerCounter int32
+
 // ExplainViewer renders an EXPLAIN plan as a navigable TreeView overlay.
 type ExplainViewer struct {
 	*core.BaseElement
@@ -28,6 +31,8 @@ type ExplainViewer struct {
 }
 
 func NewExplainViewer() *ExplainViewer {
+	n := atomic.AddInt32(&explainViewerCounter, 1)
+	id := tview.Identifier(fmt.Sprintf("%s-%d", ExplainViewerId, n))
 	e := &ExplainViewer{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
@@ -35,7 +40,7 @@ func NewExplainViewer() *ExplainViewer {
 		analyzeMode: false,
 	}
 
-	e.SetIdentifier(ExplainViewerId)
+	e.SetIdentifier(id)
 	e.SetAfterInitFunc(e.init)
 
 	return e
@@ -50,7 +55,7 @@ func (e *ExplainViewer) init() error {
 }
 
 func (e *ExplainViewer) handleEvents() {
-	go e.HandleEvents(ExplainViewerId, func(event manager.EventMsg) {
+	go e.HandleEvents(e.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			e.setStyle()
