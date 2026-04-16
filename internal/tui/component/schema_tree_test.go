@@ -12,16 +12,16 @@ import (
 
 // newSchemaTreeMock returns a MockDriver configured for SchemaTree tests.
 // SchemaTree.init() initializes a CreateTableModal which calls CommonDataTypes().
-func newSchemaTreeMock(schemas []database.SchemaWithTables) *testutil.MockDriver {
+func newSchemaTreeMock(schemas []database.Schema) *testutil.MockDriver {
 	m := &testutil.MockDriver{}
-	m.On("ListSchemasWithTables", context.Background(), "").Return(schemas, nil)
+	m.On("ListSchemas", context.Background(), "").Return(schemas, nil)
 	m.On("CommonDataTypes").Return([]string{"TEXT", "INTEGER", "REAL", "BLOB"})
 	return m
 }
 
 func TestSchemaTree_Render_ShowsSchemaName(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users", "orders"}},
 	}))
 
@@ -37,7 +37,7 @@ func TestSchemaTree_Render_ShowsSchemaName(t *testing.T) {
 
 func TestSchemaTree_Render_ShowsTableNodes(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "main", Tables: []string{"users", "products"}},
 	}))
 
@@ -58,7 +58,7 @@ func TestSchemaTree_Render_ShowsTableNodes(t *testing.T) {
 // an empty schema (no tables) didn't highlight correctly on focus.
 func TestSchemaTree_Render_EmptySchema(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{}},
 	}))
 
@@ -74,7 +74,7 @@ func TestSchemaTree_Render_EmptySchema(t *testing.T) {
 
 func TestSchemaTree_SetSelectFunc_IsRegistered(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "main", Tables: []string{"users"}},
 	}))
 
@@ -107,7 +107,7 @@ func TestSchemaTree_SetSelectFunc_IsRegistered(t *testing.T) {
 // narrows the displayed tables to only those containing the search text.
 func TestSchemaTree_Filter_MatchesTableName(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users", "user_roles", "orders"}},
 	}))
 
@@ -130,7 +130,7 @@ func TestSchemaTree_Filter_MatchesTableName(t *testing.T) {
 // returns all tables under that schema.
 func TestSchemaTree_Filter_SchemaNameMatch(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"alpha", "beta"}},
 		{Schema: "hidden", Tables: []string{"gamma"}},
 	}))
@@ -154,7 +154,7 @@ func TestSchemaTree_Filter_SchemaNameMatch(t *testing.T) {
 // nothing (no tables rendered).
 func TestSchemaTree_Filter_NoMatch(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users", "orders"}},
 	}))
 
@@ -175,7 +175,7 @@ func TestSchemaTree_Filter_NoMatch(t *testing.T) {
 // back all tables after a narrowing filter.
 func TestSchemaTree_Filter_ClearRestoresAll(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users", "orders"}},
 	}))
 
@@ -197,7 +197,7 @@ func TestSchemaTree_Filter_ClearRestoresAll(t *testing.T) {
 // correct node and fires the select callback.
 func TestSchemaTree_JumpToTable_Success(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users", "orders"}},
 	}))
 
@@ -223,7 +223,7 @@ func TestSchemaTree_JumpToTable_Success(t *testing.T) {
 // does not exist.
 func TestSchemaTree_JumpToTable_SchemaNotFound(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users"}},
 	}))
 
@@ -241,7 +241,7 @@ func TestSchemaTree_JumpToTable_SchemaNotFound(t *testing.T) {
 // exists but the table does not.
 func TestSchemaTree_JumpToTable_TableNotFound(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "public", Tables: []string{"users"}},
 	}))
 
@@ -257,7 +257,7 @@ func TestSchemaTree_JumpToTable_TableNotFound(t *testing.T) {
 
 func TestSchemaTree_Render_MultipleSchemas(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
-	app.SetDriver(newSchemaTreeMock([]database.SchemaWithTables{
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
 		{Schema: "auth", Tables: []string{"users"}},
 		{Schema: "store", Tables: []string{"products", "orders"}},
 	}))

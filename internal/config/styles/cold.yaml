@@ -3,37 +3,37 @@ global:
   contrastBackgroundColor: "#1E293B"
   moreContrastBackgroundColor: "#2563EB"
   textColor: "#E2E8F0"
-  secondaryTextColor: "#FDE68A"
+  secondaryTextColor: "#93C5FD"
   borderColor: "#1D4ED8"
   focusColor: "#60A5FA"
   titleColor: "#2563EB"
   graphicsColor: "#2563EB"
   dimColor: "#64748B"
 connection:
-  listTextColor: "#F1FA8C"
-  listSelectedTextColor: "#F1FA8C"
+  listTextColor: "#93C5FD"
+  listSelectedTextColor: "#93C5FD"
   listSelectedBackgroundColor: "#2563EB"
   listSecondaryTextColor: "#2563EB"
 data:
-  cellTextColor: "#2563EB"
+  cellTextColor: "#93C5FD"
   selectedRowColor: "#60A5FA"
   multiSelectedRowColor: "#1D4ED8"
 tabBar:
-  activeTextColor: "#FDE68A"
+  activeTextColor: "#BFDBFE"
 inputBar:
   autocomplete:
     backgroundColor: "#1E293B"
     textColor: "#E2E8F0"
     activeBackgroundColor: "#2563EB"
     activeTextColor: "#0F172A"
-    secondaryTextColor: "#FDE68A"
+    secondaryTextColor: "#93C5FD"
     borderColor: "#60A5FA"
 help:
   scrollBarTrackColor: "#4A5568"
 others:
   leafSymbolColor: "#2563EB"
   separatorColor: "#334155"
-  buttonsTextColor: "#FDE68A"
+  buttonsTextColor: "#BFDBFE"
   deleteButtonSelectedBackgroundColor: "#DA3312"
   peekerHighlightColor: "#3A4963"
 sqlEditor:
@@ -41,5 +41,5 @@ sqlEditor:
   stringColor: "#4ADE80"
   numberColor: "#FB923C"
   commentColor: "#64748B"
-  operatorColor: "#FDE68A"
+  operatorColor: "#7DD3FC"
   identifierColor: "#E2E8F0"

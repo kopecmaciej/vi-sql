@@ -81,7 +81,7 @@ func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-func (d *Dao) ListSchemasWithTables(ctx context.Context, nameFilter string) ([]database.SchemaWithTables, error) {
+func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	query := `
 		SELECT s.schema_name, COALESCE(array_agg(t.table_name ORDER BY t.table_name) FILTER (WHERE t.table_name IS NOT NULL), '{}')
 		FROM information_schema.schemata s
@@ -104,14 +104,14 @@ func (d *Dao) ListSchemasWithTables(ctx context.Context, nameFilter string) ([]d
 	}
 	defer rows.Close()
 
-	var result []database.SchemaWithTables
+	var result []database.Schema
 	for rows.Next() {
 		var schema string
 		var tables []string
 		if err := rows.Scan(&schema, &tables); err != nil {
 			return nil, fmt.Errorf("failed to scan schema row: %w", err)
 		}
-		result = append(result, database.SchemaWithTables{
+		result = append(result, database.Schema{
 			Schema: schema,
 			Tables: tables,
 		})
@@ -820,4 +820,3 @@ func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([
 
 	return cols, rows.Err()
 }
-

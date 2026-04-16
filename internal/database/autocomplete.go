@@ -163,7 +163,7 @@ type AutocompleteEntry struct {
 func BuildSQLAutocomplete(
 	text string,
 	cursorBytePos int,
-	schemas []SchemaWithTables,
+	schemas []Schema,
 	columns []string,
 	variables []string,
 ) []AutocompleteEntry {

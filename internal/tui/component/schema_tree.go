@@ -38,12 +38,12 @@ type SchemaTree struct {
 	deleteModal      *modal.Confirm
 	createTableModal *modal.CreateTableModal
 
-	schemasWithTables []database.SchemaWithTables
-	nodeSelectFunc    func(ctx context.Context, schema, table string) error
-	nodeColumnsFunc   func(ctx context.Context, schema, table string)
-	nodeIndexesFunc   func(ctx context.Context, schema, table string)
-	onSchemasLoaded   func([]database.SchemaWithTables)
-	onImport          func(schema, table string)
+	schemas         []database.Schema
+	nodeSelectFunc  func(ctx context.Context, schema, table string) error
+	nodeColumnsFunc func(ctx context.Context, schema, table string)
+	nodeIndexesFunc func(ctx context.Context, schema, table string)
+	onSchemasLoaded func([]database.Schema)
+	onImport        func(schema, table string)
 }
 
 func NewSchemaTree() *SchemaTree {
@@ -170,16 +170,16 @@ func (s *SchemaTree) handleEvents() {
 func (s *SchemaTree) Render() {
 	ctx := context.Background()
 
-	if err := s.listSchemasWithTables(ctx); err != nil {
+	if err := s.ListSchemas(ctx); err != nil {
 		modal.ShowError(s.App.Pages, "Failed to list schemas", err)
-		s.schemasWithTables = []database.SchemaWithTables{}
+		s.schemas = []database.Schema{}
 	}
 
-	s.renderTree(s.schemasWithTables, false)
+	s.renderTree(s.schemas, false)
 	s.renderLayout()
 }
 
-func (s *SchemaTree) renderTree(schemas []database.SchemaWithTables, expand bool) {
+func (s *SchemaTree) renderTree(schemas []database.Schema, expand bool) {
 	ctx := context.Background()
 	rootNode := s.rootNode()
 	s.tree.SetRoot(rootNode)
@@ -247,16 +247,16 @@ func (s *SchemaTree) SetIndexesFunc(f func(ctx context.Context, schema, table st
 	s.nodeIndexesFunc = f
 }
 
-func (s *SchemaTree) SetOnSchemasLoaded(fn func([]database.SchemaWithTables)) {
+func (s *SchemaTree) SetOnSchemasLoaded(fn func([]database.Schema)) {
 	s.onSchemasLoaded = fn
 }
 
-func (s *SchemaTree) listSchemasWithTables(ctx context.Context) error {
-	schemas, err := s.Driver.ListSchemasWithTables(ctx, "")
+func (s *SchemaTree) ListSchemas(ctx context.Context) error {
+	schemas, err := s.Driver.ListSchemas(ctx, "")
 	if err != nil {
 		return err
 	}
-	s.schemasWithTables = schemas
+	s.schemas = schemas
 	if s.onSchemasLoaded != nil {
 		s.onSchemasLoaded(schemas)
 	}
@@ -467,19 +467,19 @@ func (s *SchemaTree) filterBarHandler() {
 
 func (s *SchemaTree) clearFilter() {
 	s.filterBar.SetText("")
-	s.renderTree(s.schemasWithTables, false)
+	s.renderTree(s.schemas, false)
 	s.renderLayout()
 }
 
 func (s *SchemaTree) filter(text string) {
 	expand := true
-	filtered := []database.SchemaWithTables{}
+	filtered := []database.Schema{}
 	if text == "" {
-		filtered = s.schemasWithTables
+		filtered = s.schemas
 		expand = false
 	} else {
 		re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(text))
-		for _, st := range s.schemasWithTables {
+		for _, st := range s.schemas {
 			matchedSchema := re.MatchString(st.Schema)
 			matchedTables := []string{}
 
@@ -490,7 +490,7 @@ func (s *SchemaTree) filter(text string) {
 			}
 
 			if matchedSchema || len(matchedTables) > 0 {
-				filteredST := database.SchemaWithTables{
+				filteredST := database.Schema{
 					Schema: st.Schema,
 					Tables: matchedTables,
 				}
@@ -539,9 +539,9 @@ func (s *SchemaTree) showAddTableModal(ctx context.Context) {
 		s.addTableNode(ctx, parent, schemaName, tableName, false)
 		parent.SetExpanded(true)
 		// Keep the in-memory cache consistent.
-		for i, st := range s.schemasWithTables {
+		for i, st := range s.schemas {
 			if st.Schema == schemaName {
-				s.schemasWithTables[i].Tables = append(s.schemasWithTables[i].Tables, tableName)
+				s.schemas[i].Tables = append(s.schemas[i].Tables, tableName)
 				break
 			}
 		}

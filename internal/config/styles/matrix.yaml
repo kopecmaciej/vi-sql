@@ -1,5 +1,5 @@
 global:
-  backgroundColor: "#0C110C"
+  backgroundColor: "#030903"
   contrastBackgroundColor: "#121A12"
   moreContrastBackgroundColor: "#1A6B32"
   textColor: "#B9F6CA"
@@ -25,7 +25,7 @@ inputBar:
     backgroundColor: "#121A12"
     textColor: "#B9F6CA"
     activeBackgroundColor: "#1A6B32"
-    activeTextColor: "#0C110C"
+    activeTextColor: "#030903"
     secondaryTextColor: "#FF8F00"
     borderColor: "#00E676"
 help:

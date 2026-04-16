@@ -9,8 +9,8 @@ type PrimaryKey struct {
 	Columns map[string]any
 }
 
-// SchemaWithTables represents a database schema and its tables.
-type SchemaWithTables struct {
+// Schema represents a database schema and its tables.
+type Schema struct {
 	Schema string
 	Tables []string
 }

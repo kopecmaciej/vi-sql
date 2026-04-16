@@ -12,7 +12,7 @@ type Driver interface {
 	GetServerInfo(ctx context.Context) (*ServerInfo, error)
 	GetActiveSessions(ctx context.Context) (int64, error)
 	// Schema browsing
-	ListSchemasWithTables(ctx context.Context, nameFilter string) ([]SchemaWithTables, error)
+	ListSchemas(ctx context.Context, nameFilter string) ([]Schema, error)
 	// Table structure
 	GetTableColumns(ctx context.Context, schema, table string) ([]ColumnInfo, error)
 	GetTableConstraints(ctx context.Context, schema, table string) ([]ConstraintInfo, error)

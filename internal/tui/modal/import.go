@@ -48,7 +48,7 @@ type ImportModal struct {
 	previewTable *core.Table
 	warningsView *core.TextView
 
-	schemas []database.SchemaWithTables
+	schemas []database.Schema
 	columns []database.ColumnInfo // populated on Preview
 }
 
@@ -81,7 +81,7 @@ func (m *ImportModal) handleEvents() {
 }
 
 // SetSchemas provides the schema+table list used for autocomplete.
-func (m *ImportModal) SetSchemas(schemas []database.SchemaWithTables) {
+func (m *ImportModal) SetSchemas(schemas []database.Schema) {
 	m.schemas = schemas
 }
 

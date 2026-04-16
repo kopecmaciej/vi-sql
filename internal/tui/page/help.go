@@ -38,8 +38,8 @@ type Help struct {
 	searchInput *core.InputField
 
 	// capture-based key edit
-	capturePanel   *tview.Flex
-	captureDisplay *tview.TextView
+	capturePanel   *core.Flex
+	captureDisplay *core.TextView
 	capturedKey    config.Key
 
 	allSections      []config.OrderedKeys
@@ -60,8 +60,8 @@ func NewHelp() *Help {
 		keysTable:      core.NewTable(),
 		footer:         component.NewFooter(),
 		searchInput:    core.NewInputField(),
-		capturePanel:   tview.NewFlex(),
-		captureDisplay: tview.NewTextView(),
+		capturePanel:   core.NewFlex(),
+		captureDisplay: core.NewTextView(),
 	}
 
 	h.SetIdentifier(HelpPageId)
@@ -86,9 +86,7 @@ func (h *Help) handleEvents() {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			h.setStyle()
-			go h.App.QueueUpdateDraw(func() {
-				h.Render()
-			})
+			h.Render()
 		}
 	})
 }
@@ -150,17 +148,13 @@ func (h *Help) setStyle() {
 	h.sectionList.SetStyle(s)
 	h.keysTable.SetStyle(s)
 	h.searchInput.SetStyle(s)
-
-	h.capturePanel.SetBackgroundColor(s.Global.BackgroundColor.Color())
-	h.capturePanel.SetBorderColor(s.Global.BorderColor.Color())
-	h.capturePanel.SetTitleColor(s.Global.TitleColor.Color())
-	h.captureDisplay.SetBackgroundColor(s.Global.BackgroundColor.Color())
-	h.captureDisplay.SetTextColor(s.Global.TextColor.Color())
+	h.sectionList.SetStyle(s)
+	h.capturePanel.SetStyle(s)
+	h.footer.SetStyle(s)
 
 	selectedFg := s.Global.BackgroundColor.Color()
 	selectedBg := h.style.SelectedBackgroundColor.Color()
 
-	h.sectionList.SetMainTextColor(s.Global.TextColor.Color())
 	h.sectionList.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(selectedFg).
 		Background(selectedBg))

@@ -21,8 +21,8 @@ func newDataMock(rows []database.Row, cols []database.ColumnInfo) *testutil.Mock
 	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return("SELECT *", rows, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).Return([]string{"id", "name"}, nil)
-	m.On("ListSchemasWithTables", mock.Anything, mock.Anything).
-		Return([]database.SchemaWithTables{{Schema: "public", Tables: []string{"users"}}}, nil)
+	m.On("ListSchemas", mock.Anything, mock.Anything).
+		Return([]database.Schema{{Schema: "public", Tables: []string{"users"}}}, nil)
 	return m
 }
 
@@ -53,8 +53,8 @@ func TestData_HandleTableSelection_LimitReflectsRenderedHeight(t *testing.T) {
 		Return("SELECT *", []database.Row{}, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).
 		Return([]string{}, nil)
-	m.On("ListSchemasWithTables", mock.Anything, mock.Anything).
-		Return([]database.SchemaWithTables{}, nil)
+	m.On("ListSchemas", mock.Anything, mock.Anything).
+		Return([]database.Schema{}, nil)
 
 	app.SetDriver(m)
 
@@ -109,8 +109,8 @@ func TestData_HandleTableSelection_LimitFromConfig(t *testing.T) {
 		Return("SELECT *", []database.Row{}, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).
 		Return([]string{}, nil)
-	m.On("ListSchemasWithTables", mock.Anything, mock.Anything).
-		Return([]database.SchemaWithTables{}, nil)
+	m.On("ListSchemas", mock.Anything, mock.Anything).
+		Return([]database.Schema{}, nil)
 
 	app.SetDriver(m)
 
@@ -153,8 +153,8 @@ func TestData_HandleTableSelection_ReusesStateOnRevisit(t *testing.T) {
 		Return("SELECT *", []database.Row{}, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).
 		Return([]string{}, nil)
-	m.On("ListSchemasWithTables", mock.Anything, mock.Anything).
-		Return([]database.SchemaWithTables{}, nil)
+	m.On("ListSchemas", mock.Anything, mock.Anything).
+		Return([]database.Schema{}, nil)
 
 	app.SetDriver(m)
 

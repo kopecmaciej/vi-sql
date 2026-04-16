@@ -63,10 +63,10 @@ func TestMain(m *testing.M) {
 
 // --- Schema browsing ---
 
-func TestListSchemasWithTables_MultipleSchemas(t *testing.T) {
+func TestListSchemas_MultipleSchemas(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas)
 
@@ -77,10 +77,10 @@ func TestListSchemasWithTables_MultipleSchemas(t *testing.T) {
 	assert.NotEmpty(t, schemaNames)
 }
 
-func TestListSchemasWithTables_WithFilter(t *testing.T) {
+func TestListSchemas_WithFilter(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "pub")
+	schemas, err := testDao.ListSchemas(ctx, "pub")
 	require.NoError(t, err)
 	for _, s := range schemas {
 		assert.Contains(t, s.Schema, "pub")
@@ -92,7 +92,7 @@ func TestListSchemasWithTables_WithFilter(t *testing.T) {
 func TestGetTableColumns_WithPGTypes(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas)
 	require.NotEmpty(t, schemas[0].Tables)
@@ -112,7 +112,7 @@ func TestGetTableColumns_WithPGTypes(t *testing.T) {
 func TestGetTableConstraints(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas)
 	require.NotEmpty(t, schemas[0].Tables)
@@ -127,7 +127,7 @@ func TestGetTableConstraints(t *testing.T) {
 func TestGetTableForeignKeys(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas)
 	require.NotEmpty(t, schemas[0].Tables)
@@ -141,7 +141,7 @@ func TestGetTableForeignKeys(t *testing.T) {
 func TestListRows_BasicPagination(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
@@ -156,7 +156,7 @@ func TestListRows_BasicPagination(t *testing.T) {
 func TestExecuteQuery_Select(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
@@ -232,7 +232,7 @@ func TestCreateTable_And_DropTable(t *testing.T) {
 	err := testDao.CreateTable(ctx, "public", ddl)
 	require.NoError(t, err)
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	var found bool
 	for _, s := range schemas {
@@ -295,7 +295,7 @@ func TestGetActiveSessions_PositiveCount(t *testing.T) {
 func TestGetTableColumnNames(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
@@ -426,7 +426,7 @@ func TestRenameTable_And_RenameBack(t *testing.T) {
 	err = testDao.RenameTable(ctx, "public", "rename_pg_src", "rename_pg_dst")
 	require.NoError(t, err)
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	var tables []string
 	for _, s := range schemas {
@@ -446,7 +446,7 @@ func TestRenameTable_And_RenameBack(t *testing.T) {
 func TestListRows_CountCallback(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
@@ -470,7 +470,7 @@ func TestListRows_CountCallback(t *testing.T) {
 func TestGetEstimatedRowCount(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
@@ -500,7 +500,7 @@ func TestRenameColumn(t *testing.T) {
 func TestListQueryRows_WithPagination(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemasWithTables(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 

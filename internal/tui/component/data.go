@@ -434,8 +434,6 @@ func (c *Data) HandleTableSelection(ctx context.Context, schema, table string) e
 	return nil
 }
 
-// Reset clears stale table data and state from a previous connection so a
-// fresh table selection starts from a clean slate.
 func (c *Data) Reset() {
 	c.table.Clear()
 	c.resultsBar.Clear()
@@ -444,9 +442,7 @@ func (c *Data) Reset() {
 	c.columns = nil
 }
 
-// SetEditorSchemas propagates the already-loaded schema list to all bars and
-// the SQL query editor so autocomplete works before any table is selected.
-func (c *Data) SetEditorSchemas(schemas []database.SchemaWithTables) {
+func (c *Data) SetSchemasForAutocomplete(schemas []database.Schema) {
 	c.filterBar.SetSchemas(schemas)
 	c.sortBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
@@ -609,7 +605,7 @@ func (c *Data) loadAutocompleteKeys(ctx context.Context) {
 		Message: manager.Message{Type: manager.UpdateAutocompleteKeys, Data: cols},
 	})
 
-	schemas, err := c.Driver.ListSchemasWithTables(ctx, "")
+	schemas, err := c.Driver.ListSchemas(ctx, "")
 	if err != nil {
 		return
 	}

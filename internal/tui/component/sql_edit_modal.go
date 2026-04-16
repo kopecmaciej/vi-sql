@@ -87,7 +87,7 @@ func (m *SQLEditModal) handleEvents() {
 }
 
 // SetSchemas wires schema/table autocomplete into the editor.
-func (m *SQLEditModal) SetSchemas(schemas []database.SchemaWithTables) {
+func (m *SQLEditModal) SetSchemas(schemas []database.Schema) {
 	m.editor.SetSchemas(schemas)
 }
 

@@ -38,12 +38,12 @@ func (m *MockDriver) GetActiveSessions(ctx context.Context) (int64, error) {
 	return args.Get(0).(int64), args.Error(1)
 }
 
-func (m *MockDriver) ListSchemasWithTables(ctx context.Context, nameFilter string) ([]database.SchemaWithTables, error) {
+func (m *MockDriver) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	args := m.Called(ctx, nameFilter)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]database.SchemaWithTables), args.Error(1)
+	return args.Get(0).([]database.Schema), args.Error(1)
 }
 
 func (m *MockDriver) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {

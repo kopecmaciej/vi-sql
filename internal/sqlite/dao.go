@@ -48,7 +48,7 @@ func (d *Dao) GetActiveSessions(_ context.Context) (int64, error) {
 	return 0, nil
 }
 
-func (d *Dao) ListSchemasWithTables(ctx context.Context, nameFilter string) ([]database.SchemaWithTables, error) {
+func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	query := "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
 	args := []any{}
 	if nameFilter != "" {
@@ -75,7 +75,7 @@ func (d *Dao) ListSchemasWithTables(ctx context.Context, nameFilter string) ([]d
 		return nil, err
 	}
 
-	return []database.SchemaWithTables{{Schema: "main", Tables: tables}}, nil
+	return []database.Schema{{Schema: "main", Tables: tables}}, nil
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {

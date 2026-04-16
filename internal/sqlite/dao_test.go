@@ -32,12 +32,12 @@ func newTestDao(t *testing.T) *Dao {
 
 // --- Schema browsing ---
 
-func TestListSchemasWithTables_ReturnsMainSchema(t *testing.T) {
+func TestListSchemas_ReturnsMainSchema(t *testing.T) {
 	t.Parallel()
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	schemas, err := dao.ListSchemasWithTables(ctx, "")
+	schemas, err := dao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 	assert.Equal(t, "main", schemas[0].Schema)
@@ -46,12 +46,12 @@ func TestListSchemasWithTables_ReturnsMainSchema(t *testing.T) {
 	assert.Contains(t, schemas[0].Tables, "products")
 }
 
-func TestListSchemasWithTables_WithFilter(t *testing.T) {
+func TestListSchemas_WithFilter(t *testing.T) {
 	t.Parallel()
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	schemas, err := dao.ListSchemasWithTables(ctx, "user")
+	schemas, err := dao.ListSchemas(ctx, "user")
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 	for _, table := range schemas[0].Tables {
@@ -59,12 +59,12 @@ func TestListSchemasWithTables_WithFilter(t *testing.T) {
 	}
 }
 
-func TestListSchemasWithTables_FilterNoMatch(t *testing.T) {
+func TestListSchemas_FilterNoMatch(t *testing.T) {
 	t.Parallel()
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	schemas, err := dao.ListSchemasWithTables(ctx, "nonexistent_xyz")
+	schemas, err := dao.ListSchemas(ctx, "nonexistent_xyz")
 	require.NoError(t, err)
 	require.Len(t, schemas, 1)
 	assert.Empty(t, schemas[0].Tables)
@@ -309,14 +309,14 @@ func TestCreateTable_And_DropTable(t *testing.T) {
 	err := dao.CreateTable(ctx, "main", ddl)
 	require.NoError(t, err)
 
-	schemas, err := dao.ListSchemasWithTables(ctx, "")
+	schemas, err := dao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	assert.Contains(t, schemas[0].Tables, "test_ddl")
 
 	err = dao.DropTable(ctx, "main", "test_ddl")
 	require.NoError(t, err)
 
-	schemas, err = dao.ListSchemasWithTables(ctx, "")
+	schemas, err = dao.ListSchemas(ctx, "")
 	require.NoError(t, err)
 	assert.NotContains(t, schemas[0].Tables, "test_ddl")
 }
@@ -332,7 +332,7 @@ func TestRenameTable_And_RenameBack(t *testing.T) {
 	err := dao.RenameTable(ctx, "main", "rename_src", "rename_dst")
 	require.NoError(t, err)
 
-	schemas, _ := dao.ListSchemasWithTables(ctx, "")
+	schemas, _ := dao.ListSchemas(ctx, "")
 	assert.Contains(t, schemas[0].Tables, "rename_dst")
 	assert.NotContains(t, schemas[0].Tables, "rename_src")
 

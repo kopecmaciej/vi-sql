@@ -97,6 +97,10 @@ func (f *Flex) SetStyle(style *config.Styles) {
 
 func (l *List) SetStyle(style *config.Styles) {
 	SetCommonStyle(l.List, style)
+	bg := style.Global.BackgroundColor.Color()
+	fg := style.Global.TextColor.Color()
+	l.SetMainTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
+	l.SetSecondaryTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
 }
 
 func (t *TextView) SetStyle(style *config.Styles) {

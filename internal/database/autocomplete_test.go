@@ -125,7 +125,7 @@ func TestExtractCTENames(t *testing.T) {
 }
 
 func TestBuildSQLAutocomplete(t *testing.T) {
-	schemas := []SchemaWithTables{
+	schemas := []Schema{
 		{Schema: "public", Tables: []string{"users", "orders"}},
 	}
 	columns := []string{"id", "email", "status"}

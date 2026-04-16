@@ -29,7 +29,7 @@ type SQLQueryEditor struct {
 	*core.TextArea
 
 	style         *config.SQLEditorStyle
-	schemas       []database.SchemaWithTables
+	schemas       []database.Schema
 	columns       []string
 	columnCache   map[string][]string // key: "schema.table" or "table"
 	columnFetcher func(schema, table string) ([]string, error)
@@ -233,7 +233,7 @@ func (e *SQLQueryEditor) setAutocomplete() {
 		var cols []string
 		switch ctx.Type {
 		case database.CtxAfterDot:
-			isSchema := slices.ContainsFunc(e.schemas, func(s database.SchemaWithTables) bool {
+			isSchema := slices.ContainsFunc(e.schemas, func(s database.Schema) bool {
 				return strings.EqualFold(ctx.TableName, s.Schema)
 			})
 			if !isSchema && ctx.TableName != "" {
@@ -280,7 +280,7 @@ func (e *SQLQueryEditor) handleEvents() {
 }
 
 // SetSchemas updates the list of schemas/tables for FROM/JOIN autocomplete.
-func (e *SQLQueryEditor) SetSchemas(schemas []database.SchemaWithTables) {
+func (e *SQLQueryEditor) SetSchemas(schemas []database.Schema) {
 	e.schemas = schemas
 }
 
