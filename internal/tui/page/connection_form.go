@@ -113,7 +113,7 @@ func (cf *ConnectionForm) renderFooter() {
 	cf.footer.SetKeys([]config.Key{
 		k.Navigation.FocusUp,
 		k.Navigation.FocusDown,
-		k.Common.Save,
+		k.Common.Confirm,
 		{Keys: []string{"Esc"}, Description: "cancel"},
 	})
 }
@@ -247,7 +247,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		case event.Key() == tcell.KeyEscape:
 			cf.cancel()
 			return nil
-		case k.Contains(k.Common.Save, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			_, buttonIdx := cf.form.GetFocusedItemIndex()
 			if buttonIdx >= 0 && buttonIdx < cf.form.GetButtonCount() {
 				if cf.form.GetButton(buttonIdx).GetLabel() == "Cancel" {

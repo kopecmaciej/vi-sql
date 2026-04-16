@@ -158,7 +158,7 @@ func (m *CreateTableModal) setKeybindings() {
 		case k.Contains(k.Common.Delete, event.Name()):
 			m.deleteColumn()
 			return nil
-		case k.Contains(k.Common.Save, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			m.handleExecute()
 			return nil
 		case k.Contains(k.Common.Close, event.Name()):
@@ -180,7 +180,7 @@ func (m *CreateTableModal) setKeybindings() {
 		case k.Contains(k.Navigation.FocusUp, event.Name()):
 			m.focusTarget(focusColumns)
 			return nil
-		case k.Contains(k.Common.Save, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			m.handleExecute()
 			return nil
 		case k.Contains(k.Common.Close, event.Name()):

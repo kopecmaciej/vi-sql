@@ -95,7 +95,7 @@ func (i *InputBar) setKeybindings() {
 				i.rejectFunc()
 			}
 			return nil
-		case k.Contains(k.Common.Execute, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			if i.acceptFunc != nil {
 				i.acceptFunc(i.GetText())
 			}

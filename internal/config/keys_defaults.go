@@ -30,17 +30,13 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"c"},
 			Description: "Copy",
 		},
-		Save: Key{
+		Confirm: Key{
 			Keys:        []string{"Ctrl+s"},
-			Description: "Save",
+			Description: "Confirm",
 		},
 		Refresh: Key{
 			Keys:        []string{"Ctrl+r"},
 			Description: "Refresh",
-		},
-		Execute: Key{
-			Keys:        []string{"Ctrl+Enter"},
-			Description: "Execute",
 		},
 		Clear: Key{
 			Keys:        []string{"Ctrl+u"},
@@ -123,7 +119,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Change style",
 		},
 		ToggleFooter: Key{
-			Keys:        []string{"Ctrl+t"},
+			Keys:        []string{"Alt+f"},
 			Description: "Expand/collapse footer",
 		},
 	}
@@ -138,7 +134,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Hide schemas",
 		},
 		NewTab: Key{
-			Keys:        []string{"Ctrl+a"},
+			Keys:        []string{"Ctrl+t"},
 			Description: "New tab",
 		},
 		CloseTab: Key{
@@ -146,11 +142,11 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Close tab",
 		},
 		FocusSchemaTree: Key{
-			Keys:        []string{"Ctrl+b"},
+			Keys:        []string{"Ctrl+/"},
 			Description: "Focus schema tree",
 		},
 		OpenActions: Key{
-			Keys:        []string{"Ctrl+p"},
+			Keys:        []string{"Ctrl+Space"},
 			Description: "Open actions",
 		},
 		ImportData: Key{
@@ -297,7 +293,7 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.IndexAddForm = IndexAddFormKeys{
 		ToggleSQLMode: Key{
-			Keys:        []string{"Ctrl+e"},
+			Keys:        []string{"Alt+e"},
 			Description: "SQL mode",
 		},
 		AddColumn: Key{
@@ -315,7 +311,7 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.SQLQueryEditor = SQLQueryEditorKeys{
 		Expand: Key{
-			Keys:        []string{"Ctrl+e"},
+			Keys:        []string{"Alt+z"},
 			Description: "Resize editor",
 		},
 		OpenHistory: Key{

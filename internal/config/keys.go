@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/vi-sql/internal/util"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,11 +46,10 @@ type (
 		Add     Key `yaml:"add"`
 		Edit    Key `yaml:"edit"`
 		Copy    Key `yaml:"copy"`
-		Save    Key `yaml:"save"`
+		Confirm Key `yaml:"confirm"`
 		Filter  Key `yaml:"filter"`
 		Select  Key `yaml:"select"`
 		Refresh Key `yaml:"refresh"`
-		Execute Key `yaml:"execute"`
 		Clear   Key `yaml:"clear"`
 		Paste   Key `yaml:"paste"`
 	}
@@ -165,21 +166,22 @@ var keyGroupParents = map[string]string{} // eg: "ChildKeys": "ParentKeys"
 
 // componentCommonKeys lists which CommonKeys fields each component exposes in
 // the footer. Only the named fields are shown — this avoids displaying
-// irrelevant common keys (e.g. Execute in the schema tree).
+// irrelevant common keys (e.g. Confirm in the schema tree).
 var componentCommonKeys = map[string][]string{
 	"Data":           {"Add", "Edit", "Delete", "Copy", "Filter", "Refresh"},
 	"Schema":         {"Add", "Delete", "Filter"},
 	"Peeker":         {"Copy", "Close"},
-	"Index":          {"Add", "Delete", "Save", "Close"},
+	"Index":          {"Add", "Delete", "Confirm", "Close"},
 	"Structure":      {"Refresh"},
 	"History":        {"Select", "Delete", "Close"},
-	"SQLQueryEditor": {"Execute", "Clear", "Paste"},
-	"InputBar":       {"Execute", "Clear", "Paste", "Close"},
+	"SQLQueryEditor": {"Confirm", "Clear", "Paste"},
+	"InputBar":       {"Confirm", "Clear", "Paste", "Close"},
 }
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
-# keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space])
+# keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space], [Ctrl+Space])
 #        Ctrl+<letter>: case-insensitive in config, but no Ctrl+Shift — use lowercase (e.g. Ctrl+l)
+#        Ctrl+<word>:   use the full name with + separator (e.g. Ctrl+Space)
 #        Alt+<char>:    case-sensitive, both upper and lower work (e.g. Alt+a, Alt+A)
 
 `
@@ -297,20 +299,11 @@ func (kb KeyBindings) GetCommonKeysFor(elementId string) []Key {
 	ct := cv.Type()
 	var keys []Key
 	for i := 0; i < cv.NumField(); i++ {
-		if sliceContains(names, ct.Field(i).Name) {
+		if slices.Contains(names, ct.Field(i).Name) {
 			keys = append(keys, cv.Field(i).Interface().(Key))
 		}
 	}
 	return keys
-}
-
-func sliceContains(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
-	}
-	return false
 }
 
 func (kb *KeyBindings) ConvertStrKeyToTcellKey(key string) (tcell.Key, bool) {
@@ -327,47 +320,62 @@ func (kb *KeyBindings) ConvertStrKeyToTcellKey(key string) (tcell.Key, bool) {
 	return -1, false
 }
 
-func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
+// normalizeNamedKey converts tcell's EventKey.Name() to the canonical config
+// format. Returns the normalized string and whether it's a bare rune (no modifiers).
+// Handles quirks in tcell's Name() output: space arrives as "Rune[ ]", Alt/Ctrl
+// combos with runes arrive as "Alt+Rune[x]"/"Ctrl+Rune[x]" instead of "Alt+x"/"Ctrl+x".
+func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	if namedKey == "Rune[ ]" {
-		namedKey = "Space"
+		return "Space", false
 	}
-
-	// Normalize Ctrl+letter to uppercase since tcell always reports uppercase,
-	// allowing config to use lowercase (e.g. "Ctrl+l") for user clarity
+	if strings.HasPrefix(namedKey, "Alt+Rune[") && len(namedKey) >= 11 {
+		return "Alt+" + namedKey[9:10], false
+	}
+	if strings.HasPrefix(namedKey, "Ctrl+Rune[") && len(namedKey) >= 12 {
+		r := namedKey[10 : len(namedKey)-1]
+		if r == " " {
+			r = "Space"
+		}
+		return "Ctrl+" + r, false
+	}
+	if strings.HasPrefix(namedKey, "Rune[") && len(namedKey) >= 7 {
+		return namedKey[5 : len(namedKey)-1], true
+	}
 	if strings.HasPrefix(namedKey, "Ctrl+") && len(namedKey) == 6 {
-		namedKey = "Ctrl+" + strings.ToUpper(string(namedKey[5]))
+		return "Ctrl+" + strings.ToUpper(string(namedKey[5])), false
 	}
-	if strings.HasPrefix(namedKey, "Alt+Rune[") && len(namedKey) >= 10 {
-		runeChar := namedKey[9:10]
-		altCombo := "Alt+" + runeChar
+	return namedKey, false
+}
 
-		for _, k := range configKey.Keys {
-			if k == altCombo {
-				return true
-			}
-		}
-		return false
+// normalizeConfigKey converts a config key string to the canonical form used
+// for comparison against normalized tcell key names.
+func normalizeConfigKey(k string) string {
+	// Ctrl+letter: normalize to uppercase to match tcell's reporting.
+	if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
+		return "Ctrl+" + strings.ToUpper(string(k[5]))
 	}
+	// Accept "Ctrl-Word" (tcell internal KeyNames dash) as "Ctrl+Word".
+	if strings.HasPrefix(k, "Ctrl-") && len(k) > 6 {
+		return "Ctrl+" + k[5:]
+	}
+	return k
+}
 
-	if strings.HasPrefix(namedKey, "Rune") {
-		namedKey = strings.TrimPrefix(namedKey, "Rune")
-		for _, k := range configKey.Runes {
-			if k == namedKey[1:2] {
-				return true
-			}
-		}
+// Contains reports whether namedKey (as returned by tcell's EventKey.Name())
+// matches any key in configKey.
+func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
+	log.Info().Msg(namedKey)
+	normalized, isRune := normalizeNamedKey(namedKey)
+
+	if isRune {
+		return slices.Contains(configKey.Runes, normalized)
 	}
 
 	for _, k := range configKey.Keys {
-		// Normalize Ctrl+letter to uppercase to match tcell's key naming
-		if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
-			k = "Ctrl+" + strings.ToUpper(string(k[5]))
-		}
-		if k == namedKey {
+		if normalizeConfigKey(k) == normalized {
 			return true
 		}
 	}
-
 	return false
 }
 

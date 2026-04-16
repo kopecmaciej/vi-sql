@@ -356,13 +356,22 @@ func (h *Help) updateCaptureDisplay() {
 }
 
 // eventKeyToConfigKey converts a tcell key event to a config.Key entry.
+// Alt+rune and Ctrl+rune combos arrive as KeyRune with a modifier bit set;
+// tcell KeyNames uses "Ctrl-X" (hyphen) which is normalised to "Ctrl+X" (plus).
 func eventKeyToConfigKey(event *tcell.EventKey) config.Key {
 	var key config.Key
 
 	if event.Key() == tcell.KeyRune {
-		if event.Modifiers()&tcell.ModAlt != 0 {
+		switch {
+		case event.Modifiers()&tcell.ModAlt != 0:
 			key.Keys = []string{"Alt+" + string(event.Rune())}
-		} else {
+		case event.Modifiers()&tcell.ModCtrl != 0:
+			name := string(event.Rune())
+			if event.Rune() == ' ' {
+				name = "Space"
+			}
+			key.Keys = []string{"Ctrl+" + name}
+		default:
 			key.Runes = []string{string(event.Rune())}
 		}
 		return key
@@ -372,9 +381,13 @@ func eventKeyToConfigKey(event *tcell.EventKey) config.Key {
 	if !ok || name == "" {
 		return key
 	}
-	// tcell uses "Ctrl-L" (uppercase); config convention is "Ctrl+l" (lowercase)
-	if strings.HasPrefix(name, "Ctrl-") && len(name) == 6 {
-		name = "Ctrl+" + strings.ToLower(string(name[5]))
+	// Single letter: lowercase (e.g. "Ctrl-L" → "Ctrl+l"). Multi-word: swap separator only.
+	if strings.HasPrefix(name, "Ctrl-") {
+		if len(name) == 6 {
+			name = "Ctrl+" + strings.ToLower(string(name[5]))
+		} else {
+			name = "Ctrl+" + name[5:]
+		}
 	}
 	key.Keys = []string{name}
 	return key

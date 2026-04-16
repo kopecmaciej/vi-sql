@@ -341,7 +341,7 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		}
 
 		switch {
-		case k.Contains(k.Common.Execute, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			execute()
 			return
 		case k.Contains(k.Navigation.FocusDown, event.Name()):

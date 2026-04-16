@@ -119,7 +119,7 @@ func (idx *Indexes) setKeybindings() {
 				idx.addColumn()
 				return nil
 			}
-		case k.Contains(k.Common.Save, event.Name()):
+		case k.Contains(k.Common.Confirm, event.Name()):
 			if idx.isAddFormVisible {
 				idx.handleCreate()
 				return nil
