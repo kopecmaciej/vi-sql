@@ -74,11 +74,11 @@ type Data struct {
 	inlineEdit     *modal.InlineEditModal
 	confirmModal   *modal.Confirm
 	exportModal    *modal.ExportModal
-	sqlEditModal   *SQLEditModal
-	peeker         *Peeker
-	explainViewer  *ExplainViewer
-	onOpenQueryTab func()
-	columns        []database.ColumnInfo
+	sqlEditModal       *SQLEditModal
+	peeker             *Peeker
+	explainViewer      *ExplainViewer
+	onOpenQueryWithSQL func(string)
+	columns            []database.ColumnInfo
 	state          *database.TableState
 	stateMap       *database.StateMap
 	lastExecTime   time.Duration
@@ -327,9 +327,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			if c.mode == QueryMode {
 				c.cycleEditorSize()
 			} else if c.App.GetConfig().Editor.UseBuiltin {
-				if c.onOpenQueryTab != nil {
-					c.onOpenQueryTab()
-				}
+				c.handleBuiltinTermEditor(ctx)
 			} else {
 				c.handleTermEditor(ctx)
 			}
@@ -449,12 +447,6 @@ func (c *Data) SetSchemasForAutocomplete(schemas []database.Schema) {
 	c.sqlEditModal.SetSchemas(schemas)
 }
 
-// SetOnOpenQueryTab sets a callback invoked when the user requests a new query
-// tab while in TableMode with the built-in editor enabled (Ctrl+e).
-func (c *Data) SetOnOpenQueryTab(fn func()) {
-	c.onOpenQueryTab = fn
-}
-
 // IsQueryTab reports whether this tab is in query mode (not a table tab).
 func (c *Data) IsQueryTab() bool {
 	return c.mode == QueryMode
@@ -474,6 +466,12 @@ func (c *Data) HasResults() bool {
 // SetEditorText pre-fills the SQL query editor with the given text.
 func (c *Data) SetEditorText(text string) {
 	c.sqlQueryEditor.SetText(text, true)
+}
+
+// SetEditorTextAndExecute pre-fills the SQL query editor and immediately executes the query.
+func (c *Data) SetEditorTextAndExecute(text string) {
+	c.sqlQueryEditor.SetText(text, true)
+	c.sqlQueryEditor.Execute()
 }
 
 // GetFocusPrimitive returns the inner primitive that should receive focus
@@ -1072,7 +1070,36 @@ func (c *Data) handleTermEditor(ctx context.Context) {
 	if sql == "" {
 		return
 	}
+	if isSelectQuery(sql) || isExplainQuery(sql) {
+		if c.onOpenQueryWithSQL != nil {
+			c.onOpenQueryWithSQL(sql)
+		}
+	} else {
+		go c.execSQLInline(ctx, sql)
+	}
+}
 
+// handleBuiltinTermEditor opens the built-in SQLEditModal with a blank query.
+// SELECT/EXPLAIN results open in a new query tab; DML/DDL executes inline.
+func (c *Data) handleBuiltinTermEditor(ctx context.Context) {
+	c.sqlEditModal.Open("QUERY", "", func(sql string) {
+		if isSelectQuery(sql) || isExplainQuery(sql) {
+			if c.onOpenQueryWithSQL != nil {
+				c.onOpenQueryWithSQL(sql)
+			}
+		} else {
+			go c.execSQLInline(ctx, sql)
+		}
+	})
+}
+
+func (c *Data) SetOnOpenQueryWithSQL(fn func(string)) {
+	c.onOpenQueryWithSQL = fn
+}
+
+// execSQLInline runs sql and shows the result in the current Data tab.
+// It is safe to call from any goroutine — all UI mutations are queued via QueueUpdateDraw.
+func (c *Data) execSQLInline(ctx context.Context, sql string) {
 	if isExplainQuery(sql) {
 		c.runExplain(ctx, sql)
 		return

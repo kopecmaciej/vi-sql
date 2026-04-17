@@ -9,7 +9,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/vi-sql/internal/util"
-	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -364,7 +363,6 @@ func normalizeConfigKey(k string) string {
 // Contains reports whether namedKey (as returned by tcell's EventKey.Name())
 // matches any key in configKey.
 func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
-	log.Info().Msg(namedKey)
 	normalized, isRune := normalizeNamedKey(namedKey)
 
 	if isRune {

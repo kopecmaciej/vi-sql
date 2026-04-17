@@ -86,7 +86,6 @@ func (h *Help) handleEvents() {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			h.setStyle()
-			h.Render()
 		}
 	})
 }
@@ -148,7 +147,6 @@ func (h *Help) setStyle() {
 	h.sectionList.SetStyle(s)
 	h.keysTable.SetStyle(s)
 	h.searchInput.SetStyle(s)
-	h.sectionList.SetStyle(s)
 	h.capturePanel.SetStyle(s)
 	h.footer.SetStyle(s)
 

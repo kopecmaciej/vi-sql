@@ -309,6 +309,17 @@ func (e *SQLQueryEditor) SetOnExecute(fn func(sql string)) {
 	e.onExecute = fn
 }
 
+// Execute fires the onExecute callback with the current editor text.
+func (e *SQLQueryEditor) Execute() {
+	if e.onExecute == nil {
+		return
+	}
+	sql := strings.TrimRight(strings.TrimSpace(e.GetText()), ";")
+	if sql != "" {
+		e.onExecute(sql)
+	}
+}
+
 // SetOnExpand sets the callback invoked when the user toggles the editor size.
 func (e *SQLQueryEditor) SetOnExpand(fn func()) {
 	e.onExpand = fn

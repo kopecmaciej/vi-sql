@@ -375,6 +375,15 @@ func (m *ViewModal) adjustScroll(maxVisualLines, expandedWidth int) {
 	}
 }
 
+// centeredHeight returns the modal height when centered mode is active.
+func (m *ViewModal) centeredHeight(screenHeight int) int {
+	h := screenHeight * 4 / 5
+	if h < 10 {
+		h = screenHeight
+	}
+	return h
+}
+
 // --- Draw ---
 
 func (m *ViewModal) Draw(screen tcell.Screen) {
@@ -391,10 +400,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 		}
 		x = (screenWidth - width) / 2
 		if m.centered {
-			centeredH := screenHeight * 4 / 5
-			if centeredH < 10 {
-				centeredH = screenHeight
-			}
+			centeredH := m.centeredHeight(screenHeight)
 			y = (screenHeight - centeredH) / 2
 		} else {
 			y = m.topOffset
@@ -405,11 +411,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 	if m.isFullScreen {
 		maxVisualLines = screenHeight - m.marginBottom
 	} else if m.centered {
-		centeredH := screenHeight * 4 / 5
-		if centeredH < 10 {
-			centeredH = screenHeight
-		}
-		maxVisualLines = centeredH - m.marginBottom
+		maxVisualLines = m.centeredHeight(screenHeight) - m.marginBottom
 	}
 	if maxVisualLines < 1 {
 		maxVisualLines = 1
