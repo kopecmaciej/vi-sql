@@ -182,6 +182,16 @@ func (w *Welcome) renderForm() {
 	w.form.AddTextView("Welcome page", "This page can be shown anytime via the -w flag", 60, 1, true, false)
 	w.form.AddTextView("Keybindings", fmt.Sprintf("Press: '%s' help page, %s to expand footer keys", w.App.GetKeys().Global.FullScreenHelp.String(), w.App.GetKeys().Global.ToggleFooter.String()), 60, 1, true, false)
 	w.form.AddTextView("Motions", "Use basic vim motions or normal arrow keys to move around", 60, 2, true, false)
+	w.form.AddTextView(" ", "----------------------------------------------------------", 0, 1, true, false)
+	w.form.AddTextView("MCP Server", "Expose database tools to Claude Code (or any MCP client)", 60, 1, true, false)
+	w.form.AddCheckbox("MCP enabled", cfg.MCP.Enabled, nil)
+	mcpPort := fmt.Sprintf("%d", cfg.MCP.Port)
+	if cfg.MCP.Port == 0 {
+		mcpPort = "9741"
+	}
+	w.form.AddInputField("MCP port", mcpPort, 10, nil, nil)
+	w.form.AddCheckbox("Allow writes", cfg.MCP.AllowWrite, nil)
+	w.form.AddTextView("MCP URL", fmt.Sprintf("http://localhost:%s/mcp  (add to Claude Code via: claude mcp add --transport http vi-sql http://localhost:%s/mcp)", mcpPort, mcpPort), 60, 2, true, false)
 	w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 }
 
@@ -213,6 +223,14 @@ func (w *Welcome) saveConfig() error {
 		c.Styles.BetterSymbols = betterSymbols
 		_ = w.App.SetStyle(c.Styles.CurrentStyle)
 	}
+
+	mcpPort := 9741
+	if _, err := fmt.Sscanf(w.form.GetFormItemByLabel("MCP port").(*tview.InputField).GetText(), "%d", &mcpPort); err != nil {
+		mcpPort = 9741
+	}
+	c.MCP.Enabled = w.form.GetFormItemByLabel("MCP enabled").(*tview.Checkbox).IsChecked()
+	c.MCP.Port = mcpPort
+	c.MCP.AllowWrite = w.form.GetFormItemByLabel("Allow writes").(*tview.Checkbox).IsChecked()
 
 	return w.App.GetConfig().UpdateConfig()
 }

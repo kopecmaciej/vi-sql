@@ -11,16 +11,18 @@ import (
 type App struct {
 	*tview.Application
 
-	Pages            *Pages
-	driver           database.Driver
-	formatter        database.ValueFormatter
-	manager          *manager.ElementManager
-	styles           *config.Styles
-	config           *config.Config
-	keys             *config.KeyBindings
-	previousFocus    tview.Primitive
-	openStyleModal      func()
-	openConnectionPage  func()
+	Pages              *Pages
+	driver             database.Driver
+	formatter          database.ValueFormatter
+	manager            *manager.ElementManager
+	styles             *config.Styles
+	config             *config.Config
+	keys               *config.KeyBindings
+	previousFocus      tview.Primitive
+	mcpEnabled         bool
+	openStyleModal     func()
+	openConnectionPage func()
+	toggleMCP          func()
 }
 
 // SetOpenStyleModalFunc stores a callback for opening the style-change modal.
@@ -44,6 +46,22 @@ func (a *App) OpenConnectionPage() {
 		a.openConnectionPage()
 	}
 }
+
+// SetToggleMCPFunc stores a callback for toggling the MCP server on/off.
+func (a *App) SetToggleMCPFunc(fn func()) { a.toggleMCP = fn }
+
+// ToggleMCP invokes the MCP toggle callback if one has been registered.
+func (a *App) ToggleMCP() {
+	if a.toggleMCP != nil {
+		a.toggleMCP()
+	}
+}
+
+// SetMCPEnabled updates the in-memory MCP running state.
+func (a *App) SetMCPEnabled(enabled bool) { a.mcpEnabled = enabled }
+
+// IsMCPEnabled reports whether the MCP server is currently running.
+func (a *App) IsMCPEnabled() bool { return a.mcpEnabled }
 
 func NewApp(appConfig *config.Config) *App {
 	styles, err := config.LoadStyles(appConfig.Styles.CurrentStyle, appConfig.Styles.BetterSymbols)

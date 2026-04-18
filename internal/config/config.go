@@ -70,11 +70,18 @@ type UIConfig struct {
 	SchemaPanelWidth int `yaml:"schemaPanelWidth,omitempty"`
 }
 
+type MCPConfig struct {
+	Enabled    bool `yaml:"enabled"`
+	Port       int  `yaml:"port"`
+	AllowWrite bool `yaml:"allowWrite"`
+}
+
 type Config struct {
 	Version            string       `yaml:"version"`
 	Log                LogConfig    `yaml:"log"`
 	Editor             EditorConfig `yaml:"editor"`
 	UI                 UIConfig     `yaml:"ui"`
+	MCP                MCPConfig    `yaml:"mcp"`
 	ShowConnectionPage bool         `yaml:"showConnectionPage"`
 	ShowWelcomePage    bool         `yaml:"-"`
 	CurrentConnection  string       `yaml:"currentConnection"`

@@ -13,6 +13,7 @@ const (
 	UpdateAutocompleteKeys MessageType = "update_autocomplete"
 	UpdateQueryBar         MessageType = "update_query_bar"
 	FooterHeightChanged    MessageType = "footer_height_changed"
+	MCPStateChanged        MessageType = "mcp_state_changed"
 )
 
 type (

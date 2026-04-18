@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"os"
 	"strings"
 
@@ -8,6 +9,8 @@ import (
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
+	visqlmcp "github.com/kopecmaciej/vi-sql/internal/mcp"
+	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
@@ -19,9 +22,10 @@ import (
 type App struct {
 	*core.App
 
-	connection *page.Connection
-	main       *page.Main
-	help       *page.Help
+	connection    *page.Connection
+	main          *page.Main
+	help          *page.Help
+	mcpCancelFunc context.CancelFunc
 }
 
 func NewApp(appConfig *config.Config) *App {
@@ -42,6 +46,7 @@ func (a *App) Init() error {
 
 	a.App.SetOpenStyleModalFunc(a.ShowStyleChangeModal)
 	a.App.SetOpenConnectionPageFunc(a.renderConnection)
+	a.App.SetToggleMCPFunc(a.toggleMCPServer)
 
 	err := a.help.Init(a.App)
 	if err != nil {
@@ -127,7 +132,56 @@ func (a *App) connectToDatabase() error {
 	}
 	a.SetDriver(driver)
 	a.SetFormatter(formatter)
+
+	a.startMCPServer(driver)
 	return nil
+}
+
+func (a *App) startMCPServer(driver database.Driver) {
+	cfg := a.App.GetConfig().MCP
+	if !cfg.Enabled {
+		return
+	}
+
+	if a.mcpCancelFunc != nil {
+		a.mcpCancelFunc()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.mcpCancelFunc = cancel
+
+	srv := visqlmcp.New(driver, cfg)
+	go func() {
+		if err := srv.Start(ctx); err != nil {
+			log.Error().Err(err).Msg("MCP server error")
+		}
+	}()
+
+	a.App.SetMCPEnabled(true)
+	a.App.GetManager().Broadcast(manager.EventMsg{
+		Message: manager.Message{Type: manager.MCPStateChanged, Data: true},
+	})
+}
+
+func (a *App) toggleMCPServer() {
+	cfg := a.App.GetConfig()
+	cfg.MCP.Enabled = !cfg.MCP.Enabled
+	_ = cfg.UpdateConfig()
+
+	if cfg.MCP.Enabled {
+		if a.App.GetDriver() != nil {
+			a.startMCPServer(a.App.GetDriver())
+		}
+	} else {
+		if a.mcpCancelFunc != nil {
+			a.mcpCancelFunc()
+			a.mcpCancelFunc = nil
+		}
+		a.App.SetMCPEnabled(false)
+		a.App.GetManager().Broadcast(manager.EventMsg{
+			Message: manager.Message{Type: manager.MCPStateChanged, Data: false},
+		})
+	}
 }
 
 func (a *App) Render() {

@@ -10,14 +10,16 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
+	"github.com/gdamore/tcell/v2"
 )
 
 const (
 	TopBarId = "TopBar"
 
-	connInfoWidth  = 26
-	pingInterval   = 30 * time.Second
-	pingTimeout    = 5 * time.Second
+	connInfoWidth    = 26
+	mcpIndicatorWidth = 7
+	pingInterval     = 30 * time.Second
+	pingTimeout      = 5 * time.Second
 )
 
 // healthState holds the result of the most recent ping.
@@ -35,6 +37,7 @@ type TopBar struct {
 
 	tabBar      *TabBar
 	connText    *tview.TextView
+	mcpText     *tview.TextView
 	health      healthState
 	stopMonitor context.CancelFunc
 }
@@ -59,11 +62,16 @@ func (t *TopBar) init() error {
 	t.connText.SetDynamicColors(true)
 	t.connText.SetTextAlign(tview.AlignRight)
 
+	t.mcpText = tview.NewTextView()
+	t.mcpText.SetDynamicColors(true)
+	t.mcpText.SetTextAlign(tview.AlignRight)
+
 	t.Flex.SetDirection(tview.FlexColumn)
 	t.Flex.SetBorder(true)
 	t.setStyle()
 
 	t.Flex.AddItem(t.tabBar, 0, 1, false)
+	t.Flex.AddItem(t.mcpText, mcpIndicatorWidth, 0, false)
 	t.Flex.AddItem(t.connText, connInfoWidth, 0, false)
 
 	t.handleEvents()
@@ -127,7 +135,9 @@ func (t *TopBar) doPing(ctx context.Context) {
 func (t *TopBar) setStyle() {
 	styles := t.App.GetStyles()
 	t.Flex.SetStyle(styles)
-	t.connText.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+	bg := styles.Global.BackgroundColor.Color()
+	t.connText.SetBackgroundColor(bg)
+	t.mcpText.SetBackgroundColor(bg)
 }
 
 func (t *TopBar) updateConnText() {
@@ -174,9 +184,24 @@ func (t *TopBar) updateConnText() {
 	t.connText.SetText(fmt.Sprintf("%s [%s]%s:%d[-]%s ", dot, valColor, host, port, extra))
 }
 
+func (t *TopBar) updateMCPText() {
+	const (
+		colorGreen = "#4ADE80"
+		colorGray  = "#64748B"
+	)
+	if t.App.IsMCPEnabled() {
+		t.mcpText.SetTextColor(tcell.GetColor(colorGreen))
+		t.mcpText.SetText(" MCP ")
+	} else {
+		t.mcpText.SetTextColor(tcell.GetColor(colorGray))
+		t.mcpText.SetText("       ")
+	}
+}
+
 // Render updates the connection info text and renders the tab bar.
 func (t *TopBar) Render() {
 	t.updateConnText()
+	t.updateMCPText()
 	t.tabBar.Render()
 }
 
@@ -187,6 +212,11 @@ func (t *TopBar) handleEvents() {
 			t.App.QueueUpdateDraw(func() {
 				t.setStyle()
 				t.updateConnText()
+				t.updateMCPText()
+			})
+		case manager.MCPStateChanged:
+			t.App.QueueUpdateDraw(func() {
+				t.updateMCPText()
 			})
 		}
 	})

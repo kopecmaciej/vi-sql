@@ -474,6 +474,11 @@ func (m *Main) openActionsModal() {
 	k := m.App.GetKeys()
 	ctx := context.Background()
 
+	mcpLabel := "Enable MCP server"
+	if m.App.IsMCPEnabled() {
+		mcpLabel = "Disable MCP server"
+	}
+
 	entries := []modal.ActionEntry{
 		{
 			Label:   "Server info",
@@ -489,6 +494,10 @@ func (m *Main) openActionsModal() {
 			Label:   "Connection page",
 			KeyHint: k.Global.OpenConnection.String(),
 			Handler: m.App.OpenConnectionPage,
+		},
+		{
+			Label:   mcpLabel,
+			Handler: m.App.ToggleMCP,
 		},
 		{
 			Label:   "New tab",
