@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/kopecmaciej/vi-sql/internal/manager"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const maxRows = 1000
+const maxRows = 100
 
 func (s *Server) registerTools() {
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
@@ -52,6 +53,11 @@ func (s *Server) registerTools() {
 		Name:        "get_server_info",
 		Description: "Get database server version, name, and connection info",
 	}, s.handleGetServerInfo)
+
+	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
+		Name:        "open_query_in_tab",
+		Description: "Open a new query tab in vi-sql and pre-fill the SQL editor with the given query (does not execute it)",
+	}, s.handleOpenQueryInTab)
 }
 
 // --- input types ---
@@ -86,6 +92,10 @@ type sampleTableInput struct {
 type explainQueryInput struct {
 	Query   string `json:"query"   jsonschema:"SQL query to explain,required"`
 	Analyze bool   `json:"analyze" jsonschema:"If true, executes the query and includes runtime statistics"`
+}
+
+type openQueryInTabInput struct {
+	Query string `json:"query" jsonschema:"SQL query to pre-fill in the editor,required"`
 }
 
 // --- handlers ---
@@ -289,6 +299,30 @@ func (s *Server) handleExplainQuery(
 	}, nil, nil
 }
 
+func (s *Server) handleOpenQueryInTab(
+	_ context.Context, _ *mcpsdk.CallToolRequest, input openQueryInTabInput,
+) (*mcpsdk.CallToolResult, any, error) {
+	if input.Query == "" {
+		return nil, nil, fmt.Errorf("query is required")
+	}
+	if s.manager == nil {
+		return nil, nil, fmt.Errorf("open_query_in_tab: TUI manager not available")
+	}
+
+	s.manager.Broadcast(manager.EventMsg{
+		Message: manager.Message{
+			Type: manager.OpenQueryTab,
+			Data: input.Query,
+		},
+	})
+
+	return &mcpsdk.CallToolResult{
+		Content: []mcpsdk.Content{
+			&mcpsdk.TextContent{Text: "Query opened in new tab"},
+		},
+	}, nil, nil
+}
+
 // --- helpers ---
 
 func jsonResult(v any) (*mcpsdk.CallToolResult, any, error) {
@@ -302,4 +336,3 @@ func jsonResult(v any) (*mcpsdk.CallToolResult, any, error) {
 		},
 	}, nil, nil
 }
-

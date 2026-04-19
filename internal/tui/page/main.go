@@ -86,6 +86,12 @@ func (m *Main) handleEvents() {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			m.setStyles()
+		case manager.OpenQueryTab:
+			if query, ok := event.Message.Data.(string); ok {
+				go m.App.Application.QueueUpdateDraw(func() {
+					m.openNewQueryTabWithQuery(query, false)
+				})
+			}
 		}
 	})
 }
@@ -206,7 +212,7 @@ func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error 
 		return err
 	}
 	tab.SetSchemasForAutocomplete(m.lastSchemas)
-	tab.SetOnOpenQueryWithSQL(m.openNewQueryTabWithQuery)
+	tab.SetOnOpenQueryWithSQL(func(q string) { m.openNewQueryTabWithQuery(q, true) })
 	m.queryTabs = append(m.queryTabs, tab)
 	m.topBar.AddDynamicTab(table, tab)
 	m.rebuildInnerFlex()
@@ -228,15 +234,19 @@ func (m *Main) nextQueryTabNum() int {
 	}
 }
 
-// openNewQueryTabWithQuery creates a new query tab, pre-fills it with query, and executes it.
-func (m *Main) openNewQueryTabWithQuery(query string) {
+func (m *Main) openNewQueryTabWithQuery(query string, execute bool) {
 	m.openNewQueryTab()
-	if len(m.queryTabs) > 0 {
-		m.queryTabs[len(m.queryTabs)-1].SetEditorTextAndExecute(query)
+	if len(m.queryTabs) == 0 {
+		return
+	}
+	tab := m.queryTabs[len(m.queryTabs)-1]
+	if execute {
+		tab.SetEditorTextAndExecute(query)
+	} else {
+		tab.SetEditorText(query)
 	}
 }
 
-// openNewQueryTab creates a blank read-only query tab.
 func (m *Main) openNewQueryTab() {
 	n := m.nextQueryTabNum()
 	m.queryTabNums[n] = true
@@ -528,7 +538,7 @@ func (m *Main) openActionsModal() {
 		if data.IsQueryTab() {
 			historyHandler = data.OpenHistory
 		} else {
-			historyHandler = func() { data.OpenHistoryWithCallback(m.openNewQueryTabWithQuery) }
+			historyHandler = func() { data.OpenHistoryWithCallback(func(q string) { m.openNewQueryTabWithQuery(q, true) }) }
 		}
 
 		entries = append(entries,

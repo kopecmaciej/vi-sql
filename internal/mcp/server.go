@@ -8,22 +8,25 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/build"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
+	"github.com/kopecmaciej/vi-sql/internal/manager"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rs/zerolog/log"
 )
 
 // Server wraps the MCP SDK server and exposes database tools to MCP clients.
 type Server struct {
-	driver database.Driver
-	server *mcpsdk.Server
-	cfg    config.MCPConfig
+	driver  database.Driver
+	server  *mcpsdk.Server
+	cfg     config.MCPConfig
+	manager *manager.ElementManager
 }
 
 // New creates a new MCP server backed by the given driver.
-func New(driver database.Driver, cfg config.MCPConfig) *Server {
+func New(driver database.Driver, cfg config.MCPConfig, mgr *manager.ElementManager) *Server {
 	s := &Server{
-		driver: driver,
-		cfg:    cfg,
+		driver:  driver,
+		cfg:     cfg,
+		manager: mgr,
 		server: mcpsdk.NewServer(&mcpsdk.Implementation{
 			Name:    "vi-sql",
 			Version: build.Version,

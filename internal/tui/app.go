@@ -150,7 +150,7 @@ func (a *App) startMCPServer(driver database.Driver) {
 	ctx, cancel := context.WithCancel(context.Background())
 	a.mcpCancelFunc = cancel
 
-	srv := visqlmcp.New(driver, cfg)
+	srv := visqlmcp.New(driver, cfg, a.App.GetManager())
 	go func() {
 		if err := srv.Start(ctx); err != nil {
 			log.Error().Err(err).Msg("MCP server error")

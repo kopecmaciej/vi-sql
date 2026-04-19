@@ -14,6 +14,7 @@ const (
 	UpdateQueryBar         MessageType = "update_query_bar"
 	FooterHeightChanged    MessageType = "footer_height_changed"
 	MCPStateChanged        MessageType = "mcp_state_changed"
+	OpenQueryTab           MessageType = "open_query_tab"
 )
 
 type (
@@ -59,9 +60,14 @@ func (eh *ElementManager) Unsubscribe(element tview.Identifier, listener chan Ev
 
 func (eh *ElementManager) Broadcast(event EventMsg) {
 	eh.mutex.Lock()
-	defer eh.mutex.Unlock()
-	for _, listener := range eh.listeners {
-		listener <- event
+	channels := make([]chan EventMsg, 0, len(eh.listeners))
+	for _, ch := range eh.listeners {
+		channels = append(channels, ch)
+	}
+	eh.mutex.Unlock()
+
+	for _, ch := range channels {
+		ch <- event
 	}
 }
 
