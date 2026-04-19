@@ -33,13 +33,13 @@ func (s *Server) registerTools() {
 	}, s.handleSampleTable)
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
-		Name:        "explain_query",
-		Description: "Return the query plan for a SQL statement. Set analyze=true to also execute and return runtime stats.",
-	}, s.handleExplainQuery)
+		Name:        "open_query_in_tab",
+		Description: "Open a new query tab in vi-sql and pre-fill the SQL editor with the given query (does not execute it)",
+	}, s.handleOpenQueryInTab)
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
 		Name:        "execute_query",
-		Description: "Execute a read-only SQL SELECT query and return results (max 1000 rows)",
+		Description: "Execute a read-only SQL SELECT query and return results (max 100 rows)",
 	}, s.handleExecuteQuery)
 
 	if s.cfg.AllowWrite {
@@ -50,17 +50,15 @@ func (s *Server) registerTools() {
 	}
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
+		Name:        "explain_query",
+		Description: "Return the query plan for a SQL statement. Set analyze=true to also execute and return runtime stats.",
+	}, s.handleExplainQuery)
+
+	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
 		Name:        "get_server_info",
 		Description: "Get database server version, name, and connection info",
 	}, s.handleGetServerInfo)
-
-	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
-		Name:        "open_query_in_tab",
-		Description: "Open a new query tab in vi-sql and pre-fill the SQL editor with the given query (does not execute it)",
-	}, s.handleOpenQueryInTab)
 }
-
-// --- input types ---
 
 type listSchemasInput struct {
 	Filter string `json:"filter" jsonschema:"Optional name filter"`
@@ -97,8 +95,6 @@ type explainQueryInput struct {
 type openQueryInTabInput struct {
 	Query string `json:"query" jsonschema:"SQL query to pre-fill in the editor,required"`
 }
-
-// --- handlers ---
 
 func (s *Server) handleListSchemas(
 	ctx context.Context, _ *mcpsdk.CallToolRequest, input listSchemasInput,
@@ -322,8 +318,6 @@ func (s *Server) handleOpenQueryInTab(
 		},
 	}, nil, nil
 }
-
-// --- helpers ---
 
 func jsonResult(v any) (*mcpsdk.CallToolResult, any, error) {
 	data, err := json.Marshal(v)

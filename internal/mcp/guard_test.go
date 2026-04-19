@@ -10,11 +10,8 @@ func TestAssertReadOnly(t *testing.T) {
 		"EXPLAIN SELECT * FROM products",
 		"EXPLAIN ANALYZE SELECT * FROM products",
 		"TABLE catalog.products",
-		// write keyword inside a string literal — should be allowed
 		"SELECT 'INSERT INTO foo' AS hint FROM dual",
-		// write keyword inside a line comment
 		"SELECT id -- DELETE me later\nFROM users",
-		// write keyword inside a block comment
 		"SELECT id /* UPDATE: remove this */ FROM users",
 	}
 
@@ -26,9 +23,7 @@ func TestAssertReadOnly(t *testing.T) {
 		"ALTER TABLE users ADD COLUMN foo text",
 		"CREATE TABLE foo (id int)",
 		"TRUNCATE TABLE users",
-		// writable CTE
 		"WITH del AS (DELETE FROM users WHERE id = '1' RETURNING id) SELECT * FROM del",
-		// starts with SELECT but contains mutation in subquery
 		"SELECT * FROM (DELETE FROM users RETURNING id) AS d",
 	}
 

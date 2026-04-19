@@ -21,7 +21,6 @@ type Server struct {
 	manager *manager.ElementManager
 }
 
-// New creates a new MCP server backed by the given driver.
 func New(driver database.Driver, cfg config.MCPConfig, mgr *manager.ElementManager) *Server {
 	s := &Server{
 		driver:  driver,
@@ -36,7 +35,6 @@ func New(driver database.Driver, cfg config.MCPConfig, mgr *manager.ElementManag
 	return s
 }
 
-// Start begins listening on 127.0.0.1:<port>. Blocks until ctx is cancelled.
 func (s *Server) Start(ctx context.Context) error {
 	addr := fmt.Sprintf("127.0.0.1:%d", s.cfg.Port)
 

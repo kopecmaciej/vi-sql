@@ -11,11 +11,10 @@ var allowedFirstKeywords = map[string]bool{
 	"WITH":    true, // CTEs — further checked below
 	"EXPLAIN": true,
 	"SHOW":    true,
-	"TABLE":   true,  // PostgreSQL shorthand for SELECT * FROM table
+	"TABLE":   true, // PostgreSQL shorthand for SELECT * FROM table
 	"VALUES":  true,
 }
 
-// writeKeywords are SQL verbs that mutate data or schema.
 var writeKeywords = []string{
 	"INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
 	"CREATE", "TRUNCATE", "GRANT", "REVOKE",
@@ -119,7 +118,6 @@ func firstKeyword(upper string) string {
 	return upper[:end]
 }
 
-// containsKeyword reports whether kw appears as a whole word in upper.
 func containsKeyword(upper, kw string) bool {
 	idx := 0
 	for {
