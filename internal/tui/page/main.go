@@ -44,8 +44,9 @@ type Main struct {
 	// so closed tabs release their number for reuse.
 	queryTabNums map[int]bool
 
-	actionsModal *modal.ActionsModal
-	importModal  *modal.ImportModal
+	actionsModal   *modal.ActionsModal
+	importModal    *modal.ImportModal
+	serverInfoModal *modal.ServerInfoModal
 }
 
 func NewMain() *Main {
@@ -59,8 +60,9 @@ func NewMain() *Main {
 		structureTabs: make(map[string]*component.Structure),
 		indexTabs:     make(map[string]*component.Indexes),
 		queryTabNums:  make(map[int]bool),
-		actionsModal:  modal.NewActionsModal(),
-		importModal:   modal.NewImportModal(),
+		actionsModal:    modal.NewActionsModal(),
+		importModal:     modal.NewImportModal(),
+		serverInfoModal: modal.NewServerInfoModal(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -113,6 +115,9 @@ func (m *Main) initComponents() error {
 		return err
 	}
 	if err := m.importModal.Init(m.App); err != nil {
+		return err
+	}
+	if err := m.serverInfoModal.Init(m.App); err != nil {
 		return err
 	}
 
@@ -605,18 +610,5 @@ func (m *Main) showServerInfo() {
 		return
 	}
 
-	infoText := fmt.Sprintf(
-		"Version: %s\nUptime: %s\nActive Sessions: %d\nDatabase: %s\nHost: %s:%d",
-		info.Version, info.Uptime, info.ActiveSessions, info.CurrentDB, info.Host, info.Port,
-	)
-
-	infoModal := core.NewModal()
-	infoModal.SetStyle(m.App.GetStyles())
-	infoModal.SetText(infoText)
-	infoModal.AddButtons([]string{"Close"})
-	infoModal.SetDoneFunc(func(_ int, _ string) {
-		m.App.Pages.RemovePage("ServerInfo")
-	})
-
-	m.App.Pages.AddPage("ServerInfo", infoModal, true, true)
+	m.serverInfoModal.Open(info, m.showServerInfo)
 }

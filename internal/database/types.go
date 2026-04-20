@@ -69,8 +69,11 @@ type ServerInfo struct {
 	Version        string
 	Uptime         string
 	ActiveSessions int64
+	MaxConnections int64  // 0 if the driver cannot determine it
 	CurrentDB      string
+	DatabaseSize   string // human-readable (e.g. "450 MB"), empty if unsupported
+	CacheHitRatio  string // e.g. "99.8%", empty if unsupported
 	Host           string
 	Port           int
-	Extra          map[string]string
+	Extra          map[string]string // driver-specific key/value pairs
 }

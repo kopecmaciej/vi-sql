@@ -68,6 +68,34 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 
 	info.CurrentDB = d.client.Config.Database
 
+	var maxConns int64
+	err = d.client.Pool.QueryRow(ctx,
+		"SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&maxConns)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get max connections")
+	} else {
+		info.MaxConnections = maxConns
+	}
+
+	var dbSize string
+	err = d.client.Pool.QueryRow(ctx,
+		"SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&dbSize)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get database size")
+	} else {
+		info.DatabaseSize = dbSize
+	}
+
+	var cacheHit string
+	err = d.client.Pool.QueryRow(ctx, `
+		SELECT to_char(round(blks_hit::numeric / nullif(blks_hit + blks_read, 0) * 100, 1), 'FM990.0') || '%'
+		FROM pg_stat_database WHERE datname = current_database()`).Scan(&cacheHit)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get cache hit ratio")
+	} else {
+		info.CacheHitRatio = cacheHit
+	}
+
 	return info, nil
 }
 
