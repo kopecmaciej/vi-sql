@@ -23,7 +23,7 @@ var (
 	cfgFile           string
 	showVersion       bool
 	debug             bool
-	welcomePage       bool
+	optionsPage       bool
 	connectionPage    bool
 	connectionName    string
 	listConnections   bool
@@ -49,7 +49,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $HOME/.config/vi-sql/config.yaml)")
 	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Show version")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enable debug mode")
-	rootCmd.Flags().BoolVarP(&welcomePage, "welcome-page", "w", false, "Show welcome page on startup")
+	rootCmd.Flags().BoolVarP(&optionsPage, "options-page", "o", false, "Show options page on startup")
 	rootCmd.Flags().BoolVarP(&connectionPage, "connection-page", "p", false, "Show connection page on startup")
 	rootCmd.Flags().StringVarP(&connectionName, "connection-name", "n", "", "Connect to a specific connection by name")
 	rootCmd.Flags().BoolVarP(&listConnections, "connection-list", "l", false, "List all available connections")
@@ -88,8 +88,8 @@ func runApp(cmd *cobra.Command, args []string) {
 
 	cmd.Flags().Visit(func(f *pflag.Flag) {
 		switch f.Name {
-		case "welcome-page":
-			cfg.ShowWelcomePage = welcomePage
+		case "options-page":
+			cfg.ShowOptionsPage = optionsPage
 		case "connection-page":
 			cfg.ShowConnectionPage = connectionPage
 		case "connection-list":
@@ -130,7 +130,7 @@ func runApp(cmd *cobra.Command, args []string) {
 				}
 				cfg.JumpInto = jumpInto
 				cfg.ShowConnectionPage = false
-				cfg.ShowWelcomePage = false
+				cfg.ShowOptionsPage = false
 			} else {
 				fatalf("jump value cannot be empty")
 			}

@@ -83,7 +83,7 @@ type Config struct {
 	UI                 UIConfig     `yaml:"ui"`
 	MCP                MCPConfig    `yaml:"mcp"`
 	ShowConnectionPage bool         `yaml:"showConnectionPage"`
-	ShowWelcomePage    bool         `yaml:"-"`
+	ShowOptionsPage    bool         `yaml:"-"`
 	CurrentConnection  string       `yaml:"currentConnection"`
 	Connections        []SQLConfig  `yaml:"connections"`
 	Styles             StylesConfig `yaml:"styles"`
@@ -146,7 +146,7 @@ func (c *Config) loadDefaults(version string) {
 		CurrentStyle:  "default.yaml",
 	}
 	c.ShowConnectionPage = true
-	c.ShowWelcomePage = false
+	c.ShowOptionsPage = false
 }
 
 func GetConfigPath() (string, error) {

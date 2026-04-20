@@ -49,6 +49,7 @@ func (a *App) Init() error {
 
 	a.App.SetOpenStyleModalFunc(a.ShowStyleChangeModal)
 	a.App.SetOpenConnectionPageFunc(a.renderConnection)
+	a.App.SetOpenOptionsPageFunc(a.renderOptions)
 	a.App.SetToggleMCPFunc(a.toggleMCPServer)
 
 	err := a.help.Init(a.App)
@@ -220,8 +221,8 @@ func (a *App) toggleMCPServer() {
 
 func (a *App) Render() {
 	switch {
-	case a.App.GetConfig().ShowWelcomePage:
-		a.renderWelcome()
+	case a.App.GetConfig().ShowOptionsPage:
+		a.renderOptionsOnStartup()
 	case a.App.GetConfig().GetCurrentConnection() == nil, a.App.GetConfig().ShowConnectionPage:
 		a.renderConnection()
 	default:
@@ -268,19 +269,33 @@ func (a *App) renderConnection() {
 	a.connection.Render()
 }
 
-func (a *App) renderWelcome() {
-	welcome := page.NewWelcome()
-	if err := welcome.Init(a.App); err != nil {
-		a.Pages.AddPage(welcome.GetIdentifier(), welcome, true, true)
-		modal.ShowError(a.Pages, "Error while rendering welcome page", err)
+func (a *App) renderOptionsOnStartup() {
+	opts := page.NewOptions()
+	if err := opts.Init(a.App); err != nil {
+		a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
+		modal.ShowError(a.Pages, "Error while rendering options page", err)
 		return
 	}
-	welcome.SetOnSubmitFunc(func() {
-		a.Pages.RemovePage(welcome.GetIdentifier())
+	opts.SetOnSubmitFunc(func() {
+		a.Pages.RemovePage(opts.GetIdentifier())
 		a.renderConnection()
 	})
-	a.Pages.AddPage(welcome.GetIdentifier(), welcome, true, true)
-	welcome.Render()
+	a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
+	opts.Render()
+}
+
+func (a *App) renderOptions() {
+	opts := page.NewOptions()
+	if err := opts.Init(a.App); err != nil {
+		a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
+		modal.ShowError(a.Pages, "Error while rendering options page", err)
+		return
+	}
+	opts.SetOnSubmitFunc(func() {
+		a.Pages.RemovePage(opts.GetIdentifier())
+	})
+	a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
+	opts.Render()
 }
 
 func (a *App) ShowStyleChangeModal() {

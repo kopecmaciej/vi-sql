@@ -224,7 +224,6 @@ func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error 
 	return nil
 }
 
-// nextQueryTabNum returns the lowest positive integer not currently in use.
 func (m *Main) nextQueryTabNum() int {
 	for n := 1; ; n++ {
 		if !m.queryTabNums[n] {
@@ -507,6 +506,10 @@ func (m *Main) openActionsModal() {
 		{
 			Label:   mcpLabel,
 			Handler: m.App.ToggleMCP,
+		},
+		{
+			Label:   "Options page",
+			Handler: m.App.OpenOptionsPage,
 		},
 		{
 			Label:   "New tab",

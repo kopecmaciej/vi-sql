@@ -22,45 +22,44 @@ type App struct {
 	mcpEnabled         bool
 	openStyleModal     func()
 	openConnectionPage func()
+	openOptionsPage    func()
 	toggleMCP          func()
 }
 
-// SetOpenStyleModalFunc stores a callback for opening the style-change modal.
-// Called by tui.App during initialisation so components in page/ can trigger it.
 func (a *App) SetOpenStyleModalFunc(fn func()) { a.openStyleModal = fn }
 
-// OpenStyleModal invokes the style-change modal if one has been registered.
 func (a *App) OpenStyleModal() {
 	if a.openStyleModal != nil {
 		a.openStyleModal()
 	}
 }
 
-// SetOpenConnectionPageFunc stores a callback for navigating to the connection page.
-// Called by tui.App during initialisation so components in page/ can trigger it.
 func (a *App) SetOpenConnectionPageFunc(fn func()) { a.openConnectionPage = fn }
 
-// OpenConnectionPage invokes the connection page callback if one has been registered.
 func (a *App) OpenConnectionPage() {
 	if a.openConnectionPage != nil {
 		a.openConnectionPage()
 	}
 }
 
-// SetToggleMCPFunc stores a callback for toggling the MCP server on/off.
+func (a *App) SetOpenOptionsPageFunc(fn func()) { a.openOptionsPage = fn }
+
+func (a *App) OpenOptionsPage() {
+	if a.openOptionsPage != nil {
+		a.openOptionsPage()
+	}
+}
+
 func (a *App) SetToggleMCPFunc(fn func()) { a.toggleMCP = fn }
 
-// ToggleMCP invokes the MCP toggle callback if one has been registered.
 func (a *App) ToggleMCP() {
 	if a.toggleMCP != nil {
 		a.toggleMCP()
 	}
 }
 
-// SetMCPEnabled updates the in-memory MCP running state.
 func (a *App) SetMCPEnabled(enabled bool) { a.mcpEnabled = enabled }
 
-// IsMCPEnabled reports whether the MCP server is currently running.
 func (a *App) IsMCPEnabled() bool { return a.mcpEnabled }
 
 func NewApp(appConfig *config.Config) *App {

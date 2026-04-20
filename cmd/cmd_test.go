@@ -170,7 +170,7 @@ func TestRootCmdFlags_AllRegistered(t *testing.T) {
 	localFlags := []flagSpec{
 		{"version", "v"},
 		{"debug", "d"},
-		{"welcome-page", "w"},
+		{"options-page", "o"},
 		{"connection-page", "p"},
 		{"connection-name", "n"},
 		{"connection-list", "l"},
