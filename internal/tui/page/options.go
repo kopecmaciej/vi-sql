@@ -14,20 +14,19 @@ import (
 
 const (
 	OptionsPageId = "Options"
-
 )
 
 // itemDescriptions maps focusable form item labels to help text shown in the side panel.
 var itemDescriptions = map[string]string{
-	"Enable $EDITOR": "Open SQL queries in an external editor (vim, nano, etc.) instead of the built-in editor.\n\nOnce enabled, use the 'Move to $EDITOR' keybinding from within the SQL editor to transfer the current query.\n\n[::b]Note: the built-in editor has SQL autocomplete; external editors do not.[::-]",
-	"Set editor":     "Command to invoke as the external editor.\n\nUse a bare command (e.g. 'vim') or prefix with '$' to read from an env var (e.g. '$EDITOR').",
+	"Enable $EDITOR":  "Open SQL queries in an external editor (vim, nano, etc.) instead of the built-in editor.\n\nOnce enabled, use the 'Move to $EDITOR' keybinding from within the SQL editor to transfer the current query.\n\n[::b]Note: the built-in editor has SQL autocomplete; external editors do not.[::-]",
+	"Set editor":      "Command to invoke as the external editor.\n\nUse a bare command (e.g. 'vim') or prefix with '$' to read from an env var (e.g. '$EDITOR').",
 	"Log File":        "Path where structured log output is written.\n\nDefault: /tmp/vi-sql.log\n\nChange takes effect on restart.",
 	"Log Level":       "Controls how verbose the log output is.\n\n'debug' logs everything; 'info' is suitable for normal use; 'error' logs only failures.\n\nChange takes effect on restart.",
 	"Nerd Font icons": "Enable Nerd Font symbols for richer icons in the schema tree and UI.\n\nRequires a Nerd Font to be installed and selected in your terminal emulator (e.g. JetBrainsMono Nerd Font).",
 	"Connection page": "Show the connection selection page on every startup.\n\nWhen disabled, vi-sql connects to the last-used connection automatically.",
-	"MCP enabled": "Start an HTTP MCP server when vi-sql launches.\n\nAdd to Claude Code with:\n  claude mcp add --transport http vi-sql http://localhost:<port>/mcp",
-	"MCP port":    "TCP port the MCP server listens on.\n\nDefault: 9741. Change this if the port is already in use.",
-	"Allow writes": "Allow the MCP client to execute INSERT, UPDATE, DELETE, and DDL statements.\n\nDisabled by default. Enable only when you fully trust the AI agent and want it to modify data.",
+	"MCP enabled":     "Start an HTTP MCP server when vi-sql launches.\n\nAdd to Claude Code with:\n  claude mcp add --transport http vi-sql http://localhost:<port>/mcp",
+	"MCP port":        "TCP port the MCP server listens on.\n\nDefault: 9741. Change this if the port is already in use.",
+	"Allow writes":    "Allow the MCP client to execute INSERT, UPDATE, DELETE, and DDL statements.\n\nDisabled by default. Enable only when you fully trust the AI agent and want it to modify data.",
 }
 
 type Options struct {
@@ -245,6 +244,19 @@ func (w *Options) buildGroups() {
 				tview.NewTextView().SetLabel("Config file").
 					SetText(configFile).
 					SetSize(1, 0).SetDynamicColors(true).SetScrollable(false),
+			}
+		}),
+		core.NewFormGroup(true, func() []tview.FormItem {
+			logLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
+			return []tview.FormItem{
+				tview.NewInputField().SetLabel("Log File").SetText(cfg.Log.Path).SetFieldWidth(30),
+				tview.NewButtonGroup("Log Level", logLevels, getLogLevelIndex(cfg.Log.Level, logLevels), nil),
+				tview.NewCheckbox().SetLabel("Nerd Font icons").SetChecked(cfg.Styles.BetterSymbols),
+				tview.NewCheckbox().SetLabel("Connection page").SetChecked(cfg.ShowConnectionPage),
+			}
+		}),
+		core.NewFormGroup(true, func() []tview.FormItem {
+			return []tview.FormItem{
 				tview.NewCheckbox().SetLabel("Enable $EDITOR").SetChecked(w.editorEnabled).
 					SetChangedFunc(func(checked bool) {
 						w.editorEnabled = checked
@@ -259,15 +271,6 @@ func (w *Options) buildGroups() {
 			}
 		}),
 		w.editorOptions,
-		core.NewFormGroup(true, func() []tview.FormItem {
-			logLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
-			return []tview.FormItem{
-				tview.NewInputField().SetLabel("Log File").SetText(cfg.Log.Path).SetFieldWidth(30),
-				tview.NewButtonGroup("Log Level", logLevels, getLogLevelIndex(cfg.Log.Level, logLevels), nil),
-				tview.NewCheckbox().SetLabel("Nerd Font icons").SetChecked(cfg.Styles.BetterSymbols),
-				tview.NewCheckbox().SetLabel("Connection page").SetChecked(cfg.ShowConnectionPage),
-			}
-		}),
 		core.NewFormGroup(true, func() []tview.FormItem {
 			return []tview.FormItem{
 				tview.NewCheckbox().SetLabel("MCP enabled").SetChecked(w.mcpEnabled).
