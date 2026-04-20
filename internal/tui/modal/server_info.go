@@ -12,16 +12,13 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 )
 
-const ServerInfoModalId tview.Identifier = "ServerInfo"
+const ServerInfoModalId = "ServerInfo"
 
-// ServerInfoModal displays a structured dashboard of server metrics.
-// It is owned by page/main.go and opened via Open().
 type ServerInfoModal struct {
 	*core.BaseElement
 	*core.Flex
 
 	content   *core.TextView
-	hint      *tview.TextView
 	refreshFn func()
 }
 
@@ -30,7 +27,6 @@ func NewServerInfoModal() *ServerInfoModal {
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		content:     core.NewTextView(),
-		hint:        tview.NewTextView(),
 	}
 	s.SetIdentifier(ServerInfoModalId)
 	s.SetAfterInitFunc(s.init)
@@ -50,32 +46,16 @@ func (s *ServerInfoModal) setLayout() {
 	s.Flex.SetBorder(true)
 	s.Flex.SetTitle(" Server Info ")
 	s.Flex.SetBorderPadding(0, 0, 1, 1)
-
 	s.content.SetDynamicColors(true)
 	s.content.SetScrollable(true)
 	s.content.SetWrap(false)
 
-	s.hint.SetDynamicColors(true)
-	s.hint.SetTextAlign(tview.AlignCenter)
-
 	s.Flex.AddItem(s.content, 0, 1, true)
-	s.Flex.AddItem(s.hint, 1, 0, false)
 }
 
 func (s *ServerInfoModal) setStyle() {
-	styles := s.App.GetStyles()
-	s.Flex.SetStyle(styles)
-	s.content.SetStyle(styles)
-
-	bg := styles.Global.BackgroundColor.Color()
-	dim := styles.Global.DimColor.String()
-	text := styles.Global.SecondaryTextColor.String()
-
-	s.hint.SetBackgroundColor(bg)
-	s.hint.SetText(fmt.Sprintf(
-		"[%s][[Esc][-][%s]] Close   [[%s]r[-][%s]] Refresh[-]",
-		dim, dim, text, dim,
-	))
+	s.Flex.SetStyle(s.App.GetStyles())
+	s.content.SetStyle(s.App.GetStyles())
 }
 
 func (s *ServerInfoModal) setKeybindings() {
@@ -85,7 +65,7 @@ func (s *ServerInfoModal) setKeybindings() {
 		case keys.Contains(keys.Common.Close, event.Name()):
 			s.App.Pages.RemovePage(ServerInfoModalId)
 			return nil
-		case event.Rune() == 'r':
+		case keys.Contains(keys.Common.Refresh, event.Name()):
 			if s.refreshFn != nil {
 				s.refreshFn()
 			}
@@ -103,8 +83,6 @@ func (s *ServerInfoModal) handleEvents() {
 	})
 }
 
-// Open displays the modal with the given server info.
-// If the modal is already visible (e.g. on refresh), the content is updated in place.
 func (s *ServerInfoModal) Open(info *database.ServerInfo, refreshFn func()) {
 	s.refreshFn = refreshFn
 	s.content.SetText(s.buildContent(info))
@@ -123,7 +101,7 @@ func (s *ServerInfoModal) Open(info *database.ServerInfo, refreshFn func()) {
 		AddItem(nil, 0, 1, false)
 
 	s.App.Pages.AddPage(ServerInfoModalId, wrapper, true, true)
-	s.App.SetFocusInternal(s.content)
+	s.App.SetFocusOnly(s)
 }
 
 func (s *ServerInfoModal) buildContent(info *database.ServerInfo) string {

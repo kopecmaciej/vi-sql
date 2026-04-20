@@ -145,7 +145,7 @@ func (m *ImportModal) Render(schema, table string) {
 		AddItem(nil, 0, 1, false)
 
 	m.App.Pages.AddPage(ImportModalId, wrapper, true, true)
-	m.App.SetFocusInternal(m.form)
+	m.App.SetFocusOnly(m.form)
 }
 
 func (m *ImportModal) buildForm(tableValue string) {

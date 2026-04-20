@@ -198,7 +198,6 @@ func (f *Footer) handleEvents() {
 	})
 }
 
-
 func (f *Footer) keyCell(text string) *tview.TableCell {
 	cell := tview.NewTableCell(text)
 	cell.SetTextColor(f.App.GetStyles().Global.SecondaryTextColor.Color())
@@ -268,13 +267,6 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		focus = ExplainViewerId
 	case strings.HasPrefix(focus, SQLEditModalId+"-"):
 		focus = SQLEditModalId
-	}
-
-	// InputBar is no longer a KeyBindings field — serve its Common keys directly.
-	if focus == "InputBar" {
-		keys := f.App.GetKeys().GetCommonKeysFor("InputBar")
-		f.keys = keys
-		return keys, nil
 	}
 
 	orderedKeys, err := f.App.GetKeys().GetKeysForElement(string(focus))

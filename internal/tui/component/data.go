@@ -158,7 +158,7 @@ func (c *Data) init() error {
 		c.cycleEditorSize()
 	})
 	c.sqlQueryEditor.SetOnFocusDown(func() {
-		c.App.SetFocusInternal(c.table)
+		c.App.SetFocusOnly(c.table)
 	})
 	c.sqlQueryEditor.SetOnOpenInEditor(func() {
 		if c.App.GetConfig().Editor.Enabled {
@@ -357,7 +357,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			return c.handleRefresh(ctx)
 		case k.Contains(k.Navigation.FocusUp, event.Name()):
 			if c.mode == QueryMode {
-				c.App.SetFocusInternal(c.sqlQueryEditor)
+				c.App.SetFocusOnly(c.sqlQueryEditor)
 				return nil
 			}
 		case k.Contains(k.Data.HideColumn, event.Name()):
@@ -1270,7 +1270,7 @@ func (c *Data) showExplainViewer(ctx context.Context, sql, result string, analyz
 		c.App.Pages.RemovePage(ExplainViewerId)
 	})
 	c.App.Pages.AddPage(ExplainViewerId, c.explainViewer, true, true)
-	c.App.SetFocusInternal(c.explainViewer.tree.TreeView)
+	c.App.SetFocusOnly(c.explainViewer.tree.TreeView)
 }
 
 func isExplainQuery(sql string) bool {

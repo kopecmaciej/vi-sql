@@ -174,6 +174,7 @@ var componentCommonKeys = map[string][]string{
 	"History":        {"Select", "Delete", "Close"},
 	"SQLQueryEditor": {"Confirm", "Clear", "Paste"},
 	"InputBar":       {"Confirm", "Clear", "Paste", "Close"},
+	"ServerInfo":     {"Close", "Refresh"},
 }
 
 const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
@@ -257,14 +258,8 @@ func (kb KeyBindings) GetKeysForElement(elementId string) ([]OrderedKeys, error)
 		return nil, fmt.Errorf("element is empty")
 	}
 
-	v := reflect.ValueOf(kb)
-	field := v.FieldByName(elementId)
-
-	if !field.IsValid() || field.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("field %s not found", elementId)
-	}
-
 	var result []OrderedKeys
+
 	if parent, ok := keyGroupParents[elementId]; ok {
 		if parentKeys, err := kb.GetKeysForElement(parent); err == nil {
 			result = append(result, parentKeys...)
@@ -278,10 +273,17 @@ func (kb KeyBindings) GetKeysForElement(elementId string) ([]OrderedKeys, error)
 		})
 	}
 
-	result = append(result, OrderedKeys{
-		Element: elementId,
-		Keys:    extractKeysFromStruct(field),
-	})
+	v := reflect.ValueOf(kb)
+	if field := v.FieldByName(elementId); field.IsValid() && field.Kind() == reflect.Struct {
+		result = append(result, OrderedKeys{
+			Element: elementId,
+			Keys:    extractKeysFromStruct(field),
+		})
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no keys found for element %s", elementId)
+	}
 
 	return result, nil
 }

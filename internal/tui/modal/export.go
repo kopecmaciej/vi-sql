@@ -131,7 +131,7 @@ func (e *ExportModal) Render(_ context.Context, query, schema, table string) {
 		AddItem(nil, 0, 1, false)
 
 	e.App.Pages.AddPage(ExportModalId, wrapper, true, true)
-	e.App.SetFocusInternal(e.form)
+	e.App.SetFocusOnly(e.form)
 }
 
 func (e *ExportModal) buildForm() {

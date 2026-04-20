@@ -117,7 +117,7 @@ func (m *SQLEditModal) Open(title, initialSQL string, onExecute func(sql string)
 	m.editor.SetText(initialSQL, true)
 	// false = do not resize to fill screen; Draw() controls the rect.
 	m.App.Pages.AddPage(SQLEditModalId, m, false, true)
-	m.App.SetFocusInternal(m.editor)
+	m.App.SetFocusOnly(m.editor)
 }
 
 func (m *SQLEditModal) close() {

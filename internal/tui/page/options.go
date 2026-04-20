@@ -190,7 +190,7 @@ func (w *Options) Render() {
 	w.updateDescription()
 
 	if page, _ := w.App.Pages.GetFrontPage(); page == OptionsPageId {
-		w.App.SetFocusInternal(w)
+		w.App.SetFocusOnly(w)
 	}
 }
 
@@ -269,7 +269,7 @@ func (w *Options) buildGroups() {
 						if idx := w.form.GetFormItemIndex("Enable $EDITOR"); idx >= 0 {
 							w.form.SetFocus(idx)
 						}
-						w.App.SetFocusInternal(w.form)
+						w.App.SetFocusOnly(w.form)
 					}),
 			}
 		}),
@@ -285,7 +285,7 @@ func (w *Options) buildGroups() {
 						if idx := w.form.GetFormItemIndex("MCP enabled"); idx >= 0 {
 							w.form.SetFocus(idx)
 						}
-						w.App.SetFocusInternal(w.form)
+						w.App.SetFocusOnly(w.form)
 					}),
 			}
 		}),

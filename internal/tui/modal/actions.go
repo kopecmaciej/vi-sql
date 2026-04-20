@@ -190,5 +190,5 @@ func (a *ActionsModal) Open(entries []ActionEntry) {
 		AddItem(nil, 0, 1, false)
 
 	a.App.Pages.AddPage(ActionsModalId, wrapper, true, true)
-	a.App.SetFocusInternal(a.filter)
+	a.App.SetFocusOnly(a.filter)
 }

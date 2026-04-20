@@ -186,7 +186,7 @@ func (h *Help) setKeybindings() {
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
 		case k.Contains(k.Navigation.FocusRight, event.Name()):
-			h.App.SetFocusInternal(h.keysTable)
+			h.App.SetFocusOnly(h.keysTable)
 			return nil
 		case k.Contains(k.Common.Filter, event.Name()):
 			h.enterSearchMode()
@@ -210,7 +210,7 @@ func (h *Help) setKeybindings() {
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
 		case k.Contains(k.Navigation.FocusLeft, event.Name()):
-			h.App.SetFocusInternal(h.sectionList)
+			h.App.SetFocusOnly(h.sectionList)
 			return nil
 		case k.Contains(k.Common.Edit, event.Name()):
 			row, _ := h.keysTable.GetSelection()
@@ -264,7 +264,7 @@ func (h *Help) setKeybindings() {
 func (h *Help) enterSearchMode() {
 	h.searchMode = true
 	h.leftFlex.AddItem(h.searchInput, 3, 0, true)
-	h.App.SetFocusInternal(h.searchInput)
+	h.App.SetFocusOnly(h.searchInput)
 }
 
 func (h *Help) exitSearchMode(reset bool) {
@@ -275,7 +275,7 @@ func (h *Help) exitSearchMode(reset bool) {
 		h.filteredSections = h.allSections
 		h.renderSectionList(0)
 	}
-	h.App.SetFocusInternal(h.sectionList)
+	h.App.SetFocusOnly(h.sectionList)
 }
 
 func (h *Help) enterEditMode(row int) {
@@ -301,13 +301,13 @@ func (h *Help) enterEditMode(row int) {
 	h.rightFlex.RemoveItem(h.keysTable)
 	h.rightFlex.AddItem(h.capturePanel, 4, 0, false)
 	h.rightFlex.AddItem(h.keysTable, 0, 1, false)
-	h.App.SetFocusInternal(h.captureDisplay)
+	h.App.SetFocusOnly(h.captureDisplay)
 }
 
 func (h *Help) exitEditMode() {
 	h.editMode = false
 	h.rightFlex.RemoveItem(h.capturePanel)
-	h.App.SetFocusInternal(h.keysTable)
+	h.App.SetFocusOnly(h.keysTable)
 }
 
 func (h *Help) saveEdit() {

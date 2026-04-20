@@ -219,7 +219,7 @@ func (s *SchemaTree) renderLayout() {
 		focusTarget = s.filterBar
 	}
 	s.Flex.AddItem(s.tree, 0, 1, true)
-	s.App.SetFocusInternal(focusTarget)
+	s.App.SetFocusOnly(focusTarget)
 }
 
 func (s *SchemaTree) IsFocused() bool {

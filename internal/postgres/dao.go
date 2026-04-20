@@ -50,7 +50,7 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 
 	var uptime string
 	err = d.client.Pool.QueryRow(ctx,
-		"SELECT now() - pg_postmaster_start_time()").Scan(&uptime)
+		"SELECT (now() - pg_postmaster_start_time())::text").Scan(&uptime)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to get server uptime")
 	} else {

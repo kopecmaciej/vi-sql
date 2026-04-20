@@ -118,11 +118,11 @@ const (
 func (m *CreateTableModal) focusTarget(t focusTarget) {
 	switch t {
 	case focusTableName:
-		m.App.SetFocusInternal(m.tableNameInput)
+		m.App.SetFocusOnly(m.tableNameInput)
 	case focusColumns:
-		m.App.SetFocusInternal(m.columnsTable)
+		m.App.SetFocusOnly(m.columnsTable)
 	case focusPreview:
-		m.App.SetFocusInternal(m.preview)
+		m.App.SetFocusOnly(m.preview)
 	}
 }
 
@@ -294,7 +294,7 @@ func (m *CreateTableModal) renderWithEditInput() {
 	editFlex.AddItem(m.editInput, 3, 0, true)
 
 	m.rebuildLayout(editFlex)
-	m.App.SetFocusInternal(m.editInput)
+	m.App.SetFocusOnly(m.editInput)
 }
 
 func (m *CreateTableModal) finishEditing(colIdx, tableCol int, value string) {
@@ -309,7 +309,7 @@ func (m *CreateTableModal) finishEditing(colIdx, tableCol int, value string) {
 	m.renderColumns()
 	m.updatePreview()
 	m.rebuildLayout(nil)
-	m.App.SetFocusInternal(m.columnsTable)
+	m.App.SetFocusOnly(m.columnsTable)
 	m.columnsTable.Select(colIdx+1, tableCol)
 }
 
@@ -318,7 +318,7 @@ func (m *CreateTableModal) cancelEditing() {
 	m.editInput = nil
 	m.renderColumns()
 	m.rebuildLayout(nil)
-	m.App.SetFocusInternal(m.columnsTable)
+	m.App.SetFocusOnly(m.columnsTable)
 }
 
 func (m *CreateTableModal) autocompleteTypes(currentText string) []tview.AutocompleteItem {
@@ -571,7 +571,7 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 		AddItem(nil, 0, 1, false)
 
 	m.App.Pages.AddPage(CreateTableModalId, modal, true, true)
-	m.App.SetFocusInternal(m.tableNameInput)
+	m.App.SetFocusOnly(m.tableNameInput)
 
 	// Update preview when table name changes
 	m.tableNameInput.SetChangedFunc(func(text string) {

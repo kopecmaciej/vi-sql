@@ -33,7 +33,7 @@ func (p *Pages) SetStyle(style *config.Styles) {
 
 // AddPage wraps tview.Pages.AddPage with focus tracking.
 func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
-	p.app.SetPreviousFocus()
+	p.app.SnapshotFocus()
 	p.Pages.AddPage(string(view), page, resize, visible)
 	if visible && page.HasFocus() {
 		p.app.FocusChanged(page)
@@ -44,7 +44,7 @@ func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, vis
 // RemovePage wraps tview.Pages.RemovePage with focus restoration.
 func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
 	p.Pages.RemovePage(string(view))
-	p.app.GiveBackFocus()
+	p.app.RestoreFocus()
 	return p.Pages
 }
 

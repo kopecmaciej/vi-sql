@@ -186,7 +186,7 @@ func (h *History) enterSearchMode() {
 	h.searchMode = true
 	h.searchInput.SetText("")
 	h.rebuildLayout()
-	h.App.SetFocusInternal(h.searchInput)
+	h.App.SetFocusOnly(h.searchInput)
 }
 
 func (h *History) exitSearchMode() {
@@ -194,7 +194,7 @@ func (h *History) exitSearchMode() {
 	h.searchInput.SetText("")
 	h.filterEntries("")
 	h.rebuildLayout()
-	h.App.SetFocusInternal(h.table)
+	h.App.SetFocusOnly(h.table)
 }
 
 func (h *History) clearHistory() *tcell.EventKey {
@@ -322,7 +322,7 @@ func (h *History) Render() {
 		AddItem(nil, 0, 1, false)
 
 	h.App.Pages.AddPage(HistoryModalId, wrapper, true, true)
-	h.App.SetFocusInternal(h.table)
+	h.App.SetFocusOnly(h.table)
 }
 
 // SaveToHistory saves text to the history file, deduplicating and capping at maxHistory.

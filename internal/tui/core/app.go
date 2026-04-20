@@ -18,7 +18,7 @@ type App struct {
 	styles             *config.Styles
 	config             *config.Config
 	keys               *config.KeyBindings
-	previousFocus      tview.Primitive
+	focusSnapshot      tview.Primitive
 	mcpEnabled         bool
 	openStyleModal     func()
 	openConnectionPage func()
@@ -109,25 +109,25 @@ func (a *App) SetStyle(styleName string) error {
 	return nil
 }
 
-func (a *App) SetPreviousFocus() {
-	a.previousFocus = a.GetFocus()
+func (a *App) SnapshotFocus() {
+	a.focusSnapshot = a.GetFocus()
 }
 
 func (a *App) SetFocus(p tview.Primitive) {
-	a.previousFocus = a.GetFocus()
+	a.focusSnapshot = a.GetFocus()
 	a.Application.SetFocus(p)
 	a.FocusChanged(p)
 }
 
-func (a *App) SetFocusInternal(p tview.Primitive) {
+func (a *App) SetFocusOnly(p tview.Primitive) {
 	a.Application.SetFocus(p)
 	a.FocusChanged(p)
 }
 
-func (a *App) GiveBackFocus() {
-	if a.previousFocus != nil {
-		a.SetFocus(a.previousFocus)
-		a.previousFocus = nil
+func (a *App) RestoreFocus() {
+	if a.focusSnapshot != nil {
+		a.SetFocus(a.focusSnapshot)
+		a.focusSnapshot = nil
 	}
 }
 
