@@ -431,10 +431,9 @@ func (m *Main) ToggleFooter() {
 	m.footerHeight = m.footer.Toggle()
 	m.rebuildInnerFlex()
 	m.footer.Render()
-	m.App.GetManager().Broadcast(manager.EventMsg{
-		Sender:  m.GetIdentifier(),
-		Message: manager.Message{Type: manager.FooterHeightChanged, Data: m.footerHeight},
-	})
+	msg := manager.NewFooterHeightChangedMsg(m.footerHeight)
+	msg.Sender = m.GetIdentifier()
+	m.App.GetManager().Broadcast(msg)
 }
 
 func (m *Main) setKeybindings() {

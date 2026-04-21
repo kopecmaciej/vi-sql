@@ -100,11 +100,7 @@ func (a *App) SetStyle(styleName string) error {
 	}
 	a.styles.LoadMainStyles()
 	a.Pages.SetStyle(a.styles)
-	a.manager.Broadcast(manager.EventMsg{
-		Message: manager.Message{
-			Type: manager.StyleChanged,
-		},
-	})
+	a.manager.Broadcast(manager.NewStyleChangedMsg())
 
 	return nil
 }
@@ -132,13 +128,7 @@ func (a *App) RestoreFocus() {
 }
 
 func (a *App) FocusChanged(p tview.Primitive) {
-	msg := manager.EventMsg{
-		Message: manager.Message{
-			Type: manager.FocusChanged,
-			Data: p.GetIdentifier(),
-		},
-	}
-	a.manager.Broadcast(msg)
+	a.manager.Broadcast(manager.NewFocusChangedMsg(p.GetIdentifier()))
 }
 
 func (a *App) GetDriver() database.Driver {

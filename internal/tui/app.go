@@ -200,9 +200,7 @@ func (a *App) startMCPServer(driver database.Driver) {
 	}()
 
 	a.App.SetMCPEnabled(true)
-	a.App.GetManager().Broadcast(manager.EventMsg{
-		Message: manager.Message{Type: manager.MCPStateChanged, Data: true},
-	})
+	a.App.GetManager().Broadcast(manager.NewMCPStateChangedMsg(true))
 }
 
 func (a *App) toggleMCPServer() {
@@ -220,9 +218,7 @@ func (a *App) toggleMCPServer() {
 			a.mcpCancelFunc = nil
 		}
 		a.App.SetMCPEnabled(false)
-		a.App.GetManager().Broadcast(manager.EventMsg{
-			Message: manager.Message{Type: manager.MCPStateChanged, Data: false},
-		})
+		a.App.GetManager().Broadcast(manager.NewMCPStateChangedMsg(false))
 	}
 }
 

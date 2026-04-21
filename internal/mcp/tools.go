@@ -336,16 +336,11 @@ func (s *Server) handleOpenQueryInTab(
 	}
 
 	tabID := uuid.New().String()
-	s.manager.Broadcast(manager.EventMsg{
-		Message: manager.Message{
-			Type: manager.OpenQueryTab,
-			Data: manager.OpenQueryTabRequest{
-				TabID: tabID,
-				Query: input.Query,
-				Name:  input.Name,
-			},
-		},
-	})
+	s.manager.Broadcast(manager.NewOpenQueryTabMsg(manager.OpenQueryTabRequest{
+		TabID: tabID,
+		Query: input.Query,
+		Name:  input.Name,
+	}))
 
 	return jsonResult(map[string]string{"tab_id": tabID, "status": "Query opened in new tab"})
 }
