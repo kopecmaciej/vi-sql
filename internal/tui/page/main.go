@@ -291,7 +291,6 @@ func (m *Main) openNewQueryTabFull(tabID, name string) {
 	}
 
 	if tabID != "" {
-		tab.SetTabID(tabID)
 		m.topBar.AddDynamicTabWithID(displayName, tabID, tab)
 		if m.tabRegistry != nil {
 			m.tabRegistry.Register(tabID, tab.GetEditorText)
@@ -321,7 +320,7 @@ func (m *Main) closeActiveTab() {
 				break
 			}
 		}
-		if id := tab.GetTabID(); id != "" && m.tabRegistry != nil {
+		if id := m.topBar.GetActiveTabID(); id != "" && m.tabRegistry != nil {
 			m.tabRegistry.Unregister(id)
 		}
 		var n int

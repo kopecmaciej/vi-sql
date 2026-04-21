@@ -237,6 +237,11 @@ func (t *TopBar) AddDynamicTabWithID(name, tabID string, component TabBarPrimiti
 	return t.tabBar.AddDynamicTabWithID(name, tabID, component)
 }
 
+// GetActiveTabID returns the MCP-assigned tabID of the active tab, or empty string.
+func (t *TopBar) GetActiveTabID() string {
+	return t.tabBar.GetActiveTabID()
+}
+
 // RenameActiveTab updates the display name of the currently active tab.
 func (t *TopBar) RenameActiveTab(newName string) {
 	t.tabBar.RenameActiveTab(newName)

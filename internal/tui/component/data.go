@@ -79,7 +79,6 @@ type Data struct {
 	sqlEditModal   *SQLEditModal
 	peeker         *Peeker
 	explainViewer  *ExplainViewer
-	tabID          string
 	columns        []database.ColumnInfo
 	foreignKeys    []database.ForeignKeyInfo
 	state          *database.TableState
@@ -497,9 +496,6 @@ func (c *Data) SetEditorTextAndExecute(text string) {
 	c.sqlQueryEditor.SetText(text, true)
 	c.sqlQueryEditor.Execute()
 }
-
-func (c *Data) SetTabID(id string) { c.tabID = id }
-func (c *Data) GetTabID() string   { return c.tabID }
 
 func (c *Data) GetEditorText() string { return c.sqlQueryEditor.GetText() }
 
