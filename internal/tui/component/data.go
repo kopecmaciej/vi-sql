@@ -489,12 +489,10 @@ func (c *Data) SelectedTable() (schema, table string) {
 	return c.state.Schema, c.state.Table
 }
 
-// SetEditorText pre-fills the SQL query editor with the given text.
 func (c *Data) SetEditorText(text string) {
 	c.sqlQueryEditor.SetText(text, true)
 }
 
-// SetEditorTextAndExecute pre-fills the SQL query editor and immediately executes the query.
 func (c *Data) SetEditorTextAndExecute(text string) {
 	c.sqlQueryEditor.SetText(text, true)
 	c.sqlQueryEditor.Execute()
@@ -503,7 +501,6 @@ func (c *Data) SetEditorTextAndExecute(text string) {
 func (c *Data) SetTabID(id string) { c.tabID = id }
 func (c *Data) GetTabID() string   { return c.tabID }
 
-// GetEditorText returns the current text in the SQL query editor.
 func (c *Data) GetEditorText() string { return c.sqlQueryEditor.GetText() }
 
 // GetFocusPrimitive returns the inner primitive that should receive focus

@@ -140,7 +140,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Close tab",
 		},
 		RenameTab: Key{
-			Runes:       []string{"R"},
+			Keys:        []string{"F2"},
 			Description: "Rename tab",
 		},
 		FocusSchemaTree: Key{

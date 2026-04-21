@@ -47,6 +47,14 @@ func (mi *InputModal) Draw(screen tcell.Screen) {
 	mi.input.Draw(screen)
 }
 
+func (mi *InputModal) Focus(delegate func(p tview.Primitive)) {
+	delegate(mi.input)
+}
+
+func (mi *InputModal) HasFocus() bool {
+	return mi.input.HasFocus()
+}
+
 func (mi *InputModal) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return mi.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 		mi.input.InputHandler()(event, setFocus)

@@ -119,4 +119,7 @@ var appHints = []func(k *config.KeyBindings) string{
 	func(k *config.KeyBindings) string {
 		return "Create your own style by adding a .yaml file to the styles folder in your config directory."
 	},
+	func(k *config.KeyBindings) string {
+		return fmt.Sprintf("Press [::b]%s[-:-:-] to rename the active query tab — useful when working with multiple queries at once.", k.Main.RenameTab.String())
+	},
 }
