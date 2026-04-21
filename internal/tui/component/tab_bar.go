@@ -19,7 +19,8 @@ type TabBarPrimitive interface {
 }
 
 type TabBarComponent struct {
-	id        string
+	id        string // display name
+	tabID     string // stable MCP-assigned UUID (empty for non-MCP tabs)
 	primitive TabBarPrimitive
 	rendered  bool
 }
@@ -94,6 +95,26 @@ func (t *TabBar) AddDynamicTab(name string, component TabBarPrimitive) int {
 	t.active = len(t.tabs) - 1
 	t.Render()
 	return t.active
+}
+
+// AddDynamicTabWithID is like AddDynamicTab but stamps the component with a stable tabID.
+func (t *TabBar) AddDynamicTabWithID(name, tabID string, component TabBarPrimitive) int {
+	t.tabs = append(t.tabs, &TabBarComponent{
+		id:        name,
+		tabID:     tabID,
+		primitive: component,
+	})
+	t.active = len(t.tabs) - 1
+	t.Render()
+	return t.active
+}
+
+// RenameActiveTab updates the display name of the currently active tab.
+func (t *TabBar) RenameActiveTab(newName string) {
+	if t.active < len(t.tabs) {
+		t.tabs[t.active].id = newName
+		t.Render()
+	}
 }
 
 // CloseActiveTab removes the currently active tab. Does nothing if only one tab remains.

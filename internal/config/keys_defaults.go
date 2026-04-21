@@ -139,6 +139,10 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+x"},
 			Description: "Close tab",
 		},
+		RenameTab: Key{
+			Runes:       []string{"R"},
+			Description: "Rename tab",
+		},
 		FocusSchemaTree: Key{
 			Keys:        []string{"Ctrl+/"},
 			Description: "Focus schema tree",

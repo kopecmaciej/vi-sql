@@ -79,6 +79,7 @@ type Data struct {
 	sqlEditModal   *SQLEditModal
 	peeker         *Peeker
 	explainViewer  *ExplainViewer
+	tabID          string
 	columns        []database.ColumnInfo
 	foreignKeys    []database.ForeignKeyInfo
 	state          *database.TableState
@@ -503,6 +504,12 @@ func (c *Data) SetEditorTextAndExecute(text string) {
 	c.sqlQueryEditor.SetText(text, true)
 	c.sqlQueryEditor.Execute()
 }
+
+func (c *Data) SetTabID(id string) { c.tabID = id }
+func (c *Data) GetTabID() string   { return c.tabID }
+
+// GetEditorText returns the current text in the SQL query editor.
+func (c *Data) GetEditorText() string { return c.sqlQueryEditor.GetText() }
 
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).

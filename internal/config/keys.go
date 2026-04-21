@@ -80,6 +80,7 @@ type (
 		HideSchema      Key `yaml:"hideSchema"`
 		NewTab          Key `yaml:"newTab"`
 		CloseTab        Key `yaml:"closeTab"`
+		RenameTab       Key `yaml:"renameTab"`
 		FocusSchemaTree Key `yaml:"focusSchemaTree"`
 		OpenActions     Key `yaml:"openActions"`
 		ImportData      Key `yaml:"importData"`

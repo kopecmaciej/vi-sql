@@ -125,7 +125,21 @@ run_tests() {
     assert "get_server_info"         "$(call_tool get_server_info '{}')"
     assert "list_enum_types"         "$(call_tool list_enum_types '{}')"
     assert "explain_query"           "$(call_tool explain_query "{\"query\":$(sql_arg 'SELECT 1'),\"analyze\":false}")"
-    assert "open_query_in_tab"       "$(call_tool open_query_in_tab "{\"query\":$(sql_arg 'SELECT 1 AS test')}")"
+
+    local open_resp tab_id
+    open_resp=$(call_tool open_query_in_tab "{\"query\":$(sql_arg 'SELECT 1 AS test'),\"name\":\"mcp-test tab\"}")
+    assert "open_query_in_tab"       "$open_resp"
+    tab_id=$(echo "$open_resp" | jq -r '.result.content[0].text' | jq -r '.tab_id // empty' 2>/dev/null || true)
+
+    if [[ -n "$tab_id" ]]; then
+        # Brief pause: the TUI goroutine registers the tab asynchronously.
+        sleep 0.5
+        assert "get_query_from_tab"  "$(call_tool get_query_from_tab "{\"tab_id\":\"$tab_id\"}")"
+    else
+        echo "  SKIP  get_query_from_tab (tab_id not returned by open_query_in_tab)"
+        FAIL=$((FAIL+1))
+    fi
+
     assert "get_last_query_result"   "$(call_tool get_last_query_result '{}')"
 
     if has_tool "execute_query"; then
@@ -178,7 +192,8 @@ case "${1:-}" in
         echo "MCP test suite for vi-sql"
         echo ""
         echo "  Tests: get_server_info, list_schemas, list_enum_types, explain_query,"
-        echo "         describe_table, sample_table, open_query_in_tab, get_last_query_result"
+        echo "         describe_table, sample_table, open_query_in_tab, get_query_from_tab,"
+        echo "         get_last_query_result"
         echo "         execute_query (skipped if AllowExecute is off)"
         echo "         execute_statement (skipped if AllowWrite is off)"
         echo ""

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/rs/zerolog/log"
@@ -35,8 +36,13 @@ func (s *Server) registerTools() {
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
 		Name:        "open_query_in_tab",
-		Description: "Open a new query tab in vi-sql and pre-fill the SQL editor with the given query (does not execute it)",
+		Description: "Open a new query tab in vi-sql and pre-fill the SQL editor with the given query (does not execute it). Returns a tab_id you can later pass to get_query_from_tab.",
 	}, s.handleOpenQueryInTab)
+
+	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
+		Name:        "get_query_from_tab",
+		Description: "Return the current editor text from a specific query tab opened by open_query_in_tab. Works regardless of which tab is currently active.",
+	}, s.handleGetQueryFromTab)
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
 		Name:        "get_last_query_result",
@@ -102,6 +108,11 @@ type explainQueryInput struct {
 
 type openQueryInTabInput struct {
 	Query string `json:"query" jsonschema:"SQL query to pre-fill in the editor,required"`
+	Name  string `json:"name"  jsonschema:"Optional display name for the tab"`
+}
+
+type getQueryFromTabInput struct {
+	TabID string `json:"tab_id" jsonschema:"Tab ID returned by open_query_in_tab,required"`
 }
 
 type getLastQueryResultInput struct{}
@@ -324,18 +335,37 @@ func (s *Server) handleOpenQueryInTab(
 		return nil, nil, fmt.Errorf("open_query_in_tab: TUI manager not available")
 	}
 
+	tabID := uuid.New().String()
 	s.manager.Broadcast(manager.EventMsg{
 		Message: manager.Message{
 			Type: manager.OpenQueryTab,
-			Data: input.Query,
+			Data: manager.OpenQueryTabRequest{
+				TabID: tabID,
+				Query: input.Query,
+				Name:  input.Name,
+			},
 		},
 	})
 
-	return &mcpsdk.CallToolResult{
-		Content: []mcpsdk.Content{
-			&mcpsdk.TextContent{Text: "Query opened in new tab"},
-		},
-	}, nil, nil
+	return jsonResult(map[string]string{"tab_id": tabID, "status": "Query opened in new tab"})
+}
+
+func (s *Server) handleGetQueryFromTab(
+	_ context.Context, _ *mcpsdk.CallToolRequest, input getQueryFromTabInput,
+) (*mcpsdk.CallToolResult, any, error) {
+	log.Debug().Str("tool", "get_query_from_tab").Str("tab_id", input.TabID).Msg("MCP tool called")
+	if input.TabID == "" {
+		return nil, nil, fmt.Errorf("tab_id is required")
+	}
+	if s.tabRegistry == nil {
+		return nil, nil, fmt.Errorf("get_query_from_tab: tab registry not available")
+	}
+
+	text, ok := s.tabRegistry.GetText(input.TabID)
+	if !ok {
+		return nil, nil, fmt.Errorf("tab %q not found or has been closed", input.TabID)
+	}
+	return jsonResult(map[string]string{"tab_id": input.TabID, "query": text})
 }
 
 func (s *Server) handleGetLastQueryResult(

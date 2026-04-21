@@ -17,20 +17,22 @@ import (
 
 // Server wraps the MCP SDK server and exposes database tools to MCP clients.
 type Server struct {
-	driver     database.Driver
-	server     *mcpsdk.Server
-	cfg        config.MCPConfig
-	manager    *manager.ElementManager
-	resultMu   sync.RWMutex
-	lastResult *manager.QueryResult
-	eventCh    chan manager.EventMsg
+	driver      database.Driver
+	server      *mcpsdk.Server
+	cfg         config.MCPConfig
+	manager     *manager.ElementManager
+	tabRegistry *manager.TabRegistry
+	resultMu    sync.RWMutex
+	lastResult  *manager.QueryResult
+	eventCh     chan manager.EventMsg
 }
 
-func New(driver database.Driver, cfg config.MCPConfig, mgr *manager.ElementManager) *Server {
+func New(driver database.Driver, cfg config.MCPConfig, mgr *manager.ElementManager, reg *manager.TabRegistry) *Server {
 	s := &Server{
-		driver:  driver,
-		cfg:     cfg,
-		manager: mgr,
+		driver:      driver,
+		cfg:         cfg,
+		manager:     mgr,
+		tabRegistry: reg,
 		server: mcpsdk.NewServer(&mcpsdk.Implementation{
 			Name:    "vi-sql",
 			Version: build.Version,
