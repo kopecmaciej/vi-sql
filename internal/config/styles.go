@@ -82,6 +82,7 @@ type (
 		LeafSymbolColor                     Style `yaml:"leafSymbolColor"`
 		SeparatorColor                      Style `yaml:"separatorColor"`
 		ButtonsTextColor                    Style `yaml:"buttonsTextColor"`
+		ButtonsBackgroundColor              Style `yaml:"buttonsBackgroundColor"`
 		DeleteButtonSelectedBackgroundColor Style `yaml:"deleteButtonSelectedBackgroundColor"`
 		TableHeaderTextColor                Style `yaml:"tableHeaderTextColor"`
 		PeekerHighlightColor                Style `yaml:"peekerHighlightColor"`
@@ -148,6 +149,7 @@ func (s *Styles) loadDefaults() {
 		LeafSymbolColor:                     "#2563EB",
 		SeparatorColor:                      "#334155",
 		ButtonsTextColor:                    "#FDE68A",
+		ButtonsBackgroundColor:              "#2563EB",
 		DeleteButtonSelectedBackgroundColor: "#DA3312",
 		TableHeaderTextColor:                "#94A3B8",
 		PeekerHighlightColor:                "#3A4963",

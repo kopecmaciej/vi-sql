@@ -13,6 +13,9 @@ build:
 run:
 	env $$(cat .env) $(BUILD_DIR)/$(SVC_NAME)
 
+just-test:
+	make build; env $(cat .env | grep POSTGRES | xargs) ./.build/vi-sql -d
+
 tidy:
 	go mod tidy
 

@@ -119,14 +119,14 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 
 	cfg.ConfigPath = configPath
 
-	if cfg.Version != version {
-		cfg.Version = version
-		if err := cfg.UpdateConfig(); err != nil {
-			log.Error().Err(err).Msg("Failed to update config with new version")
-		}
-	}
-
 	return cfg, nil
+}
+
+// UpdateVersion sets the persisted version to the given value.
+// Called explicitly after changelog acknowledgment (or silently when no changelog is pending).
+func (c *Config) UpdateVersion(version string) error {
+	c.Version = version
+	return c.UpdateConfig()
 }
 
 func (c *Config) loadDefaults(version string) {

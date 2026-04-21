@@ -223,6 +223,12 @@ func (a *App) toggleMCPServer() {
 }
 
 func (a *App) Render() {
+	if pending := getPendingChangelog(a.App.GetConfig().Version); len(pending) > 0 {
+		a.showChangelogModal(pending)
+		return
+	}
+	a.updateConfigVersionIfNeeded()
+
 	switch {
 	case a.App.GetConfig().ShowOptionsPage:
 		a.renderOptionsOnStartup()
@@ -232,6 +238,56 @@ func (a *App) Render() {
 		a.initAndRenderMain()
 	}
 	go a.checkForUpdate()
+}
+
+func getPendingChangelog(lastVersion string) []modal.ChangelogEntry {
+	var pending []modal.ChangelogEntry
+	for _, entry := range loadChangelog() {
+		if util.IsNewerVersion(lastVersion, entry.Version) {
+			pending = append(pending, entry)
+		}
+	}
+	return pending
+}
+
+func (a *App) showChangelogModal(entries []modal.ChangelogEntry) {
+	m := modal.NewChangelog(entries)
+	if err := m.Init(a.App); err != nil {
+		log.Error().Err(err).Msg("Failed to init changelog modal")
+		a.updateConfigVersionIfNeeded()
+		a.Render()
+		return
+	}
+
+	m.SetOnProceed(func() {
+		for _, e := range entries {
+			if e.MigrationFn != nil {
+				if err := e.MigrationFn(); err != nil {
+					log.Error().Err(err).Msgf("Migration for v%s failed", e.Version)
+					modal.ShowError(a.Pages, "Migration failed", err)
+					return
+				}
+			}
+		}
+		a.updateConfigVersionIfNeeded()
+		a.Pages.RemovePage(modal.ChangelogModalId)
+		a.Render()
+	})
+
+	m.SetOnQuit(func() {
+		os.Exit(0)
+	})
+
+	m.Render()
+}
+
+func (a *App) updateConfigVersionIfNeeded() {
+	cfg := a.App.GetConfig()
+	if cfg.Version != build.Version {
+		if err := cfg.UpdateVersion(build.Version); err != nil {
+			log.Error().Err(err).Msg("Failed to update config version")
+		}
+	}
 }
 
 func (a *App) checkForUpdate() {

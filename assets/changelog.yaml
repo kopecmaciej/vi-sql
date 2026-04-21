@@ -1,0 +1,15 @@
+entries:
+  - version: "0.1.0"
+    breaking: false
+    title: "Initial release"
+    changes:
+      - "New: PostgreSQL support with full schema browsing"
+      - "New: Multi-tab query editor with syntax highlighting"
+      - "New: EXPLAIN / EXPLAIN ANALYZE with plan viewer"
+      - "New: Table data viewer with pagination, filtering, and ordering"
+      - "New: Row CRUD (add, edit, delete) with destructive-action confirmation"
+      - "New: Table structure, indexes, and DDL panels"
+      - "New: Query history with fuzzy search and preview"
+      - "New: CSV import and multi-format export (CSV, JSON, SQL, Markdown)"
+      - "New: MCP server integration for AI-assisted querying"
+      - "New: In-app changelog shown on first startup after upgrade"
