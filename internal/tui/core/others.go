@@ -53,6 +53,9 @@ type (
 	FormModal struct {
 		*primitives.FormModal
 	}
+	InputModal struct {
+		*primitives.InputModal
+	}
 )
 
 func NewFlex() *Flex {
@@ -89,6 +92,10 @@ func NewViewModal() *ViewModal {
 
 func NewFormModal() *FormModal {
 	return &FormModal{FormModal: primitives.NewFormModal()}
+}
+
+func NewInputModal() *InputModal {
+	return &InputModal{InputModal: primitives.NewInputModal()}
 }
 
 func (f *Flex) SetStyle(style *config.Styles) {
@@ -141,6 +148,12 @@ func (v *ViewModal) SetStyle(style *config.Styles) {
 	SetCommonStyle(v.ViewModal, style)
 	v.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
 	v.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
+}
+
+func (m *InputModal) SetStyle(style *config.Styles) {
+	SetCommonStyle(m.Box, style)
+	m.SetFieldTextColor(style.Global.SecondaryTextColor.Color())
+	m.SetFieldBackgroundColor(style.Global.ContrastBackgroundColor.Color())
 }
 
 func (f *FormModal) SetStyle(style *config.Styles) {

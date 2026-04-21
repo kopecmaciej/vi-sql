@@ -14,7 +14,6 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 )
 
 const (
@@ -50,7 +49,7 @@ type Main struct {
 	actionsModal    *modal.ActionsModal
 	importModal     *modal.ImportModal
 	serverInfoModal *modal.ServerInfoModal
-	renameModal     *primitives.InputModal
+	renameModal     *core.InputModal
 }
 
 func NewMain() *Main {
@@ -67,7 +66,7 @@ func NewMain() *Main {
 		actionsModal:    modal.NewActionsModal(),
 		importModal:     modal.NewImportModal(),
 		serverInfoModal: modal.NewServerInfoModal(),
-		renameModal:     primitives.NewInputModal(),
+		renameModal:     core.NewInputModal(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -79,6 +78,8 @@ func NewMain() *Main {
 func (m *Main) SetRegistry(r *manager.TabRegistry) { m.tabRegistry = r }
 
 func (m *Main) init() error {
+	m.renameModal.SetBorder(true)
+	m.renameModal.SetTitle("Rename tab")
 	m.setStyles()
 	m.setKeybindings()
 	m.handleEvents()
@@ -90,13 +91,7 @@ func (m *Main) setStyles() {
 	m.SetStyle(styles)
 	m.innerFlex.SetStyle(styles)
 	m.innerFlex.SetDirection(tview.FlexRow)
-
-	m.renameModal.SetBorder(true)
-	m.renameModal.SetTitle("Rename tab")
-	m.renameModal.SetBorderColor(styles.Global.BorderColor.Color())
-	m.renameModal.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	m.renameModal.SetFieldTextColor(styles.Global.SecondaryTextColor.Color())
-	m.renameModal.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	m.renameModal.SetStyle(styles)
 }
 
 func (m *Main) handleEvents() {
