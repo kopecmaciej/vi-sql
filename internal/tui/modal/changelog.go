@@ -253,6 +253,7 @@ func (c *Changelog) Render() {
 
 // changeGroup holds a named set of changelog items that share the same category.
 type changeGroup struct {
+	key    string // matches knownCategories prefix key
 	symbol string
 	label  string
 	items  []string
@@ -263,10 +264,10 @@ var knownCategories = []struct {
 	symbol string
 	label  string
 }{
-	{"New", "+", "Features"},
-	{"Improvement", "~", "Improvements"},
-	{"Fix", "*", "Bug Fixes"},
-	{"Breaking", "!", "Breaking Changes"},
+	{"New", "✦", "Features"},
+	{"Improvement", "◈", "Improvements"},
+	{"Fix", "⬡", "Bug Fixes"},
+	{"Breaking", "⚑", "Breaking Changes"},
 }
 
 func groupChanges(changes []string) []changeGroup {
@@ -277,13 +278,15 @@ func groupChanges(changes []string) []changeGroup {
 		matched := false
 		for _, cat := range knownCategories {
 			pfx := cat.prefix + ": "
-			if strings.HasPrefix(ch, pfx) {
-				text := strings.TrimPrefix(ch, pfx)
+			text, found := strings.CutPrefix(ch, pfx)
+			if found {
 				if idx, ok := indexMap[cat.prefix]; ok {
 					groups[idx].items = append(groups[idx].items, text)
 				} else {
 					indexMap[cat.prefix] = len(groups)
-					groups = append(groups, changeGroup{symbol: cat.symbol, label: cat.label, items: []string{text}})
+					groups = append(groups, changeGroup{
+						key: cat.prefix, symbol: cat.symbol, label: cat.label, items: []string{text},
+					})
 				}
 				matched = true
 				break
@@ -295,7 +298,7 @@ func groupChanges(changes []string) []changeGroup {
 				groups[idx].items = append(groups[idx].items, ch)
 			} else {
 				indexMap[other] = len(groups)
-				groups = append(groups, changeGroup{symbol: "-", label: "Other", items: []string{ch}})
+				groups = append(groups, changeGroup{key: other, symbol: "·", label: "Other", items: []string{ch}})
 			}
 		}
 	}
@@ -304,32 +307,59 @@ func groupChanges(changes []string) []changeGroup {
 
 func (c *Changelog) buildText(contentWidth int) string {
 	styles := c.App.GetStyles()
+	bg := styles.Global.BackgroundColor.String()
+	fg := styles.Global.TextColor.String()
+	dimColor := styles.Global.DimColor.String()
+	contrastBg := styles.Global.ContrastBackgroundColor.String()
 	focusColor := styles.Global.FocusColor.String()
 	secondaryColor := styles.Global.SecondaryTextColor.String()
-	dimColor := styles.Global.DimColor.String()
-	textColor := styles.Global.TextColor.String()
+	fixColor := styles.SQLEditor.NumberColor.String() // orange
 
-	separator := fmt.Sprintf("[%s]%s[-]", dimColor, strings.Repeat("─", contentWidth))
+	// Category badge colors: [fg:bg]
+	categoryColors := map[string][2]string{
+		"New":         {bg, focusColor},
+		"Improvement": {bg, secondaryColor},
+		"Fix":         {bg, fixColor},
+		"Breaking":    {bg, "red"},
+	}
+
+	separator := fmt.Sprintf("[%s]%s[-:-:-]", dimColor, strings.Repeat("─", contentWidth))
 
 	var sb strings.Builder
 
+	// Centered intro header with badge background
+	title := "  What's new in vi-sql  "
+	pad := (contentWidth - len(title)) / 2
+	if pad < 0 {
+		pad = 0
+	}
+	fmt.Fprintf(&sb, "%s[%s:%s:b]%s[-:-:-]\n", strings.Repeat(" ", pad), bg, focusColor, title)
+	sb.WriteString(separator + "\n\n")
+
 	for i, e := range c.entries {
 		if i > 0 {
-			sb.WriteString(separator + "\n\n")
+			sb.WriteString("\n" + separator + "\n\n")
 		}
 
+		// Version badge inline with title
 		if e.Breaking {
-			fmt.Fprintf(&sb, "[red::b]v%s  ⚠ Breaking Change[::-]\n", e.Version)
+			fmt.Fprintf(&sb, "[%s:red:b]  v%s  [-:-:-]  [%s::b]%s[::-]  [red]⚠ breaking[-]\n\n",
+				bg, e.Version, fg, e.Title)
 		} else {
-			fmt.Fprintf(&sb, "[%s::b]v%s[::-]\n", focusColor, e.Version)
+			fmt.Fprintf(&sb, "[%s:%s:b]  v%s  [-:-:-]  [%s::b]%s[::-]\n\n",
+				bg, focusColor, e.Version, fg, e.Title)
 		}
-		fmt.Fprintf(&sb, "[%s::b]%s[::-]\n\n", textColor, e.Title)
 
 		groups := groupChanges(e.Changes)
 		for j, g := range groups {
-			fmt.Fprintf(&sb, "[%s::b]%s %s[::-]\n", secondaryColor, g.symbol, g.label)
+			colors, ok := categoryColors[g.key]
+			if ok {
+				fmt.Fprintf(&sb, "[%s:%s:b]  %s  %s  [-:-:-]\n\n", colors[0], colors[1], g.symbol, g.label)
+			} else {
+				fmt.Fprintf(&sb, "[%s:%s:b]  %s  %s  [-:-:-]\n\n", fg, contrastBg, g.symbol, g.label)
+			}
 			for _, item := range g.items {
-				fmt.Fprintf(&sb, "  [%s]·[-] [%s]%s[-]\n", dimColor, textColor, item)
+				fmt.Fprintf(&sb, "  [%s]▸[-] %s\n", dimColor, item)
 			}
 			if j < len(groups)-1 {
 				sb.WriteString("\n")

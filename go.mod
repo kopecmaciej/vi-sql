@@ -8,6 +8,7 @@ require (
 	github.com/adrg/xdg v0.5.3
 	github.com/atotto/clipboard v0.1.4
 	github.com/gdamore/tcell/v2 v2.13.8
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/kopecmaciej/tview v0.1.17
 	github.com/modelcontextprotocol/go-sdk v1.5.0
@@ -44,7 +45,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

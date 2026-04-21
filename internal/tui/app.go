@@ -227,7 +227,7 @@ func (a *App) Render() {
 		a.showChangelogModal(pending)
 		return
 	}
-	a.updateConfigVersionIfNeeded()
+	a.updateConfigVersion()
 
 	switch {
 	case a.App.GetConfig().ShowOptionsPage:
@@ -254,7 +254,7 @@ func (a *App) showChangelogModal(entries []modal.ChangelogEntry) {
 	m := modal.NewChangelog(entries)
 	if err := m.Init(a.App); err != nil {
 		log.Error().Err(err).Msg("Failed to init changelog modal")
-		a.updateConfigVersionIfNeeded()
+		a.updateConfigVersion()
 		a.Render()
 		return
 	}
@@ -269,7 +269,7 @@ func (a *App) showChangelogModal(entries []modal.ChangelogEntry) {
 				}
 			}
 		}
-		a.updateConfigVersionIfNeeded()
+		a.updateConfigVersion()
 		a.Pages.RemovePage(modal.ChangelogModalId)
 		a.Render()
 	})
@@ -281,10 +281,11 @@ func (a *App) showChangelogModal(entries []modal.ChangelogEntry) {
 	m.Render()
 }
 
-func (a *App) updateConfigVersionIfNeeded() {
+func (a *App) updateConfigVersion() {
+	normalized := util.NormalizeVersion(build.Version)
 	cfg := a.App.GetConfig()
-	if cfg.Version != build.Version {
-		if err := cfg.UpdateVersion(build.Version); err != nil {
+	if cfg.Version != normalized {
+		if err := cfg.UpdateVersion(normalized); err != nil {
 			log.Error().Err(err).Msg("Failed to update config version")
 		}
 	}

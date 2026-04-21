@@ -1,0 +1,68 @@
+project_name: vi-sql
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/kopecmaciej/vi-sql/internal/build.Version={{.Tag}}
+
+archives:
+  - formats: ['tar.gz']
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: ['zip']
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+  groups:
+    - title: '🎉 New Features'
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: '🔧 Maintenance'
+      regexp: '^.*?(chore|refactor)(\([[:word:]]+\))??!?:.+$'
+      order: 2
+    - title: '💅 Styling'
+      regexp: '^.*?style(\([[:word:]]+\))??!?:.+$'
+      order: 3
+    - title: '💡 Documentation'
+      regexp: '^.*?docs(\([[:word:]]+\))??!?:.+$'
+      order: 4
+
+release:
+  github:
+    owner: kopecmaciej
+    name: vi-sql
+
+checksum:
+  name_template: "{{ .ProjectName }}_checksum_sha256.txt"

@@ -41,6 +41,13 @@ func FetchLatestVersion(ctx context.Context) string {
 	return strings.TrimSpace(payload.TagName)
 }
 
+// NormalizeVersion strips the "v" prefix and any pre-release/build metadata
+// (everything after the first "-"), returning a bare "MAJOR.MINOR.PATCH" string.
+func NormalizeVersion(tag string) string {
+	tag = strings.TrimPrefix(tag, "v")
+	return strings.SplitN(tag, "-", 2)[0]
+}
+
 // IsNewerVersion returns true when latestTag is strictly newer than currentTag.
 // Both tags are expected in "vMAJOR.MINOR.PATCH" form; any parse failure returns false.
 func IsNewerVersion(currentTag, latestTag string) bool {
