@@ -2,15 +2,13 @@ module github.com/kopecmaciej/vi-sql
 
 go 1.25.0
 
-replace github.com/kopecmaciej/tview => ../tview
-
 require (
 	github.com/adrg/xdg v0.5.3
 	github.com/atotto/clipboard v0.1.4
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/kopecmaciej/tview v0.1.17
+	github.com/kopecmaciej/tview v0.1.18
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
