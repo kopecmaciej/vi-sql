@@ -1,57 +1,36 @@
-package component
+package widget
 
 import (
 	"fmt"
 	"math/rand"
 
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 )
 
-const HintsId = "Hints"
-
 type Hints struct {
-	*core.BaseElement
 	*core.TextView
 }
 
 func NewHints() *Hints {
 	h := &Hints{
-		BaseElement: core.NewBaseElement(),
-		TextView:    core.NewTextView(),
+		TextView: core.NewTextView(),
 	}
-	h.SetIdentifier(HintsId)
-	h.SetAfterInitFunc(h.init)
+	h.TextView.SetDynamicColors(true)
+	h.TextView.SetBorderPadding(0, 0, 1, 1)
+
 	return h
 }
 
-func (h *Hints) init() error {
-	h.TextView.SetDynamicColors(true)
-	h.TextView.SetBorderPadding(0, 0, 1, 1)
-	h.setStyle()
-	h.handleEvents()
-	return nil
+func (h *Hints) SetStyle(styles *config.Styles) {
+	h.TextView.SetTextColor(styles.Global.SecondaryTextColor.Color())
+	h.TextView.SetStyle(styles)
 }
 
-func (h *Hints) setStyle() {
-	h.SetStyle(h.App.GetStyles())
-}
-
-func (h *Hints) handleEvents() {
-	go h.HandleEvents(HintsId, func(event manager.EventMsg) {
-		switch event.Message.Type {
-		case manager.StyleChanged:
-			h.setStyle()
-		}
-	})
-}
-
-func (h *Hints) Render() {
+func (h *Hints) Render(keys *config.KeyBindings, betterSymbols bool) {
 	idx := rand.Intn(len(appHints))
-	text := appHints[idx](h.App.GetKeys())
-	h.TextView.SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color())
-	if h.App.GetConfig().Styles.BetterSymbols {
+	text := appHints[idx](keys)
+	if betterSymbols {
 		h.TextView.SetText("💡 " + text)
 	} else {
 		h.TextView.SetText(" [::d]Hint:[-:-:-] " + text)

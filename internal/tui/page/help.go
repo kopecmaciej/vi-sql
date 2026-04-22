@@ -10,6 +10,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 )
 
 const (
@@ -36,7 +37,7 @@ type Help struct {
 	keysTable   *core.Table
 	footer      *component.Footer
 	searchInput *core.InputField
-	hints       *component.Hints
+	hints       *widget.Hints
 
 	// capture-based key edit
 	capturePanel   *core.Flex
@@ -63,7 +64,7 @@ func NewHelp() *Help {
 		searchInput:    core.NewInputField(),
 		capturePanel:   core.NewFlex(),
 		captureDisplay: core.NewTextView(),
-		hints:          component.NewHints(),
+		hints:          widget.NewHints(),
 	}
 
 	h.SetIdentifier(HelpPageId)
@@ -73,9 +74,6 @@ func NewHelp() *Help {
 }
 
 func (h *Help) init() error {
-	if err := h.hints.Init(h.App); err != nil {
-		return err
-	}
 	if err := h.footer.Init(h.App); err != nil {
 		return err
 	}
@@ -155,6 +153,7 @@ func (h *Help) setStyle() {
 	h.searchInput.SetStyle(s)
 	h.capturePanel.SetStyle(s)
 	h.footer.SetStyle(s)
+	h.hints.SetStyle(s)
 
 	selectedFg := s.Global.BackgroundColor.Color()
 	selectedBg := h.style.SelectedBackgroundColor.Color()
@@ -434,15 +433,15 @@ func (h *Help) filterSections(query string) {
 }
 
 func (h *Help) Render() {
-	allKeys := h.App.GetKeys().GetAvailableKeys()
-	h.allSections = h.sortAndFilter(allKeys)
+	keys := h.App.GetKeys()
+	h.allSections = h.sortAndFilter(keys.GetAvailableKeys())
 	h.filteredSections = h.allSections
 
 	h.renderSectionList(0)
 	if len(h.filteredSections) > 0 {
 		h.renderKeysForSection(0)
 	}
-	h.hints.Render()
+	h.hints.Render(keys, h.App.GetConfig().Styles.BetterSymbols)
 	h.renderFooter()
 }
 

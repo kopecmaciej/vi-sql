@@ -34,7 +34,7 @@ help:
 others:
   leafSymbolColor: "#8BE9FD"
   separatorColor: "#44475A"
-  buttonsTextColor: "#282A36"
+  buttonsTextColor: "#383A59"
   deleteButtonSelectedBackgroundColor: "#FF5555"
   peekerHighlightColor: "#383A59"
 sqlEditor:

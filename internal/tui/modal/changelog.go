@@ -6,18 +6,52 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
+	"github.com/kopecmaciej/vi-sql/assets"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"github.com/kopecmaciej/vi-sql/internal/util"
+	"gopkg.in/yaml.v3"
 )
 
 const ChangelogModalId = "Changelog"
 
-type ChangelogEntry struct {
-	Version     string
-	Breaking    bool
-	Title       string
-	Changes     []string
-	MigrationFn func() error
+// MigrationRegistry maps migration keys (from changelog.yaml "migration" field) to their
+// implementation functions. Register entries here when a release requires a one-time data
+// migration on upgrade. Currently empty — reserved for future use.
+var MigrationRegistry = map[string]func() error{}
+
+type changelogYAML struct {
+	Entries []changelogEntryYAML `yaml:"entries"`
+}
+
+type changelogEntryYAML struct {
+	Version   string   `yaml:"version"`
+	Breaking  bool     `yaml:"breaking"`
+	Title     string   `yaml:"title"`
+	Changes   []string `yaml:"changes"`
+	Migration string   `yaml:"migration"`
+}
+
+func LoadChangelog() []util.ChangelogEntry {
+	var raw changelogYAML
+	if err := yaml.Unmarshal(assets.Changelog, &raw); err != nil {
+		return nil
+	}
+
+	entries := make([]util.ChangelogEntry, 0, len(raw.Entries))
+	for _, e := range raw.Entries {
+		entry := util.ChangelogEntry{
+			Version:  e.Version,
+			Breaking: e.Breaking,
+			Title:    e.Title,
+			Changes:  e.Changes,
+		}
+		if fn, ok := MigrationRegistry[e.Migration]; ok {
+			entry.MigrationFn = fn
+		}
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 // Changelog is a startup modal showing release notes.
@@ -25,16 +59,17 @@ type Changelog struct {
 	*core.BaseElement
 	*core.Flex
 
-	textView *core.TextView
-	form     *core.Form
+	textView  *core.TextView
+	form      *core.Form
+	lastWidth int
 
-	entries     []ChangelogEntry
+	entries     []util.ChangelogEntry
 	onProceed   func()
 	onQuit      func()
 	hasBreaking bool
 }
 
-func NewChangelog(entries []ChangelogEntry) *Changelog {
+func NewChangelog(entries []util.ChangelogEntry) *Changelog {
 	hasBreaking := false
 	for _, e := range entries {
 		if e.Breaking {
@@ -79,6 +114,7 @@ func (c *Changelog) setLayout() {
 	c.addButtons()
 
 	c.Flex.AddItem(c.textView, 0, 1, false)
+	c.Flex.AddItem(tview.NewBox(), 1, 0, false)
 	c.Flex.AddItem(c.form, 3, 0, true)
 }
 
@@ -122,14 +158,9 @@ func (c *Changelog) setStyle() {
 	c.textView.SetStyle(styles)
 	c.form.SetStyle(styles)
 
-	activatedStyle := tcell.StyleDefault.
-		Background(styles.Global.FocusColor.Color()).
-		Foreground(styles.Global.BackgroundColor.Color())
-	for i := 0; i < c.form.GetButtonCount(); i++ {
-		c.form.GetButton(i).SetActivatedStyle(activatedStyle)
+	if c.lastWidth > 0 {
+		c.textView.SetText(c.buildText(c.lastWidth))
 	}
-
-	c.textView.SetText(c.buildText())
 }
 
 func (c *Changelog) Focus(delegate func(tview.Primitive)) {
@@ -138,6 +169,17 @@ func (c *Changelog) Focus(delegate func(tview.Primitive)) {
 
 func (c *Changelog) HasFocus() bool {
 	return c.form.HasFocus() || c.textView.HasFocus()
+}
+
+func (c *Changelog) Draw(screen tcell.Screen) {
+	// Compute inner text width from screen size: modal is 3/5 screen width, minus Flex border (2 cols).
+	screenW, _ := screen.Size()
+	w := screenW*3/5 - 2
+	if w > 0 && w != c.lastWidth {
+		c.lastWidth = w
+		c.textView.SetText(c.buildText(w))
+	}
+	c.Flex.Draw(screen)
 }
 
 func (c *Changelog) activateButton() {
@@ -200,7 +242,7 @@ func (c *Changelog) Render() {
 		AddItem(nil, 0, 1, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
-			AddItem(c.Flex, 0, 3, true).
+			AddItem(c, 0, 3, true).
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
@@ -262,7 +304,7 @@ func groupChanges(changes []string) []changeGroup {
 	return groups
 }
 
-func (c *Changelog) buildText() string {
+func (c *Changelog) buildText(width int) string {
 	styles := c.App.GetStyles()
 	bg := styles.Global.BackgroundColor.String()
 	fg := styles.Global.TextColor.String()
@@ -272,7 +314,6 @@ func (c *Changelog) buildText() string {
 	secondaryColor := styles.Global.SecondaryTextColor.String()
 	fixColor := styles.SQLEditor.NumberColor.String() // orange
 
-	// Category badge colors: [fg:bg]
 	categoryColors := map[string][2]string{
 		"New":         {bg, focusColor},
 		"Improvement": {bg, secondaryColor},
@@ -280,12 +321,12 @@ func (c *Changelog) buildText() string {
 		"Breaking":    {bg, "red"},
 	}
 
-	separator := fmt.Sprintf("[%s]%s[-:-:-]", dimColor, strings.Repeat("─", 60))
+	separator := fmt.Sprintf("[%s]%s[-:-:-]", dimColor, strings.Repeat("─", width))
 
 	var sb strings.Builder
 
 	title := "  What's new in vi-sql  "
-	pad := max((60-len(title))/2, 0)
+	pad := max((width-len(title))/2, 0)
 	fmt.Fprintf(&sb, "%s[%s:%s:b]%s[-:-:-]\n", strings.Repeat(" ", pad), bg, focusColor, title)
 	sb.WriteString(separator + "\n\n")
 
