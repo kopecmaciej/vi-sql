@@ -78,20 +78,20 @@ type MCPConfig struct {
 }
 
 type Config struct {
-	Version              string       `yaml:"version"`
-	Log                  LogConfig    `yaml:"log"`
-	Editor               EditorConfig `yaml:"editor"`
-	UI                   UIConfig     `yaml:"ui"`
-	MCP                  MCPConfig    `yaml:"mcp"`
-	ShowConnectionPage   bool         `yaml:"showConnectionPage"`
-	ShowOptionsPage      bool         `yaml:"-"`
-	CurrentConnection    string       `yaml:"currentConnection"`
-	Connections          []SQLConfig  `yaml:"connections"`
-	Styles               StylesConfig `yaml:"styles"`
-	EncryptionKeyPath    *string      `yaml:"encryptionKeyPath,omitempty"`
-	LastUpdateNotified   string       `yaml:"lastUpdateNotified,omitempty"`
-	JumpInto             string       `yaml:"-"`
-	ConfigPath           string       `yaml:"-"`
+	Version            string       `yaml:"version"`
+	Log                LogConfig    `yaml:"log"`
+	Editor             EditorConfig `yaml:"editor"`
+	UI                 UIConfig     `yaml:"ui"`
+	MCP                MCPConfig    `yaml:"mcp"`
+	ShowConnectionPage bool         `yaml:"showConnectionPage"`
+	ShowOptionsPage    bool         `yaml:"-"`
+	CurrentConnection  string       `yaml:"currentConnection"`
+	Connections        []SQLConfig  `yaml:"connections"`
+	Styles             StylesConfig `yaml:"styles"`
+	EncryptionKeyPath  *string      `yaml:"encryptionKeyPath,omitempty"`
+	LastUpdateNotified string       `yaml:"lastUpdateNotified,omitempty"`
+	JumpInto           string       `yaml:"-"`
+	ConfigPath         string       `yaml:"-"`
 }
 
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
@@ -122,8 +122,6 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 	return cfg, nil
 }
 
-// UpdateVersion sets the persisted version to the given value.
-// Called explicitly after changelog acknowledgment (or silently when no changelog is pending).
 func (c *Config) UpdateVersion(version string) error {
 	c.Version = version
 	return c.UpdateConfig()

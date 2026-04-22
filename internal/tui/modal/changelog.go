@@ -12,7 +12,6 @@ import (
 
 const ChangelogModalId = "Changelog"
 
-// ChangelogEntry describes changes introduced in a specific version.
 type ChangelogEntry struct {
 	Version     string
 	Breaking    bool
@@ -22,20 +21,17 @@ type ChangelogEntry struct {
 }
 
 // Changelog is a startup modal showing release notes.
-// Breaking entries show "Proceed" and "Quit" buttons; non-breaking show "Continue".
 type Changelog struct {
 	*core.BaseElement
-	*tview.Box
+	*core.Flex
 
-	textView *tview.TextView
-	form     *tview.Form
+	textView *core.TextView
+	form     *core.Form
 
 	entries     []ChangelogEntry
 	onProceed   func()
 	onQuit      func()
 	hasBreaking bool
-
-	lastContentWidth int
 }
 
 func NewChangelog(entries []ChangelogEntry) *Changelog {
@@ -47,22 +43,11 @@ func NewChangelog(entries []ChangelogEntry) *Changelog {
 		}
 	}
 
-	tv := tview.NewTextView().
-		SetDynamicColors(true).
-		SetScrollable(true).
-		SetWrap(true)
-
-	form := tview.NewForm().
-		SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor).
-		SetButtonTextColor(tview.Styles.PrimaryTextColor)
-	form.SetBorderPadding(0, 0, 0, 0)
-
 	c := &Changelog{
 		BaseElement: core.NewBaseElement(),
-		Box:         tview.NewBox(),
-		textView:    tv,
-		form:        form,
+		Flex:        core.NewFlex(),
+		textView:    core.NewTextView(),
+		form:        core.NewForm(),
 		entries:     entries,
 		hasBreaking: hasBreaking,
 	}
@@ -72,18 +57,32 @@ func NewChangelog(entries []ChangelogEntry) *Changelog {
 }
 
 func (c *Changelog) init() error {
-	c.setButtons()
+	c.setLayout()
 	c.setStyle()
 	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		if event.Message.Type == manager.StyleChanged {
 			c.setStyle()
-			c.lastContentWidth = 0 // force text rebuild on next Draw
 		}
 	})
 	return nil
 }
 
-func (c *Changelog) setButtons() {
+func (c *Changelog) setLayout() {
+	c.Flex.SetDirection(tview.FlexRow)
+	c.Flex.SetBorder(true)
+	c.Flex.SetTitle(" Release Notes ")
+
+	c.textView.SetDynamicColors(true).SetScrollable(true).SetWrap(true)
+
+	c.form.SetButtonsAlign(tview.AlignCenter)
+	c.form.SetBorderPadding(0, 0, 0, 0)
+	c.addButtons()
+
+	c.Flex.AddItem(c.textView, 0, 1, false)
+	c.Flex.AddItem(c.form, 3, 0, true)
+}
+
+func (c *Changelog) addButtons() {
 	if c.hasBreaking {
 		c.form.AddButton("Proceed", func() {
 			if c.onProceed != nil {
@@ -119,20 +118,9 @@ func (c *Changelog) setButtons() {
 func (c *Changelog) setStyle() {
 	styles := c.App.GetStyles()
 
-	c.Box.SetBorder(true)
-	c.Box.SetTitle(" Release Notes ")
-	c.Box.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	c.Box.SetBorderColor(styles.Global.BorderColor.Color())
-	c.Box.SetTitleColor(styles.Global.TitleColor.Color())
-
-	c.textView.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	c.textView.SetTextColor(styles.Global.TextColor.Color())
-
-	bg := styles.Others.ButtonsBackgroundColor.Color()
-	fg := styles.Others.ButtonsTextColor.Color()
-	c.form.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	c.form.SetButtonBackgroundColor(bg)
-	c.form.SetButtonTextColor(fg)
+	core.SetCommonStyle(c.Flex, styles)
+	c.textView.SetStyle(styles)
+	c.form.SetStyle(styles)
 
 	activatedStyle := tcell.StyleDefault.
 		Background(styles.Global.FocusColor.Color()).
@@ -140,48 +128,8 @@ func (c *Changelog) setStyle() {
 	for i := 0; i < c.form.GetButtonCount(); i++ {
 		c.form.GetButton(i).SetActivatedStyle(activatedStyle)
 	}
-}
 
-func (c *Changelog) Draw(screen tcell.Screen) {
-	screenW, screenH := screen.Size()
-
-	const marginV = 4
-	const buttonH = 3
-
-	modalW := screenW * 3 / 5
-	if modalW < 40 {
-		modalW = 40
-	}
-	if modalW > 120 {
-		modalW = 120
-	}
-	x := (screenW - modalW) / 2
-	contentW := modalW - 2
-
-	if contentW != c.lastContentWidth {
-		c.textView.SetText(c.buildText(contentW))
-		c.lastContentWidth = contentW
-	}
-
-	contentH := screenH - 2*marginV - buttonH - 2
-	if contentH < 3 {
-		contentH = 3
-	}
-
-	modalH := contentH + buttonH + 2
-	y := (screenH - modalH) / 2
-	if y < marginV {
-		y = marginV
-	}
-
-	c.Box.SetRect(x, y, modalW, modalH)
-	c.Box.DrawForSubclass(screen, c)
-
-	c.textView.SetRect(x+1, y+1, contentW, contentH)
-	c.textView.Draw(screen)
-
-	c.form.SetRect(x+1, y+1+contentH, contentW, buttonH)
-	c.form.Draw(screen)
+	c.textView.SetText(c.buildText())
 }
 
 func (c *Changelog) Focus(delegate func(tview.Primitive)) {
@@ -215,7 +163,7 @@ func (c *Changelog) activateButton() {
 }
 
 func (c *Changelog) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-	return c.Box.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	return c.Flex.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 		k := c.App.GetKeys()
 		switch {
 		case event.Key() == tcell.KeyEnter:
@@ -235,7 +183,7 @@ func (c *Changelog) InputHandler() func(event *tcell.EventKey, setFocus func(p t
 }
 
 func (c *Changelog) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
-	return c.Box.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
+	return c.Flex.WrapMouseHandler(func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
 		if consumed, capture = c.form.MouseHandler()(action, event, setFocus); consumed {
 			return
 		}
@@ -248,7 +196,16 @@ func (c *Changelog) SetOnProceed(fn func()) { c.onProceed = fn }
 func (c *Changelog) SetOnQuit(fn func())    { c.onQuit = fn }
 
 func (c *Changelog) Render() {
-	c.App.Pages.AddPage(ChangelogModalId, c, true, true)
+	wrapper := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(c.Flex, 0, 3, true).
+			AddItem(nil, 0, 1, false), 0, 3, true).
+		AddItem(nil, 0, 1, false)
+
+	c.App.Pages.AddPage(ChangelogModalId, wrapper, true, true)
+	c.App.SetFocusOnly(c)
 }
 
 // changeGroup holds a named set of changelog items that share the same category.
@@ -305,7 +262,7 @@ func groupChanges(changes []string) []changeGroup {
 	return groups
 }
 
-func (c *Changelog) buildText(contentWidth int) string {
+func (c *Changelog) buildText() string {
 	styles := c.App.GetStyles()
 	bg := styles.Global.BackgroundColor.String()
 	fg := styles.Global.TextColor.String()
@@ -323,16 +280,12 @@ func (c *Changelog) buildText(contentWidth int) string {
 		"Breaking":    {bg, "red"},
 	}
 
-	separator := fmt.Sprintf("[%s]%s[-:-:-]", dimColor, strings.Repeat("─", contentWidth))
+	separator := fmt.Sprintf("[%s]%s[-:-:-]", dimColor, strings.Repeat("─", 60))
 
 	var sb strings.Builder
 
-	// Centered intro header with badge background
 	title := "  What's new in vi-sql  "
-	pad := (contentWidth - len(title)) / 2
-	if pad < 0 {
-		pad = 0
-	}
+	pad := max((60-len(title))/2, 0)
 	fmt.Fprintf(&sb, "%s[%s:%s:b]%s[-:-:-]\n", strings.Repeat(" ", pad), bg, focusColor, title)
 	sb.WriteString(separator + "\n\n")
 
@@ -341,7 +294,6 @@ func (c *Changelog) buildText(contentWidth int) string {
 			sb.WriteString("\n" + separator + "\n\n")
 		}
 
-		// Version badge inline with title
 		if e.Breaking {
 			fmt.Fprintf(&sb, "[%s:red:b]  v%s  [-:-:-]  [%s::b]%s[::-]  [red]⚠ breaking[-]\n\n",
 				bg, e.Version, fg, e.Title)
