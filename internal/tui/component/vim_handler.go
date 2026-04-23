@@ -94,10 +94,28 @@ func synth(key tcell.Key) *tcell.EventKey {
 func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primitive)) bool {
 	ta := v.editor.TextArea
 
+	if ev.Key() == tcell.KeyCtrlR {
+		ta.InputHandler()(synth(tcell.KeyCtrlY), setFocus)
+		return true
+	}
+
 	if ev.Key() != tcell.KeyRune {
 		return false
 	}
 	ch := ev.Rune()
+
+	// Resolve pending "r" (replace char under cursor).
+	if v.pending == "r" {
+		v.pending = ""
+		after := ta.GetTextAfterCursor()
+		if len(after) > 0 && after[0] != '\n' {
+			_, oldSize := utf8.DecodeRuneInString(after)
+			pos := ta.GetCursorByteOffset()
+			ta.Replace(pos, pos+oldSize, string(ch))
+			ta.InputHandler()(synth(tcell.KeyLeft), setFocus)
+		}
+		return true
+	}
 
 	// Resolve pending "d" operator.
 	if v.pending == "d" {
@@ -168,6 +186,10 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		ta.InputHandler()(synth(tcell.KeyUp), setFocus)
 		v.enterInsert()
 
+	case 'r':
+		v.pending = "r"
+		return true
+
 	case 'd':
 		v.pending = "d"
 		return true
@@ -184,6 +206,9 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 				ta.Replace(pos, pos, text)
 			}
 		}
+
+	case 'u':
+		ta.InputHandler()(synth(tcell.KeyCtrlZ), setFocus)
 
 	case 'v':
 		v.enterVisual()
@@ -264,7 +289,7 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		}
 		v.enterNormal()
 	default:
-		return false
+		return true // consume all unrecognised runes — Visual mode doesn't type
 	}
 	return true
 }
