@@ -69,7 +69,8 @@ type StylesConfig struct {
 }
 
 type UIConfig struct {
-	SchemaPanelWidth int `yaml:"schemaPanelWidth,omitempty"`
+	SchemaPanelWidth int  `yaml:"schemaPanelWidth,omitempty"`
+	VimMode          bool `yaml:"vimMode,omitempty"`
 }
 
 type MCPConfig struct {
@@ -142,6 +143,7 @@ func (c *Config) loadDefaults(version string) {
 	}
 	c.UI = UIConfig{
 		SchemaPanelWidth: 30,
+		VimMode:          false,
 	}
 	c.Styles = StylesConfig{
 		BetterSymbols: true,

@@ -29,6 +29,7 @@ var (
 	listConnections   bool
 	encryptionKeyPath string
 	jumpInto          string
+	vimMode           bool
 	rootCmd           = &cobra.Command{
 		Use:   "vi-sql",
 		Short: "SQL TUI client",
@@ -56,6 +57,7 @@ func init() {
 	rootCmd.Flags().StringVar(&encryptionKeyPath, "key-path", "", "Path to the encryption key file")
 	rootCmd.Flags().Bool("gen-key", false, "Generate valid encryption key")
 	rootCmd.Flags().StringVarP(&jumpInto, "jump", "j", "", "Jump directly to schema/table (format: schema-name/table-name)")
+	rootCmd.Flags().BoolVar(&vimMode, "vim-mode", false, "Enable vim mode in SQL editor")
 }
 
 func runApp(cmd *cobra.Command, args []string) {
@@ -134,6 +136,8 @@ func runApp(cmd *cobra.Command, args []string) {
 			} else {
 				fatalf("jump value cannot be empty")
 			}
+		case "vim-mode":
+			cfg.UI.VimMode = vimMode
 		}
 	})
 
