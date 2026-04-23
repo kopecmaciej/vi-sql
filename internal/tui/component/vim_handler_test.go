@@ -12,7 +12,7 @@ type testTA struct {
 	cursor int // byte offset
 }
 
-func (ta *testTA) GetText() string         { return ta.text }
+func (ta *testTA) GetText() string          { return ta.text }
 func (ta *testTA) GetCursorByteOffset() int { return ta.cursor }
 func (ta *testTA) GetTextAfterCursor() string {
 	if ta.cursor >= len(ta.text) {
