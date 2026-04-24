@@ -3,7 +3,7 @@ SVC_NAME := vi-sql
 REPOSITORY := github.com/kopecmaciej/vi-sql
 VERSION ?= $(shell git describe --tags --always --dirty)
 
-.PHONY: build run
+.PHONY: build run test-wezterm test-wezterm-slow
 
 all: tidy build run
 
@@ -37,6 +37,12 @@ test-tui:
 
 test-all:
 	go test -race -tags integration -timeout 120s ./...
+
+test-wezterm: build
+	go test -tags=wezterm -count=1 -v -timeout 120s ./tests/wezterm/scenarios/
+
+test-wezterm-slow: build
+	VI_SQL_WEZTERM_SLOW=1 go test -tags=wezterm -count=1 -v -timeout 300s ./tests/wezterm/scenarios/
 
 debug:
 	if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then \

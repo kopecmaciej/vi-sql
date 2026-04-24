@@ -14,8 +14,7 @@ import (
 //go:embed icons.yaml
 var defaultIconsYAML []byte
 
-// IconsConfig holds both nerd-font and ASCII icon sets. It is the top-level
-// structure of icons.yaml.
+// IconsConfig holds both nerd-font and ASCII icon sets
 type IconsConfig struct {
 	Nerd  IconStyle `yaml:"nerd"`
 	Ascii IconStyle `yaml:"ascii"`
@@ -108,13 +107,10 @@ func (s *IconStyle) spacing() string {
 	return " "
 }
 
-// Icon returns the glyph with appropriate trailing space — two spaces for nerd
-// font glyphs (which render double-wide) and one for ASCII.
 func (s *IconStyle) Icon(icon Style) string {
 	return string(icon) + s.spacing()
 }
 
-// IconWithColor wraps the glyph in a tview color tag with appropriate spacing.
 func (s *IconStyle) IconWithColor(icon Style, color Style) string {
 	return fmt.Sprintf("[%s]%s[-:-:-]%s", color.String(), icon.String(), s.spacing())
 }
