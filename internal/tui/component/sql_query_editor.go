@@ -87,13 +87,14 @@ func (e *SQLQueryEditor) refreshTitle() {
 		e.TextArea.SetTitle(" SQL Editor ")
 		return
 	}
+	s := e.style
 	switch e.vim.mode {
 	case vimNormal:
-		e.TextArea.SetTitle(" SQL Editor | NORMAL ")
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]NORMAL[-] ", s.KeywordColor))
 	case vimVisual:
-		e.TextArea.SetTitle(" SQL Editor | VISUAL ")
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]VISUAL[-] ", s.NumberColor))
 	default:
-		e.TextArea.SetTitle(" SQL Editor | INSERT ")
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]INSERT[-] ", s.OperatorColor))
 	}
 }
 
@@ -376,11 +377,6 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 			if e.onExecute != nil {
 				sql := strings.TrimRight(strings.TrimSpace(e.GetText()), ";")
 				if sql != "" {
-					if e.history != nil {
-						if err := e.history.SaveToHistory(sql); err != nil {
-							log.Error().Err(err).Msg("Failed to save to history")
-						}
-					}
 					e.onExecute(sql)
 				}
 			}
@@ -442,6 +438,16 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		}
 		e.TextArea.InputHandler()(event, setFocus)
 	})
+}
+
+// SaveQueryToHistory persists sql to the history file after a successful execution.
+// No-op if history is not initialized.
+func (e *SQLQueryEditor) SaveQueryToHistory(sql string) {
+	if e.history != nil {
+		if err := e.history.SaveToHistory(sql); err != nil {
+			log.Error().Err(err).Msg("Failed to save to history")
+		}
+	}
 }
 
 // OpenHistory renders the SQL history modal.

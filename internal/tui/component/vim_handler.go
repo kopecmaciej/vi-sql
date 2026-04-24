@@ -114,6 +114,9 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 	if ev.Key() != tcell.KeyRune {
 		return false
 	}
+	if ev.Modifiers() != tcell.ModNone {
+		return false
+	}
 	ch := ev.Rune()
 
 	// Resolve pending operator + motion.

@@ -317,7 +317,7 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Resize editor",
 		},
 		OpenHistory: Key{
-			Keys:        []string{"Ctrl+r"},
+			Keys:        []string{"Ctrl+m"},
 			Description: "Query history",
 		},
 		TermEditor: Key{

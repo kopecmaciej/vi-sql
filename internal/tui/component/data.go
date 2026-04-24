@@ -229,6 +229,7 @@ func (c *Data) init() error {
 					return
 				}
 				execTime := time.Since(start)
+				c.sqlQueryEditor.SaveQueryToHistory(sql)
 				sqlState.LastQuery = query
 				if val, ok := database.ExtractLimitValue(sql); ok {
 					sqlState.UserLimit = val
@@ -945,6 +946,7 @@ func (c *Data) executeStatement(ctx context.Context, sql string) {
 		return
 	}
 	execTime := time.Since(start)
+	c.sqlQueryEditor.SaveQueryToHistory(sql)
 	c.App.GetManager().Broadcast(manager.NewQueryExecutedMsg(manager.QueryResult{
 		Query:    sql,
 		Affected: affected,
@@ -1353,6 +1355,7 @@ func (c *Data) runExplain(ctx context.Context, sql string) {
 		})
 		return
 	}
+	c.sqlQueryEditor.SaveQueryToHistory(sql)
 	c.App.QueueUpdateDraw(func() {
 		c.showExplainViewer(ctx, bare, result, userWantsAnalyze)
 	})
