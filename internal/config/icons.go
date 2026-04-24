@@ -31,6 +31,10 @@ type SymbolsStyle struct {
 	TypeText      Style `yaml:"typeText"`
 	TypeBinary    Style `yaml:"typeBinary"`
 	TypeDefault   Style `yaml:"typeDefault"`
+	HealthUp      Style `yaml:"healthUp"`
+	HealthDown    Style `yaml:"healthDown"`
+	VimMode       Style `yaml:"vimMode"`
+	MCP           Style `yaml:"mcp"`
 }
 
 // TypeSymbol returns the icon for a given SQL data type.
@@ -81,6 +85,10 @@ func asciiIcons() *SymbolsStyle {
 		TypeText:      "T",
 		TypeBinary:    "⬡",
 		TypeDefault:   "~",
+		HealthUp:      "▲",
+		HealthDown:    "▼",
+		VimMode:       "V",
+		MCP:           "M",
 	}
 }
 
@@ -100,6 +108,10 @@ func nerdIcons() *SymbolsStyle {
 		TypeText:      "",
 		TypeBinary:    "",
 		TypeDefault:   "",
+		HealthUp:      "▲",
+		HealthDown:    "▼",
+		VimMode:       "", // nf-dev-vim
+		MCP:           "", // nf-fa-plug
 	}
 }
 
@@ -146,6 +158,8 @@ func LoadIcons(useBetterSymbols bool) (*SymbolsStyle, error) {
 		icons.TypeText = ascii.TypeText
 		icons.TypeBinary = ascii.TypeBinary
 		icons.TypeDefault = ascii.TypeDefault
+		icons.VimMode = ascii.VimMode
+		icons.MCP = ascii.MCP
 	}
 
 	return icons, nil

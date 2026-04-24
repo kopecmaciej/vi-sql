@@ -25,6 +25,7 @@ var itemDescriptions = map[string]string{
 	"Log Level":       "Controls how verbose the log output is.\n\n'debug' logs everything; 'info' is suitable for normal use; 'error' logs only failures.\n\nChange takes effect on restart.",
 	"Nerd Font icons": "Enable Nerd Font symbols for richer icons in the schema tree and UI.\n\nRequires a Nerd Font to be installed and selected in your terminal emulator (e.g. JetBrainsMono Nerd Font).",
 	"Connection page": "Show the connection selection page on every startup.\n\nWhen disabled, vi-sql connects to the last-used connection automatically.",
+	"Vim mode":        "Enable Vim keybindings in the SQL editor.\n\nSupports Normal, Insert, and Visual modes with motions (hjkl, w/b/e, f/t, gg/G, {}), operators (d, c, y, r, s), and visual selection.\n\nPress Escape to enter Normal mode; i/a/o/I/A/O to return to Insert.",
 	"MCP enabled":     "Start an HTTP MCP server when vi-sql launches.\n\n[::b]Claude Code[::-]\nclaude mcp add --transport http vi-sql http://localhost:9741/mcp\n\n[::b]Other MCP-compatible tools[::-]\n{\n    \"mcpServers\": {\n      \"vi-sql\": {\n        \"url\": \"http://127.0.0.1:9741/mcp\"\n      }\n    }\n  }",
 	"MCP port":        "TCP port the MCP server listens on.\n\nDefault: 9741. Change this if the port is already in use.",
 	"Allow execute":   "Allow the MCP client to execute SQL queries directly against the database.\n\nWhen disabled, the AI can only open queries in a vi-sql tab for you to review and run manually.\n\n[::b]Recommended: leave off unless you trust the AI to query without confirmation.[::-]",
@@ -256,6 +257,7 @@ func (w *Options) buildGroups() {
 				tview.NewButtonGroup("Log Level", logLevels, getLogLevelIndex(cfg.Log.Level, logLevels), nil),
 				tview.NewCheckbox().SetLabel("Nerd Font icons").SetChecked(cfg.Styles.BetterSymbols),
 				tview.NewCheckbox().SetLabel("Connection page").SetChecked(cfg.ShowConnectionPage),
+				tview.NewCheckbox().SetLabel("Vim mode").SetChecked(cfg.UI.VimMode),
 			}
 		}),
 		core.NewFormGroup(true, func() []tview.FormItem {
@@ -322,6 +324,7 @@ func (w *Options) saveConfig() error {
 	c.Log.Path = logFile
 	c.Log.Level = logLevel
 	c.ShowConnectionPage = w.form.GetFormItemByLabel("Connection page").(*tview.Checkbox).IsChecked()
+	c.UI.VimMode = w.form.GetFormItemByLabel("Vim mode").(*tview.Checkbox).IsChecked()
 
 	betterSymbols := w.form.GetFormItemByLabel("Nerd Font icons").(*tview.Checkbox).IsChecked()
 	if betterSymbols != c.Styles.BetterSymbols {

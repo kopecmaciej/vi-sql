@@ -11,14 +11,14 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
-	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
 	TopBarId = "TopBar"
 
-	connInfoWidth     = 26
-	mcpIndicatorWidth = 7
+	connInfoWidth     = 8
+	mcpIndicatorWidth = 4
+	vimIndicatorWidth = 4
 	pingInterval      = 30 * time.Second
 	pingTimeout       = 5 * time.Second
 )
@@ -39,6 +39,7 @@ type TopBar struct {
 	tabBar      *widget.TabBar
 	connText    *tview.TextView
 	mcpText     *tview.TextView
+	vimText     *tview.TextView
 	health      healthState
 	stopMonitor context.CancelFunc
 }
@@ -61,13 +62,18 @@ func (t *TopBar) init() error {
 
 	t.mcpText = tview.NewTextView()
 	t.mcpText.SetDynamicColors(true)
-	t.mcpText.SetTextAlign(tview.AlignRight)
+	t.mcpText.SetTextAlign(tview.AlignCenter)
+
+	t.vimText = tview.NewTextView()
+	t.vimText.SetDynamicColors(true)
+	t.vimText.SetTextAlign(tview.AlignCenter)
 
 	t.Flex.SetDirection(tview.FlexColumn)
 	t.Flex.SetBorder(true)
 	t.setStyle()
 
 	t.Flex.AddItem(t.tabBar, 0, 1, false)
+	t.Flex.AddItem(t.vimText, vimIndicatorWidth, 0, false)
 	t.Flex.AddItem(t.mcpText, mcpIndicatorWidth, 0, false)
 	t.Flex.AddItem(t.connText, connInfoWidth, 0, false)
 
@@ -136,50 +142,36 @@ func (t *TopBar) setStyle() {
 	bg := styles.Global.BackgroundColor.Color()
 	t.connText.SetBackgroundColor(bg)
 	t.mcpText.SetBackgroundColor(bg)
+	t.vimText.SetBackgroundColor(bg)
 }
 
 func (t *TopBar) updateConnText() {
-	styles := t.App.GetStyles()
-	conn := t.App.GetConfig().GetCurrentConnection()
-	if conn == nil {
-		t.connText.SetText(fmt.Sprintf("[%s]not connected[-] ", styles.Global.TitleColor.String()))
-		return
-	}
-
-	host := conn.Host
-	port := conn.Port
-
-	if (host == "" || port == 0) && conn.DSN != "" {
-		if parsed, err := util.ParsePostgresDSN(conn.GetDSN()); err == nil {
-			host = parsed.Host
-			var p int
-			if n, _ := fmt.Sscanf(parsed.Port, "%d", &p); n == 1 {
-				port = p
-			}
-		}
-	}
-
 	const (
 		colorGreen = "#4ADE80"
 		colorRed   = "#F87171"
 		colorGray  = "#64748B"
 	)
 
-	dot := fmt.Sprintf("[%s]●[-]", colorGray)
+	sym := t.App.GetStyles().Symbols
+
+	if t.App.GetConfig().GetCurrentConnection() == nil {
+		t.connText.SetText(fmt.Sprintf("[%s]%s ----[-] ", colorRed, string(sym.HealthDown)))
+		return
+	}
+
+	indicator := fmt.Sprintf("[%s]%s[-]", colorGray, string(sym.HealthDown))
 	extra := ""
 
 	if t.health.checked {
 		if t.health.connected {
-			dot = fmt.Sprintf("[%s]●[-]", colorGreen)
+			indicator = fmt.Sprintf("[%s]%s[-]", colorGreen, string(sym.HealthUp))
 			extra = fmt.Sprintf(" [%s]%s[-]", colorGray, formatPingLatency(t.health.latency))
 		} else {
-			dot = fmt.Sprintf("[%s]●[-]", colorRed)
-			extra = fmt.Sprintf(" [%s]Ctrl+O[-]", colorRed)
+			indicator = fmt.Sprintf("[%s]%s[-]", colorRed, string(sym.HealthDown))
 		}
 	}
 
-	valColor := styles.Global.TitleColor.String()
-	t.connText.SetText(fmt.Sprintf("%s [%s]%s:%d[-]%s ", dot, valColor, host, port, extra))
+	t.connText.SetText(fmt.Sprintf("%s%s ", indicator, extra))
 }
 
 func (t *TopBar) updateMCPText() {
@@ -187,19 +179,31 @@ func (t *TopBar) updateMCPText() {
 		colorGreen = "#4ADE80"
 		colorGray  = "#64748B"
 	)
+	sym := t.App.GetStyles().Symbols
 	if t.App.IsMCPEnabled() {
 		t.mcpText.SetTextColor(tcell.GetColor(colorGreen))
-		t.mcpText.SetText(" MCP ")
 	} else {
 		t.mcpText.SetTextColor(tcell.GetColor(colorGray))
-		t.mcpText.SetText("       ")
 	}
+	t.mcpText.SetText(fmt.Sprintf(" %s ", string(sym.MCP)))
+}
+
+func (t *TopBar) updateVimText() {
+	const colorGreen = "#4ADE80"
+	sym := t.App.GetStyles().Symbols
+	if !t.App.GetConfig().UI.VimMode {
+		t.vimText.SetText("    ")
+		return
+	}
+	t.vimText.SetTextColor(tcell.GetColor(colorGreen))
+	t.vimText.SetText(fmt.Sprintf(" %s ", string(sym.VimMode)))
 }
 
 // Render updates the connection info text and renders the tab bar.
 func (t *TopBar) Render() {
 	t.updateConnText()
 	t.updateMCPText()
+	t.updateVimText()
 	t.tabBar.Render()
 }
 
@@ -211,6 +215,7 @@ func (t *TopBar) handleEvents() {
 				t.setStyle()
 				t.updateConnText()
 				t.updateMCPText()
+				t.updateVimText()
 			})
 		case manager.MCPStateChanged:
 			t.App.QueueUpdateDraw(func() {

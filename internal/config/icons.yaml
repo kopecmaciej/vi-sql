@@ -15,3 +15,7 @@ typeUUID: ""
 typeText: ""
 typeBinary: ""
 typeDefault: ""
+healthUp: ""
+healthDown: ""
+vimMode: "" # nf-custom-vim
+mcp: "" # nf-fa-plug
