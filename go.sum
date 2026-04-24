@@ -84,8 +84,8 @@ github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.17.4 h1:Ej5ixsIri7BrIjBkRZLTo6ghwrEtHFk7ijlczPW4fZ4=
 github.com/klauspost/compress v1.17.4/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
-github.com/kopecmaciej/tview v0.1.18 h1:nUnNYM59YJcU+l1u6eE0tmCboJOsnGqT3ugkqkgjS9Q=
-github.com/kopecmaciej/tview v0.1.18/go.mod h1:Yt+Gb0ZV5l0SBn6l2DWI1Ibjhdhhd0zXCytOUNEdvcE=
+github.com/kopecmaciej/tview v0.1.19 h1:epa61vtwiGHamldUK+OsKL7w3ctkDTd+ZzrjfWy0LRE=
+github.com/kopecmaciej/tview v0.1.19/go.mod h1:Yt+Gb0ZV5l0SBn6l2DWI1Ibjhdhhd0zXCytOUNEdvcE=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=

@@ -27,7 +27,7 @@ type SQLQueryEditor struct {
 	*core.BaseElement
 	*core.TextArea
 
-	vim            *vimHandler // nil when vim mode is disabled
+	vim            *vimHandler
 	style          *config.SQLEditorStyle
 	schemas        []database.Schema
 	columns        []string
