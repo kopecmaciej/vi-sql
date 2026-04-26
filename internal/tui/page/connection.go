@@ -2,6 +2,7 @@ package page
 
 import (
 	"fmt"
+	"sort"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -205,6 +207,27 @@ func (c *Connection) Render() {
 	}
 }
 
+// sortedConnections returns a copy of connections sorted by LastUsed descending
+// (most recently used first; never-used entries go to the bottom).
+func sortedConnections(conns []config.SQLConfig) []config.SQLConfig {
+	sorted := make([]config.SQLConfig, len(conns))
+	copy(sorted, conns)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		ti, tj := sorted[i].LastUsed, sorted[j].LastUsed
+		if ti.IsZero() && tj.IsZero() {
+			return false
+		}
+		if ti.IsZero() {
+			return false
+		}
+		if tj.IsZero() {
+			return true
+		}
+		return ti.After(tj)
+	})
+	return sorted
+}
+
 func (c *Connection) computeContentWidth() int {
 	runes := utf8.RuneCountInString
 	max := func(a, b int) int {
@@ -221,7 +244,7 @@ func (c *Connection) computeContentWidth() int {
 		colWidths[i] = runes(h) + 2
 	}
 
-	conns := c.App.GetConfig().Connections
+	conns := sortedConnections(c.App.GetConfig().Connections)
 	for i, conn := range conns {
 		hostPort := "—"
 		if conn.Host != "" {
@@ -318,7 +341,7 @@ func (c *Connection) renderTable() {
 			SetAlign(tview.AlignCenter))
 	}
 
-	for i, conn := range c.App.GetConfig().Connections {
+	for i, conn := range sortedConnections(c.App.GetConfig().Connections) {
 		hostPort := "—"
 		if conn.Host != "" {
 			hostPort = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
@@ -424,8 +447,17 @@ func (c *Connection) updatePreview(row int) {
 		c.preview.Clear()
 		return
 	}
-	conn, err := c.App.GetConfig().GetConnectionByName(ref.(string))
-	if err != nil || conn == nil {
+	// Preview uses the raw stored connection (not the decrypted variant from
+	// GetConnectionByName) so the encryption-state check below reads the value
+	// as it actually sits on disk.
+	var conn *config.SQLConfig
+	for i := range c.App.GetConfig().Connections {
+		if c.App.GetConfig().Connections[i].Name == ref.(string) {
+			conn = &c.App.GetConfig().Connections[i]
+			break
+		}
+	}
+	if conn == nil {
 		c.preview.SetTitle("")
 		c.preview.Clear()
 		return
@@ -475,4 +507,9 @@ func (c *Connection) updatePreview(row int) {
 	c.preview.SetCell(2, 1, value(ssl))
 	c.preview.SetCell(3, 0, label("Timeout"))
 	c.preview.SetCell(3, 1, value(timeout))
+
+	if conn.Password != "" && !util.IsEncrypted(conn.Password) {
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorRed))
+		c.preview.SetCell(4, 1, tview.NewTableCell("[red]password stored unencrypted[-]").SetExpansion(1))
+	}
 }

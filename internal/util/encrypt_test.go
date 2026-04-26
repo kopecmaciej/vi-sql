@@ -95,3 +95,17 @@ func TestDecryptTooShortCiphertextFails(t *testing.T) {
 	_, err := DecryptPassword("aabb", validHexKey)
 	assert.Error(t, err)
 }
+
+func TestEncryptedValueHasPrefix(t *testing.T) {
+	enc, err := EncryptPassword("secret", validHexKey)
+	require.NoError(t, err)
+	assert.True(t, IsEncrypted(enc))
+}
+
+func TestIsEncrypted(t *testing.T) {
+	assert.True(t, IsEncrypted("enc:deadbeef"))
+	assert.False(t, IsEncrypted("plaintext"))
+	assert.False(t, IsEncrypted(""))
+	assert.False(t, IsEncrypted("enc")) // no colon
+	assert.True(t, IsEncrypted("enc:")) // prefix only — invalid ciphertext but still detected
+}

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 type EncryptionError struct {
@@ -26,7 +27,13 @@ func (e *EncryptionError) Unwrap() error {
 const (
 	EncryptionKeyEnv = "VI_SQL_SECRET_KEY"
 	KeyLength        = 32
+	EncPrefix        = "enc:"
 )
+
+// IsEncrypted reports whether s is a value produced by EncryptPassword.
+func IsEncrypted(s string) bool {
+	return strings.HasPrefix(s, EncPrefix)
+}
 
 func GenerateEncryptionKey() (string, error) {
 	key := make([]byte, KeyLength)
@@ -77,13 +84,14 @@ func EncryptPassword(password string, hexKey string) (string, error) {
 		return "", &EncryptionError{Operation: "nonce generation", Err: err}
 	}
 	ciphertext := gcm.Seal(nonce, nonce, []byte(password), nil)
-	return hex.EncodeToString(ciphertext), nil
+	return EncPrefix + hex.EncodeToString(ciphertext), nil
 }
 
 func DecryptPassword(encryptedHex string, hexKey string) (string, error) {
 	if encryptedHex == "" {
 		return "", nil
 	}
+	encryptedHex = strings.TrimPrefix(encryptedHex, EncPrefix)
 	ciphertext, err := hex.DecodeString(encryptedHex)
 	if err != nil {
 		return "", &EncryptionError{Operation: "decode encrypted password", Err: err}

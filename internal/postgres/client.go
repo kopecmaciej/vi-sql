@@ -26,10 +26,17 @@ func (c *Client) Connect() error {
 	defer cancel()
 
 	dsn := c.Config.GetDSN()
-	if c.Config.Password != "" && config.EncryptionKey != "" {
-		password, err := util.DecryptPassword(c.Config.Password, config.EncryptionKey)
-		if err != nil {
-			return err
+	if c.Config.Password != "" && c.Config.Host != "" {
+		password := c.Config.Password
+		if util.IsEncrypted(password) {
+			if config.EncryptionKey == "" {
+				return fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
+			}
+			decrypted, err := util.DecryptPassword(password, config.EncryptionKey)
+			if err != nil {
+				return err
+			}
+			password = decrypted
 		}
 		sslMode := c.Config.SSLMode
 		if sslMode == "" {
