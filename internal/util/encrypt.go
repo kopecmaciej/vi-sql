@@ -25,9 +25,8 @@ func (e *EncryptionError) Unwrap() error {
 }
 
 const (
-	EncryptionKeyEnv = "VI_SQL_SECRET_KEY"
-	KeyLength        = 32
-	EncPrefix        = "enc:"
+	KeyLength = 32
+	EncPrefix = "enc:"
 )
 
 // IsEncrypted reports whether s is a value produced by EncryptPassword.
@@ -57,10 +56,6 @@ func PrintEncryptionKeyInstructions() {
 	fmt.Println("- Set it as an environment variable: VI_SQL_SECRET_KEY")
 	fmt.Println("- Save it to a file and reference the path in the config file")
 	fmt.Println("  or use the CLI option: vi-sql --key-path=/path/to/key")
-}
-
-func GetEncryptionKey() string {
-	return os.Getenv(EncryptionKeyEnv)
 }
 
 func EncryptPassword(password string, hexKey string) (string, error) {

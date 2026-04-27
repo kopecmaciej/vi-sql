@@ -229,7 +229,37 @@ func (a *App) Render() {
 		return
 	}
 	a.updateConfigVersion()
-	a.continueStartup()
+	a.gateOnMasterPassword(a.continueStartup)
+}
+
+// gateOnMasterPassword shows the master-password modal (setup or unlock,
+// depending on whether a wrapped key already exists) when the configured
+// security method is "master" and the data key has not been loaded yet.
+// Other methods proceed straight through.
+func (a *App) gateOnMasterPassword(next func()) {
+	cfg := a.App.GetConfig()
+	if cfg.Security.Method != config.SecurityMethodMaster || config.EncryptionKey != "" {
+		next()
+		return
+	}
+
+	mode := modal.MasterModeUnlock
+	if !cfg.IsMasterConfigured() {
+		mode = modal.MasterModeSetup
+	}
+	m := modal.NewMasterPasswordModal(mode)
+	if err := m.Init(a.App); err != nil {
+		modal.ShowError(a.Pages, "Failed to init master password modal", err)
+		return
+	}
+	m.SetOnDone(func(err error) {
+		if err != nil {
+			a.Stop()
+			return
+		}
+		next()
+	})
+	m.Render()
 }
 
 func (a *App) continueStartup() {

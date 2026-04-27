@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	sec "github.com/kopecmaciej/vi-sql/internal/security"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
@@ -18,10 +17,6 @@ const (
 	ConfigFile = "config.yaml"
 	LogPath    = "/tmp/vi-sql.log"
 	FileMode   = 0600
-)
-
-var (
-	EncryptionKey = ""
 )
 
 type SQLOptions struct {
@@ -79,25 +74,6 @@ type MCPConfig struct {
 	Port         int  `yaml:"port"`
 	AllowExecute bool `yaml:"allowExecute"`
 	AllowWrite   bool `yaml:"allowWrite"`
-}
-
-// SecurityMethod constants for SecurityConfig.Method.
-const (
-	SecurityMethodKeyring = "keyring"
-	SecurityMethodMaster  = "master"
-	SecurityMethodEnv     = "env"
-	SecurityMethodOff     = "off"
-)
-
-type SecurityConfig struct {
-	Method           string `yaml:"method"`                     // "keyring" | "master" | "env" | "off"
-	KeyringService   string `yaml:"keyringService,omitempty"`   // default "vi-sql"
-	KeyringAccount   string `yaml:"keyringAccount,omitempty"`   // default "encryption-key"
-	MasterSalt       string `yaml:"masterSalt,omitempty"`       // hex-encoded Argon2id salt
-	MasterMemory     uint32 `yaml:"masterMemory,omitempty"`     // KiB
-	MasterIter       uint32 `yaml:"masterIterations,omitempty"` // KDF iterations
-	MasterParallel   uint8  `yaml:"masterParallelism,omitempty"`
-	MasterWrappedKey string `yaml:"masterWrappedKey,omitempty"` // EncryptionKey wrapped by KEK derived from passphrase
 }
 
 type Config struct {
@@ -394,6 +370,10 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 	for _, connection := range c.Connections {
 		if connection.Name == name {
 			conn := connection
+			// TODO: when the user has switched encryption methods (e.g. keyring → master),
+			// this decrypt fails because EncryptionKey is the new method's data key but
+			// conn.Password was sealed with the previous method's key. The connection
+			// has no record of which method produced its ciphertext. See SecurityConfig.
 			if util.IsEncrypted(conn.Password) && EncryptionKey != "" {
 				decryptedPass, err := util.DecryptPassword(conn.Password, EncryptionKey)
 				if err != nil {
@@ -408,119 +388,18 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 	return nil, fmt.Errorf("connection '%s' not found", name)
 }
 
-func (c *Config) LoadEncryptionKey() error {
-	// --key-path flag takes highest priority.
-	if c.EncryptionKeyPath != nil {
-		key, err := os.ReadFile(*c.EncryptionKeyPath)
-		if err != nil {
-			return fmt.Errorf("failed to load encryption key: %s", err)
-		}
-		EncryptionKey = strings.TrimSpace(string(key))
-		return nil
+// IsPasswordUnreadable reports whether the stored password is encrypted but
+// cannot be decrypted with the currently loaded EncryptionKey — typically
+// because the user switched encryption methods after the connection was saved.
+func (m *SQLConfig) IsPasswordUnreadable() bool {
+	if !util.IsEncrypted(m.Password) {
+		return false
 	}
-
-	method := c.Security.Method
-	if method == "" {
-		method = SecurityMethodKeyring
+	if EncryptionKey == "" {
+		return true
 	}
-
-	// VI_SQL_SECRET_KEY wins when method is "env" or when used as an override.
-	if envKey := util.GetEncryptionKey(); envKey != "" {
-		if method != SecurityMethodEnv {
-			log.Warn().Msg("VI_SQL_SECRET_KEY is set but Security.Method is not 'env' — env var takes precedence")
-		}
-		EncryptionKey = envKey
-		return nil
-	}
-
-	switch method {
-	case SecurityMethodKeyring:
-		return c.loadKeyringKey()
-	case SecurityMethodMaster:
-		return c.loadMasterKey()
-	case SecurityMethodEnv:
-		// Already handled above; if we reach here the env var is not set.
-		log.Warn().Msg("Security method is 'env' but VI_SQL_SECRET_KEY is not set — passwords will not be decrypted")
-	case SecurityMethodOff:
-		// Intentionally no key.
-	}
-	return nil
-}
-
-func (c *Config) loadKeyringKey() error {
-	key, err := sec.EnsureKey(c.Security.KeyringService, c.Security.KeyringAccount)
-	if err != nil {
-		return fmt.Errorf("keyring unavailable: %w", err)
-	}
-	EncryptionKey = key
-	return nil
-}
-
-func (c *Config) loadMasterKey() error {
-	params := sec.Argon2idParams{
-		Memory:      c.Security.MasterMemory,
-		Iterations:  c.Security.MasterIter,
-		Parallelism: c.Security.MasterParallel,
-	}
-	if params.Memory == 0 {
-		params = sec.DefaultArgon2idParams()
-	}
-
-	setup := c.Security.MasterWrappedKey == ""
-
-	if setup {
-		pass, err := sec.PromptPassphrase(true)
-		if err != nil {
-			return fmt.Errorf("master password: %w", err)
-		}
-		salt, err := sec.GenerateSalt()
-		if err != nil {
-			return err
-		}
-		kek, err := sec.DeriveKey(pass, salt, params)
-		if err != nil {
-			return err
-		}
-		dataKey, err := util.GenerateEncryptionKey()
-		if err != nil {
-			return err
-		}
-		wrapped, err := util.EncryptPassword(dataKey, kek)
-		if err != nil {
-			return fmt.Errorf("wrapping data key: %w", err)
-		}
-		c.Security.MasterSalt = salt
-		c.Security.MasterMemory = params.Memory
-		c.Security.MasterIter = params.Iterations
-		c.Security.MasterParallel = params.Parallelism
-		c.Security.MasterWrappedKey = wrapped
-		if err := c.UpdateConfig(); err != nil {
-			return fmt.Errorf("persisting master password config: %w", err)
-		}
-		EncryptionKey = dataKey
-		return nil
-	}
-
-	// Existing config: try up to 3 times to unwrap the data key.
-	for attempt := 1; attempt <= 3; attempt++ {
-		pass, err := sec.PromptPassphrase(false)
-		if err != nil {
-			return fmt.Errorf("master password: %w", err)
-		}
-		kek, err := sec.DeriveKey(pass, c.Security.MasterSalt, params)
-		if err != nil {
-			return err
-		}
-		dataKey, err := util.DecryptPassword(c.Security.MasterWrappedKey, kek)
-		if err == nil {
-			EncryptionKey = dataKey
-			return nil
-		}
-		if attempt < 3 {
-			fmt.Fprintln(os.Stderr, "Wrong master password, please try again.")
-		}
-	}
-	return fmt.Errorf("master password: too many failed attempts")
+	_, err := util.DecryptPassword(m.Password, EncryptionKey)
+	return err != nil
 }
 
 // GetDSN returns the DSN from config. If the stored DSN starts with "$" it is

@@ -365,6 +365,11 @@ func (cf *ConnectionForm) save() {
 			password := cf.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
 			// In edit mode the password field is left blank when the stored value is
 			// encrypted. Preserve the original ciphertext rather than clearing it.
+			// TODO: if the ciphertext was sealed with a different encryption method
+			// (e.g. saved under keyring, then user switched to master), preserving
+			// it here keeps an unreadable blob. The save will succeed but the
+			// connection will fail to decrypt at use time. UpdateConnection has no
+			// way to detect this without try-decrypting first.
 			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) {
 				password = cf.editConn.Password
 			}

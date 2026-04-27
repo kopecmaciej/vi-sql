@@ -141,8 +141,12 @@ func runApp(cmd *cobra.Command, args []string) {
 		}
 	})
 
-	if err := cfg.LoadEncryptionKey(); err != nil {
-		fatalf("loading encryption key: %v", err)
+	// Master-mode loading is deferred to the TUI so the user is prompted via
+	// an in-app modal instead of a raw terminal prompt.
+	if cfg.Security.Method != config.SecurityMethodMaster {
+		if err := cfg.LoadEncryptionKey(); err != nil {
+			fatalf("loading encryption key: %v", err)
+		}
 	}
 
 	logLevel := zerolog.InfoLevel

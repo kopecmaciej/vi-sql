@@ -508,8 +508,12 @@ func (c *Connection) updatePreview(row int) {
 	c.preview.SetCell(3, 0, label("Timeout"))
 	c.preview.SetCell(3, 1, value(timeout))
 
-	if conn.Password != "" && !util.IsEncrypted(conn.Password) {
+	switch {
+	case conn.Password != "" && !util.IsEncrypted(conn.Password):
 		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorRed))
 		c.preview.SetCell(4, 1, tview.NewTableCell("[red]password stored unencrypted[-]").SetExpansion(1))
+	case conn.IsPasswordUnreadable():
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorYellow))
+		c.preview.SetCell(4, 1, tview.NewTableCell("[yellow]password unreadable with current encryption method[-]").SetExpansion(1))
 	}
 }

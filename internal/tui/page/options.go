@@ -107,21 +107,6 @@ func (w *Options) setLayout() {
 	w.descPanel.SetDynamicColors(true)
 	w.descPanel.SetScrollable(false)
 
-	w.form.AddButton("Save", func() {
-		err := w.saveConfig()
-		if err != nil {
-			modal.ShowError(w.App.Pages, "Error while saving config", err)
-			return
-		}
-		if w.onSubmit != nil {
-			w.onSubmit()
-		}
-	})
-
-	w.form.AddButton("Exit", func() {
-		w.App.Stop()
-	})
-
 	w.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		k := w.App.GetKeys()
 		if k.Contains(k.Common.Confirm, event.Name()) {
@@ -254,16 +239,16 @@ func (w *Options) buildGroups() {
 				statusText = "[red]⚠ Keyring backend not available on this system[-]"
 			}
 		case config.SecurityMethodMaster:
-			if cfg.Security.MasterWrappedKey != "" {
-				statusText = "[green]Master password configured — restart app to switch[-]"
+			if cfg.IsMasterConfigured() {
+				statusText = "[green]Master password configured[-]"
 			} else {
-				statusText = "[yellow]Not configured — will prompt on next startup[-]"
+				statusText = "[yellow]Not configured — save options to set it now[-]"
 			}
 		case config.SecurityMethodEnv:
-			if os.Getenv(util.EncryptionKeyEnv) != "" {
-				statusText = "[green]" + util.EncryptionKeyEnv + " is set[-]"
+			if os.Getenv(security.EncryptionKeyEnv) != "" {
+				statusText = "[green]" + security.EncryptionKeyEnv + " is set[-]"
 			} else {
-				statusText = "[red]⚠ " + util.EncryptionKeyEnv + " is not set — encryption disabled[-]"
+				statusText = "[red]⚠ " + security.EncryptionKeyEnv + " is not set — encryption disabled[-]"
 			}
 		}
 		return []tview.FormItem{
@@ -358,7 +343,95 @@ func (w *Options) buildGroups() {
 func (w *Options) renderForm() {
 	w.buildGroups()
 	w.form.RenderGroups(w.groups)
+	w.renderButtons()
 	w.form.ApplyDropdownNavKeys(w.App.GetKeys())
+}
+
+func (w *Options) renderButtons() {
+	w.form.ClearButtons()
+
+	cfg := w.App.GetConfig()
+	if cfg.Security.Method == config.SecurityMethodMaster && cfg.IsMasterConfigured() {
+		w.form.AddButton("Change master password", w.openChangeMasterModal)
+		w.form.AddButton("Reset master password", w.openResetMasterConfirm)
+	}
+
+	w.form.AddButton("Save", func() {
+		if err := w.saveConfig(); err != nil {
+			modal.ShowError(w.App.Pages, "Error while saving config", err)
+			return
+		}
+		c := w.App.GetConfig()
+		if c.Security.Method == config.SecurityMethodMaster && !c.IsMasterConfigured() {
+			w.openSetupAfterReset()
+			return
+		}
+		if w.onSubmit != nil {
+			w.onSubmit()
+		}
+	})
+	w.form.AddButton("Exit", func() {
+		w.App.Stop()
+	})
+}
+
+func (w *Options) openChangeMasterModal() {
+	m := modal.NewMasterPasswordModal(modal.MasterModeChange)
+	if err := m.Init(w.App); err != nil {
+		modal.ShowError(w.App.Pages, "Failed to init master password modal", err)
+		return
+	}
+	m.SetOnDone(func(err error) {
+		if err == nil {
+			w.App.SetFocusOnly(w.form)
+		}
+	})
+	m.Render()
+}
+
+func (w *Options) openResetMasterConfirm() {
+	encryptedCount := 0
+	for _, conn := range w.App.GetConfig().Connections {
+		if util.IsEncrypted(conn.Password) {
+			encryptedCount++
+		}
+	}
+
+	c := modal.NewConfirm("ResetMasterConfirm")
+	if err := c.Init(w.App); err != nil {
+		modal.ShowError(w.App.Pages, "Failed to init confirm modal", err)
+		return
+	}
+	c.SetConfirmButtonLabel("Reset")
+	msg := fmt.Sprintf("Reset master password?\n\nThis clears the wrapped key. %d encrypted connection password(s) will be erased; host/user/db are kept.\n\nYou will be asked to set a new master password.", encryptedCount)
+	c.SetText(msg)
+	c.SetOnConfirm(func() {
+		w.App.Pages.RemovePage(c.GetIdentifier())
+		if err := w.App.GetConfig().ApplyMasterReset(); err != nil {
+			modal.ShowError(w.App.Pages, "Failed to reset master password", err)
+			return
+		}
+		w.openSetupAfterReset()
+	})
+	c.SetOnCancel(func() {
+		w.App.Pages.RemovePage(c.GetIdentifier())
+		w.App.SetFocusOnly(w.form)
+	})
+	w.App.Pages.AddPage(c.GetIdentifier(), c, true, true)
+	w.App.SetFocusOnly(c)
+}
+
+func (w *Options) openSetupAfterReset() {
+	m := modal.NewMasterPasswordModal(modal.MasterModeSetup)
+	if err := m.Init(w.App); err != nil {
+		modal.ShowError(w.App.Pages, "Failed to init master password modal", err)
+		return
+	}
+	m.SetOnDone(func(err error) {
+		w.Render()
+		w.App.SetFocusOnly(w.form)
+	})
+	m.Render()
 }
 
 func (w *Options) saveConfig() error {

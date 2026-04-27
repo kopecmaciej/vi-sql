@@ -35,6 +35,9 @@ func GenerateSalt() (string, error) {
 }
 
 // DeriveKey derives a 32-byte AES key from passphrase+salt and returns it as hex.
+// This call blocks for the full Argon2id duration (typically 100-300ms with
+// default params) — never invoke it on the tview main goroutine. Use
+// DeriveKeyAsync from UI code.
 func DeriveKey(passphrase string, saltHex string, params Argon2idParams) (string, error) {
 	salt, err := hex.DecodeString(saltHex)
 	if err != nil {
@@ -42,6 +45,24 @@ func DeriveKey(passphrase string, saltHex string, params Argon2idParams) (string
 	}
 	key := argon2.IDKey([]byte(passphrase), salt, params.Iterations, params.Memory, params.Parallelism, 32)
 	return hex.EncodeToString(key), nil
+}
+
+type DeriveResult struct {
+	Key string
+	Err error
+}
+
+// DeriveKeyAsync runs DeriveKey on a background goroutine and returns a
+// single-shot channel with the result. Callers can select on the channel
+// alongside UI events without blocking the tview main loop.
+func DeriveKeyAsync(passphrase string, saltHex string, params Argon2idParams) <-chan DeriveResult {
+	out := make(chan DeriveResult, 1)
+	go func() {
+		key, err := DeriveKey(passphrase, saltHex, params)
+		out <- DeriveResult{Key: key, Err: err}
+		close(out)
+	}()
+	return out
 }
 
 // PromptPassphrase reads a passphrase from the terminal without echo.
