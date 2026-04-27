@@ -89,10 +89,8 @@ func PrintEncryptionKeyInstructions() {
 
 	fmt.Println("Encryption key successfully generated for vi-sql:")
 	fmt.Println(key)
-	fmt.Println("\nPlease store this key securely using one of the following methods:")
-	fmt.Println("- Set it as an environment variable: VI_SQL_SECRET_KEY")
-	fmt.Println("- Save it to a file and reference the path in the config file")
-	fmt.Println("  or use the CLI option: vi-sql --key-path=/path/to/key")
+	fmt.Println("\nSet it as an environment variable to use the 'env' security method:")
+	fmt.Println("  export VI_SQL_SECRET_KEY=" + key)
 }
 
 func EncryptPassword(password string, hexKey string) (string, error) {

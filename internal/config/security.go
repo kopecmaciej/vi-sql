@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strings"
 
 	sec "github.com/kopecmaciej/vi-sql/internal/security"
 	"github.com/kopecmaciej/vi-sql/internal/util"
@@ -31,15 +29,6 @@ type SecurityConfig struct {
 }
 
 func (c *Config) LoadEncryptionKey() error {
-	if c.EncryptionKeyPath != nil {
-		key, err := os.ReadFile(*c.EncryptionKeyPath)
-		if err != nil {
-			return fmt.Errorf("failed to load encryption key: %s", err)
-		}
-		EncryptionKey = strings.TrimSpace(string(key))
-		return nil
-	}
-
 	method := c.Security.Method
 	if method == "" {
 		method = SecurityMethodKeyring

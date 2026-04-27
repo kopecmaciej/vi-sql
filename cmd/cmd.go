@@ -28,7 +28,6 @@ var (
 	connectionPage      bool
 	connectionName      string
 	listConnections     bool
-	encryptionKeyPath   string
 	jumpInto            string
 	resetMasterPassword bool
 	rootCmd             = &cobra.Command{
@@ -55,8 +54,7 @@ func init() {
 	rootCmd.Flags().BoolVarP(&connectionPage, "connection-page", "p", false, "Show connection page on startup")
 	rootCmd.Flags().StringVarP(&connectionName, "connection-name", "n", "", "Connect to a specific connection by name")
 	rootCmd.Flags().BoolVarP(&listConnections, "connection-list", "l", false, "List all available connections")
-	rootCmd.Flags().StringVar(&encryptionKeyPath, "key-path", "", "Path to the encryption key file")
-	rootCmd.Flags().Bool("gen-key", false, "Generate valid encryption key")
+	rootCmd.Flags().Bool("gen-key", false, "Generate a random encryption key for use with VI_SQL_SECRET_KEY")
 	rootCmd.Flags().StringVarP(&jumpInto, "jump", "j", "", "Jump directly to schema/table (format: schema-name/table-name)")
 	rootCmd.Flags().BoolVar(&resetMasterPassword, "reset-master-password", false, "Reset master password (clears wrapped key and erases encrypted connection passwords)")
 }
@@ -118,18 +116,6 @@ func runApp(cmd *cobra.Command, args []string) {
 			}
 		case "gen-key":
 			util.PrintEncryptionKeyInstructions()
-			os.Exit(0)
-		case "key-path":
-			if encryptionKeyPath != "" {
-				if _, err := os.ReadFile(encryptionKeyPath); err != nil {
-					fatalf("reading encryption key from %s: %v", encryptionKeyPath, err)
-				}
-				cfg.EncryptionKeyPath = &encryptionKeyPath
-				if err := cfg.UpdateConfig(); err != nil {
-					fatalf("saving path to config file: %v", err)
-				}
-				fmt.Println("Encryption key file path saved successfully")
-			}
 			os.Exit(0)
 		case "jump":
 			if jumpInto != "" {

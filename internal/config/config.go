@@ -88,7 +88,6 @@ type Config struct {
 	CurrentConnection  string         `yaml:"currentConnection"`
 	Connections        []SQLConfig    `yaml:"connections"`
 	Styles             StylesConfig   `yaml:"styles"`
-	EncryptionKeyPath  *string        `yaml:"encryptionKeyPath,omitempty"`
 	LastUpdateNotified string         `yaml:"lastUpdateNotified,omitempty"`
 	JumpInto           string         `yaml:"-"`
 	ConfigPath         string         `yaml:"-"`
