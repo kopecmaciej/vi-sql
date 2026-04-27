@@ -134,8 +134,7 @@ func runApp(cmd *cobra.Command, args []string) {
 		}
 	})
 
-	// Master-mode loading is deferred to the TUI so the user is prompted via
-	// an in-app modal instead of a raw terminal prompt.
+	// Master-mode loading is deferred so the user is prompted via an in-app modal.
 	if cfg.Security.Method != config.SecurityMethodMaster {
 		if err := cfg.LoadEncryptionKey(); err != nil {
 			fatalf("loading encryption key: %v", err)

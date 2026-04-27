@@ -29,7 +29,6 @@ const (
 	EncPrefix = "enc:"
 )
 
-// IsEncrypted reports whether s is a value produced by EncryptPassword or TaggedEncrypt.
 func IsEncrypted(s string) bool {
 	return strings.HasPrefix(s, EncPrefix)
 }

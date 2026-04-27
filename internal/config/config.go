@@ -389,9 +389,6 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 	return nil, fmt.Errorf("connection '%s' not found", name)
 }
 
-// IsPasswordUnreadable reports whether the stored password is encrypted but
-// cannot be decrypted with the currently loaded EncryptionKey — typically
-// because the user switched encryption methods after the connection was saved.
 func (m *SQLConfig) IsPasswordUnreadable() bool {
 	if !util.IsEncrypted(m.Password) {
 		return false

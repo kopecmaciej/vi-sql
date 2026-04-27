@@ -40,10 +40,6 @@ func (c *Config) LoadEncryptionKey() error {
 			log.Warn().Msgf("%s is set but Security.Method is %q — ignoring env var", sec.EncryptionKeyEnv, method)
 		}
 		return c.loadKeyringKey()
-	case SecurityMethodMaster:
-		// Master mode is handled by the TUI (see tui/app.go gateOnMasterPassword);
-		// LoadEncryptionKey is a no-op so the caller never blocks on stdin.
-		return nil
 	case SecurityMethodEnv:
 		envKey := sec.GetEnvKey()
 		if envKey == "" {
@@ -80,15 +76,11 @@ func (c *Config) MasterParams() sec.Argon2idParams {
 	return p
 }
 
-// IsMasterConfigured reports whether the master password setup has run.
 func (c *Config) IsMasterConfigured() bool {
 	return c.Security.MasterWrappedKey != ""
 }
 
-// ApplyMasterSetup completes a fresh master-password setup using a KEK that
-// the caller has already derived (typically via DeriveKeyAsync). It generates
-// a new data key, wraps it with the KEK, persists the security config, and
-// loads the data key as the active EncryptionKey.
+// ApplyMasterSetup expects a KEK already derived by the caller (typically via DeriveKeyAsync).
 func (c *Config) ApplyMasterSetup(kek string, salt string, params sec.Argon2idParams) error {
 	dataKey, err := util.GenerateEncryptionKey()
 	if err != nil {
@@ -111,9 +103,6 @@ func (c *Config) ApplyMasterSetup(kek string, salt string, params sec.Argon2idPa
 	return nil
 }
 
-// ApplyMasterUnlock unwraps the stored data key with a KEK that the caller
-// has already derived from the user-typed passphrase. On success the data
-// key is loaded as EncryptionKey.
 func (c *Config) ApplyMasterUnlock(kek string) error {
 	dataKey, err := util.DecryptPassword(c.Security.MasterWrappedKey, kek)
 	if err != nil {
