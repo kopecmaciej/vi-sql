@@ -4,10 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/term"
 )
 
 // Argon2idParams holds the KDF tuning parameters persisted in config.
@@ -63,41 +61,4 @@ func DeriveKeyAsync(passphrase string, saltHex string, params Argon2idParams) <-
 		close(out)
 	}()
 	return out
-}
-
-// PromptPassphrase reads a passphrase from the terminal without echo.
-// When setup is true it prompts twice and requires them to match.
-func PromptPassphrase(setup bool) (string, error) {
-	fd := int(os.Stdin.Fd())
-
-	if setup {
-		fmt.Fprint(os.Stderr, "Set master password: ")
-		first, err := term.ReadPassword(fd)
-		fmt.Fprintln(os.Stderr)
-		if err != nil {
-			return "", fmt.Errorf("reading passphrase: %w", err)
-		}
-		if len(first) == 0 {
-			return "", fmt.Errorf("passphrase must not be empty")
-		}
-
-		fmt.Fprint(os.Stderr, "Confirm master password: ")
-		second, err := term.ReadPassword(fd)
-		fmt.Fprintln(os.Stderr)
-		if err != nil {
-			return "", fmt.Errorf("reading passphrase confirmation: %w", err)
-		}
-		if string(first) != string(second) {
-			return "", fmt.Errorf("passphrases do not match")
-		}
-		return string(first), nil
-	}
-
-	fmt.Fprint(os.Stderr, "Master password: ")
-	pass, err := term.ReadPassword(fd)
-	fmt.Fprintln(os.Stderr)
-	if err != nil {
-		return "", fmt.Errorf("reading passphrase: %w", err)
-	}
-	return string(pass), nil
 }

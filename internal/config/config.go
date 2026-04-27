@@ -92,6 +92,7 @@ type Config struct {
 	LastUpdateNotified string         `yaml:"lastUpdateNotified,omitempty"`
 	JumpInto           string         `yaml:"-"`
 	ConfigPath         string         `yaml:"-"`
+	FirstLaunch        bool           `yaml:"-"`
 }
 
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
@@ -112,12 +113,16 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 
 	defaultConfig.ConfigPath = configPath
 
+	_, statErr := os.Stat(configPath)
+	firstLaunch := os.IsNotExist(statErr)
+
 	cfg, err := util.LoadConfigFile(defaultConfig, configPath)
 	if err != nil {
 		return nil, err
 	}
 
 	cfg.ConfigPath = configPath
+	cfg.FirstLaunch = firstLaunch
 
 	return cfg, nil
 }
@@ -249,7 +254,7 @@ func (c *Config) AddConnection(sqlConfig *SQLConfig) error {
 	}
 
 	if EncryptionKey != "" && sqlConfig.Password != "" && !util.IsEncrypted(sqlConfig.Password) {
-		encryptedPass, err := util.EncryptPassword(sqlConfig.Password, EncryptionKey)
+		encryptedPass, err := util.TaggedEncrypt(sqlConfig.Password, EncryptionKey, c.Security.Method)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt password: %w", err)
 		}
@@ -319,7 +324,7 @@ func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) err
 	for i, connection := range c.Connections {
 		if connection.Name == originalName {
 			if sqlConfig.Password != "" && EncryptionKey != "" && !util.IsEncrypted(sqlConfig.Password) {
-				encryptedPass, err := util.EncryptPassword(sqlConfig.Password, EncryptionKey)
+				encryptedPass, err := util.TaggedEncrypt(sqlConfig.Password, EncryptionKey, c.Security.Method)
 				if err != nil {
 					return fmt.Errorf("failed to encrypt password: %w", err)
 				}
@@ -354,6 +359,7 @@ func (c *Config) UpdateConnectionFromDSN(originalName string, sqlConfig *SQLConf
 		return err
 	}
 	sqlConfig.Host = parsed.Host
+	sqlConfig.Username = parsed.Username
 	sqlConfig.Database = parsed.Database
 	sqlConfig.SSLMode = parsed.SSLMode
 	if port, err := strconv.Atoi(parsed.Port); err == nil {
@@ -370,12 +376,8 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 	for _, connection := range c.Connections {
 		if connection.Name == name {
 			conn := connection
-			// TODO: when the user has switched encryption methods (e.g. keyring → master),
-			// this decrypt fails because EncryptionKey is the new method's data key but
-			// conn.Password was sealed with the previous method's key. The connection
-			// has no record of which method produced its ciphertext. See SecurityConfig.
 			if util.IsEncrypted(conn.Password) && EncryptionKey != "" {
-				decryptedPass, err := util.DecryptPassword(conn.Password, EncryptionKey)
+				decryptedPass, _, err := util.TaggedDecrypt(conn.Password, EncryptionKey)
 				if err != nil {
 					log.Warn().Err(err).Msg("Failed to decrypt password")
 				} else {
@@ -398,7 +400,7 @@ func (m *SQLConfig) IsPasswordUnreadable() bool {
 	if EncryptionKey == "" {
 		return true
 	}
-	_, err := util.DecryptPassword(m.Password, EncryptionKey)
+	_, _, err := util.TaggedDecrypt(m.Password, EncryptionKey)
 	return err != nil
 }
 
@@ -429,7 +431,7 @@ func (m *SQLConfig) GetDecryptedDSN() string {
 		return dsn
 	}
 
-	decryptedPass, err := util.DecryptPassword(m.Password, EncryptionKey)
+	decryptedPass, _, err := util.TaggedDecrypt(m.Password, EncryptionKey)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to decrypt password")
 		return dsn

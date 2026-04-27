@@ -29,9 +29,46 @@ const (
 	EncPrefix = "enc:"
 )
 
-// IsEncrypted reports whether s is a value produced by EncryptPassword.
+// IsEncrypted reports whether s is a value produced by EncryptPassword or TaggedEncrypt.
 func IsEncrypted(s string) bool {
 	return strings.HasPrefix(s, EncPrefix)
+}
+
+// TaggedEncrypt encrypts password and returns enc:<method>:<hex-ciphertext>.
+func TaggedEncrypt(password, hexKey, method string) (string, error) {
+	enc, err := EncryptPassword(password, hexKey)
+	if err != nil {
+		return "", err
+	}
+	return EncPrefix + method + ":" + strings.TrimPrefix(enc, EncPrefix), nil
+}
+
+// TaggedDecrypt decrypts an enc:<method>:<hex-ciphertext> value.
+// Returns plaintext and the embedded method tag.
+func TaggedDecrypt(encryptedHex, hexKey string) (string, string, error) {
+	rest, ok := strings.CutPrefix(encryptedHex, EncPrefix)
+	if !ok {
+		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("not a tagged value")}
+	}
+	method, hex, ok := strings.Cut(rest, ":")
+	if !ok {
+		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("invalid tagged format")}
+	}
+	plaintext, err := DecryptPassword(EncPrefix+hex, hexKey)
+	return plaintext, method, err
+}
+
+// ParseMethodTag returns the method embedded in a tagged password value, or "" if untagged.
+func ParseMethodTag(s string) string {
+	rest, ok := strings.CutPrefix(s, EncPrefix)
+	if !ok {
+		return ""
+	}
+	method, _, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ""
+	}
+	return method
 }
 
 func GenerateEncryptionKey() (string, error) {

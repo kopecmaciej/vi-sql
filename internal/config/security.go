@@ -52,10 +52,9 @@ func (c *Config) LoadEncryptionKey() error {
 		}
 		return c.loadKeyringKey()
 	case SecurityMethodMaster:
-		if envKey := sec.GetEnvKey(); envKey != "" {
-			log.Warn().Msgf("%s is set but Security.Method is %q — ignoring env var", sec.EncryptionKeyEnv, method)
-		}
-		return c.loadMasterKey()
+		// Master mode is handled by the TUI (see tui/app.go gateOnMasterPassword);
+		// LoadEncryptionKey is a no-op so the caller never blocks on stdin.
+		return nil
 	case SecurityMethodEnv:
 		envKey := sec.GetEnvKey()
 		if envKey == "" {
@@ -110,6 +109,7 @@ func (c *Config) ApplyMasterSetup(kek string, salt string, params sec.Argon2idPa
 	if err != nil {
 		return fmt.Errorf("wrapping data key: %w", err)
 	}
+	c.Security.Method = SecurityMethodMaster
 	c.Security.MasterSalt = salt
 	c.Security.MasterMemory = params.Memory
 	c.Security.MasterIter = params.Iterations
@@ -171,42 +171,4 @@ func (c *Config) ApplyMasterReset() error {
 	}
 	EncryptionKey = ""
 	return c.UpdateConfig()
-}
-
-func (c *Config) loadMasterKey() error {
-	params := c.MasterParams()
-
-	if !c.IsMasterConfigured() {
-		pass, err := sec.PromptPassphrase(true)
-		if err != nil {
-			return fmt.Errorf("master password: %w", err)
-		}
-		salt, err := sec.GenerateSalt()
-		if err != nil {
-			return err
-		}
-		kek, err := sec.DeriveKey(pass, salt, params)
-		if err != nil {
-			return err
-		}
-		return c.ApplyMasterSetup(kek, salt, params)
-	}
-
-	for attempt := 1; attempt <= 3; attempt++ {
-		pass, err := sec.PromptPassphrase(false)
-		if err != nil {
-			return fmt.Errorf("master password: %w", err)
-		}
-		kek, err := sec.DeriveKey(pass, c.Security.MasterSalt, params)
-		if err != nil {
-			return err
-		}
-		if err := c.ApplyMasterUnlock(kek); err == nil {
-			return nil
-		}
-		if attempt < 3 {
-			fmt.Fprintln(os.Stderr, "Wrong master password, please try again.")
-		}
-	}
-	return fmt.Errorf("master password: too many failed attempts")
 }

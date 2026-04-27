@@ -220,6 +220,10 @@ func (m *MasterPasswordModal) runSetup() {
 	}()
 }
 
+// Note: unlock has no attempt cap — the user can keep guessing. Brute-forcing
+// the passphrase is gated by Argon2id (~100-300ms per try with default params),
+// not by an in-app counter. Add a counter here if local rate-limiting becomes
+// a concern.
 func (m *MasterPasswordModal) runUnlock() {
 	pass := m.password("Password")
 	if pass == "" {

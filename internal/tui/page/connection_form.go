@@ -314,7 +314,13 @@ func (cf *ConnectionForm) save() {
 		dsn := cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).GetText()
 		trimmedDSN := strings.TrimSpace(dsn)
 
-		if trimmedDSN != "postgresql://" && trimmedDSN != "postgres://" && trimmedDSN != "" {
+		// In edit mode the DSN field is pre-filled with the stored (password-masked)
+		// DSN. If the user didn't touch it, we must not re-parse — that would set the
+		// password to the literal "****" and drop fields the parser doesn't fill.
+		// Treat unchanged DSN the same as an empty one and fall through to form fields.
+		dsnUnchanged := cf.editConn != nil && trimmedDSN == cf.editConn.DSN
+
+		if !dsnUnchanged && trimmedDSN != "postgresql://" && trimmedDSN != "postgres://" && trimmedDSN != "" {
 			if name == "" {
 				name = trimmedDSN
 			}
@@ -363,14 +369,12 @@ func (cf *ConnectionForm) save() {
 			}
 			username := cf.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
 			password := cf.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
-			// In edit mode the password field is left blank when the stored value is
-			// encrypted. Preserve the original ciphertext rather than clearing it.
-			// TODO: if the ciphertext was sealed with a different encryption method
-			// (e.g. saved under keyring, then user switched to master), preserving
-			// it here keeps an unreadable blob. The save will succeed but the
-			// connection will fail to decrypt at use time. UpdateConnection has no
-			// way to detect this without try-decrypting first.
-			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) {
+			// In edit mode the password field is blank when the stored value is
+			// encrypted. Preserve the original ciphertext — but only if it can still
+			// be decrypted with the current key. Orphan ciphertext (sealed under a
+			// previous encryption method) is dropped so the user is forced to
+			// re-enter rather than persist an unreadable blob.
+			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && !cf.editConn.IsPasswordUnreadable() {
 				password = cf.editConn.Password
 			}
 			database := cf.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()

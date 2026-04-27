@@ -583,6 +583,17 @@ func (m *Main) openActionsModal() {
 			Label:   "Options page",
 			Handler: m.App.OpenOptionsPage,
 		},
+	}
+
+	cfg := m.App.GetConfig()
+	if cfg.Security.Method == config.SecurityMethodMaster && cfg.IsMasterConfigured() {
+		entries = append(entries, modal.ActionEntry{
+			Label:   "Change master password",
+			Handler: m.openChangeMasterModal,
+		})
+	}
+
+	entries = append(entries, []modal.ActionEntry{
 		{
 			Label:   "New tab",
 			KeyHint: k.Main.NewTab.String(),
@@ -608,7 +619,7 @@ func (m *Main) openActionsModal() {
 			KeyHint: k.Common.Add.String(),
 			Handler: func() { m.schemas.OpenCreateTable(ctx) },
 		},
-	}
+	}...)
 
 	// Resolve the schema/table for Structure and Indexes actions:
 	// prefer the active table tab; fall back to the schema tree selection.
@@ -705,6 +716,15 @@ func (m *Main) openIndexesTab(ctx context.Context, schema, table string) {
 		m.rebuildInnerFlex()
 	}
 	m.App.SetFocus(tab)
+}
+
+func (m *Main) openChangeMasterModal() {
+	mp := modal.NewMasterPasswordModal(modal.MasterModeChange)
+	if err := mp.Init(m.App); err != nil {
+		modal.ShowError(m.App.Pages, "Failed to init master password modal", err)
+		return
+	}
+	mp.Render()
 }
 
 func (m *Main) showServerInfo() {

@@ -13,7 +13,6 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
-	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -110,14 +109,7 @@ func (w *Options) setLayout() {
 	w.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		k := w.App.GetKeys()
 		if k.Contains(k.Common.Confirm, event.Name()) {
-			err := w.saveConfig()
-			if err != nil {
-				modal.ShowError(w.App.Pages, "Error while saving config", err)
-				return nil
-			}
-			if w.onSubmit != nil {
-				w.onSubmit()
-			}
+			w.submit()
 			return nil
 		}
 		return event
@@ -349,87 +341,77 @@ func (w *Options) renderForm() {
 
 func (w *Options) renderButtons() {
 	w.form.ClearButtons()
-
-	cfg := w.App.GetConfig()
-	if cfg.Security.Method == config.SecurityMethodMaster && cfg.IsMasterConfigured() {
-		w.form.AddButton("Change master password", w.openChangeMasterModal)
-		w.form.AddButton("Reset master password", w.openResetMasterConfirm)
-	}
-
-	w.form.AddButton("Save", func() {
-		if err := w.saveConfig(); err != nil {
-			modal.ShowError(w.App.Pages, "Error while saving config", err)
-			return
-		}
-		c := w.App.GetConfig()
-		if c.Security.Method == config.SecurityMethodMaster && !c.IsMasterConfigured() {
-			w.openSetupAfterReset()
-			return
-		}
-		if w.onSubmit != nil {
-			w.onSubmit()
-		}
-	})
+	w.form.AddButton("Save", w.submit)
 	w.form.AddButton("Exit", func() {
 		w.App.Stop()
 	})
 }
 
-func (w *Options) openChangeMasterModal() {
-	m := modal.NewMasterPasswordModal(modal.MasterModeChange)
-	if err := m.Init(w.App); err != nil {
-		modal.ShowError(w.App.Pages, "Failed to init master password modal", err)
+func (w *Options) submit() {
+	originalMethod := w.App.GetConfig().Security.Method
+	if w.readDesiredMethod() == config.SecurityMethodMaster && !w.App.GetConfig().IsMasterConfigured() {
+		w.openSetupThenContinue(originalMethod)
 		return
 	}
-	m.SetOnDone(func(err error) {
-		if err == nil {
-			w.App.SetFocusOnly(w.form)
-		}
-	})
-	m.Render()
-}
-
-func (w *Options) openResetMasterConfirm() {
-	encryptedCount := 0
-	for _, conn := range w.App.GetConfig().Connections {
-		if util.IsEncrypted(conn.Password) {
-			encryptedCount++
-		}
-	}
-
-	c := modal.NewConfirm("ResetMasterConfirm")
-	if err := c.Init(w.App); err != nil {
-		modal.ShowError(w.App.Pages, "Failed to init confirm modal", err)
+	if err := w.saveConfig(); err != nil {
+		modal.ShowError(w.App.Pages, "Error while saving config", err)
 		return
 	}
-	c.SetConfirmButtonLabel("Reset")
-	msg := fmt.Sprintf("Reset master password?\n\nThis clears the wrapped key. %d encrypted connection password(s) will be erased; host/user/db are kept.\n\nYou will be asked to set a new master password.", encryptedCount)
-	c.SetText(msg)
-	c.SetOnConfirm(func() {
-		w.App.Pages.RemovePage(c.GetIdentifier())
-		if err := w.App.GetConfig().ApplyMasterReset(); err != nil {
-			modal.ShowError(w.App.Pages, "Failed to reset master password", err)
-			return
-		}
-		w.openSetupAfterReset()
-	})
-	c.SetOnCancel(func() {
-		w.App.Pages.RemovePage(c.GetIdentifier())
-		w.App.SetFocusOnly(w.form)
-	})
-	w.App.Pages.AddPage(c.GetIdentifier(), c, true, true)
-	w.App.SetFocusOnly(c)
+	w.finishSubmit(originalMethod)
 }
 
-func (w *Options) openSetupAfterReset() {
+func (w *Options) finishSubmit(originalMethod string) {
+	if originalMethod != w.App.GetConfig().Security.Method {
+		showSecurityRestartNotice(w.App.Pages, func() {
+			if w.onSubmit != nil {
+				w.onSubmit()
+			}
+		})
+		return
+	}
+	if w.onSubmit != nil {
+		w.onSubmit()
+	}
+}
+
+func showSecurityRestartNotice(pages *core.Pages, onDismiss func()) {
+	const id = "SecurityRestartNotice"
+	m := tview.NewModal()
+	m.SetTitle(" Restart required ")
+	m.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	m.SetText("Encryption method changed. Restart vi-sql to load the new key — existing connection passwords stay encrypted under the previous key until then.")
+	m.AddButtons([]string{"Ok"})
+	m.SetDoneFunc(func(_ int, _ string) {
+		pages.RemovePage(id)
+		if onDismiss != nil {
+			onDismiss()
+		}
+	})
+	pages.AddPage(id, m, true, true)
+}
+
+func (w *Options) readDesiredMethod() string {
+	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
+	_, idx := w.form.GetFormItemByLabel("Encryption method").(*tview.ButtonGroup).GetCurrentOption()
+	return methodKeys[idx]
+}
+
+func (w *Options) openSetupThenContinue(originalMethod string) {
 	m := modal.NewMasterPasswordModal(modal.MasterModeSetup)
 	if err := m.Init(w.App); err != nil {
 		modal.ShowError(w.App.Pages, "Failed to init master password modal", err)
 		return
 	}
 	m.SetOnDone(func(err error) {
-		w.Render()
-		w.App.SetFocusOnly(w.form)
+		if err != nil {
+			w.App.SetFocusOnly(w.form)
+			return
+		}
+		if err := w.saveConfig(); err != nil {
+			modal.ShowError(w.App.Pages, "Error while saving config", err)
+			return
+		}
+		w.finishSubmit(originalMethod)
 	})
 	m.Render()
 }

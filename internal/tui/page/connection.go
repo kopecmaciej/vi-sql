@@ -513,7 +513,15 @@ func (c *Connection) updatePreview(row int) {
 		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorRed))
 		c.preview.SetCell(4, 1, tview.NewTableCell("[red]password stored unencrypted[-]").SetExpansion(1))
 	case conn.IsPasswordUnreadable():
+		storedMethod := util.ParseMethodTag(conn.Password)
+		currentMethod := c.App.GetConfig().Security.Method
+		var msg string
+		if storedMethod != "" && storedMethod != currentMethod {
+			msg = fmt.Sprintf("[yellow]password encrypted with %s (current method: %s) — re-enter to re-encrypt[-]", storedMethod, currentMethod)
+		} else {
+			msg = "[yellow]password unreadable — key mismatch, re-enter[-]"
+		}
 		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorYellow))
-		c.preview.SetCell(4, 1, tview.NewTableCell("[yellow]password unreadable with current encryption method[-]").SetExpansion(1))
+		c.preview.SetCell(4, 1, tview.NewTableCell(msg).SetExpansion(1))
 	}
 }
