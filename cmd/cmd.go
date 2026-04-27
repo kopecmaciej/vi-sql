@@ -262,15 +262,15 @@ func runResetMasterPassword(cfg *config.Config) {
 		return
 	}
 
-	encryptedCount := 0
+	masterCount := 0
 	for _, conn := range cfg.Connections {
-		if util.IsEncrypted(conn.Password) {
-			encryptedCount++
+		if util.ParseMethodTag(conn.Password) == config.SecurityMethodMaster {
+			masterCount++
 		}
 	}
 
 	fmt.Printf("Reset master password? This clears the wrapped key.\n")
-	fmt.Printf("%d encrypted connection password(s) will be erased; host/user/db are kept.\n", encryptedCount)
+	fmt.Printf("%d master-encrypted connection password(s) will be erased; host/user/db are kept. Passwords stored under other methods (keyring, env) are unaffected.\n", masterCount)
 	fmt.Print("Type 'y' or 'yes' to confirm: ")
 	reader := bufio.NewReader(os.Stdin)
 	answer, _ := reader.ReadString('\n')

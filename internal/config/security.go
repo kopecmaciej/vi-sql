@@ -155,17 +155,21 @@ func (c *Config) ApplyMasterChange(newKEK string, newSalt string, params sec.Arg
 }
 
 // ApplyMasterReset clears the wrapped key and salt, and zeros the password
-// field on every connection that has an encrypted password (the ciphertext
-// is unrecoverable without the old data key, so the user must re-enter).
-// Host/user/database fields are preserved.
+// field only on connections that were encrypted under the master key — those
+// ciphertexts are unrecoverable once the data key is gone. Passwords sealed
+// under another method (keyring, env) are independent of the master key and
+// stay intact. Host/user/database fields are always preserved. The security
+// method is reset to keyring so the next launch doesn't force a fresh master
+// setup; the user can switch back via the options page.
 func (c *Config) ApplyMasterReset() error {
+	c.Security.Method = SecurityMethodKeyring
 	c.Security.MasterSalt = ""
 	c.Security.MasterMemory = 0
 	c.Security.MasterIter = 0
 	c.Security.MasterParallel = 0
 	c.Security.MasterWrappedKey = ""
 	for i := range c.Connections {
-		if util.IsEncrypted(c.Connections[i].Password) {
+		if util.ParseMethodTag(c.Connections[i].Password) == SecurityMethodMaster {
 			c.Connections[i].Password = ""
 		}
 	}
