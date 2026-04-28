@@ -26,7 +26,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestLogging_CreatesFile(t *testing.T) {
 
 	f := logging(logPath, zerolog.InfoLevel)
 	require.NotNil(t, f)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	_, err := os.Stat(logPath)
 	assert.NoError(t, err, "log file should have been created")
@@ -151,7 +151,7 @@ func TestLogging_AppendsToExistingFile(t *testing.T) {
 
 	f := logging(logPath, zerolog.InfoLevel)
 	require.NotNil(t, f)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
@@ -174,9 +174,9 @@ func TestRootCmdFlags_AllRegistered(t *testing.T) {
 		{"connection-page", "p"},
 		{"connection-name", "n"},
 		{"connection-list", "l"},
-		{"key-path", ""},
 		{"gen-key", ""},
 		{"jump", "j"},
+		{"reset-master-password", ""},
 	}
 
 	for _, spec := range persistentFlags {
