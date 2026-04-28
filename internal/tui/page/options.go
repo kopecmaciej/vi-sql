@@ -287,6 +287,7 @@ func (w *Options) buildGroups() {
 					SetChangedFunc(func(checked bool) {
 						w.editorEnabled = checked
 						w.editorOptions.SetVisible(checked)
+						w.applyFormToConfig()
 						w.form.RenderGroups(w.groups)
 						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 						if idx := w.form.GetFormItemIndex("Enable $EDITOR"); idx >= 0 {
@@ -303,6 +304,7 @@ func (w *Options) buildGroups() {
 					SetChangedFunc(func(checked bool) {
 						w.mcpEnabled = checked
 						w.mcpOptions.SetVisible(checked)
+						w.applyFormToConfig()
 						w.form.RenderGroups(w.groups)
 						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 						if idx := w.form.GetFormItemIndex("MCP enabled"); idx >= 0 {
@@ -319,6 +321,7 @@ func (w *Options) buildGroups() {
 					func(_ string, idx int) {
 						w.securityMethod = methodKeys[idx]
 						w.securityOptions.SetVisible(w.securityMethod != config.SecurityMethodOff)
+						w.applyFormToConfig()
 						w.form.RenderGroups(w.groups)
 						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 						if i := w.form.GetFormItemIndex("Encryption method"); i >= 0 {
@@ -416,17 +419,39 @@ func (w *Options) openSetupThenContinue(originalMethod string) {
 	m.Render()
 }
 
-func (w *Options) saveConfig() error {
-	logFile := w.form.GetFormItemByLabel("Log File").(*tview.InputField).GetText()
-	_, logLevelIdx := w.form.GetFormItemByLabel("Log Level").(*tview.ButtonGroup).GetCurrentOption()
-	logLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
-	logLevel := logLevels[logLevelIdx]
-
+// applyFormToConfig writes form values into the memroy, as RenderGroups
+// rebuilds form items clearing them, so unsave changes would be lost
+func (w *Options) applyFormToConfig() {
 	c := w.App.GetConfig()
+	logLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
+	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
 
-	c.Editor.Enabled = w.form.GetFormItemByLabel("Enable $EDITOR").(*tview.Checkbox).IsChecked()
-	if w.editorOptions != nil && w.editorOptions.IsVisible() {
-		editorCmd := w.form.GetFormItemByLabel("Set editor").(*tview.InputField).GetText()
+	if item := w.form.GetFormItemByLabel("Log File"); item != nil {
+		c.Log.Path = item.(*tview.InputField).GetText()
+	}
+	if item := w.form.GetFormItemByLabel("Log Level"); item != nil {
+		_, idx := item.(*tview.ButtonGroup).GetCurrentOption()
+		c.Log.Level = logLevels[idx]
+	}
+	if item := w.form.GetFormItemByLabel("Connection page"); item != nil {
+		c.ShowConnectionPage = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Vim mode"); item != nil {
+		c.UI.VimMode = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Nerd Font icons"); item != nil {
+		nerdFont := item.(*tview.Checkbox).IsChecked()
+		if nerdFont != c.Styles.NerdFont {
+			c.Styles.NerdFont = nerdFont
+			_ = w.App.SetStyle(c.Styles.CurrentStyle)
+		}
+	}
+
+	if item := w.form.GetFormItemByLabel("Enable $EDITOR"); item != nil {
+		c.Editor.Enabled = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Set editor"); item != nil {
+		editorCmd := item.(*tview.InputField).GetText()
 		splitEditorCmd := strings.Split(editorCmd, "$")
 		if len(splitEditorCmd) > 1 {
 			c.Editor.Command = ""
@@ -436,32 +461,32 @@ func (w *Options) saveConfig() error {
 			c.Editor.Command = editorCmd
 		}
 	}
-	c.Log.Path = logFile
-	c.Log.Level = logLevel
-	c.ShowConnectionPage = w.form.GetFormItemByLabel("Connection page").(*tview.Checkbox).IsChecked()
-	c.UI.VimMode = w.form.GetFormItemByLabel("Vim mode").(*tview.Checkbox).IsChecked()
 
-	nerdFont := w.form.GetFormItemByLabel("Nerd Font icons").(*tview.Checkbox).IsChecked()
-	if nerdFont != c.Styles.NerdFont {
-		c.Styles.NerdFont = nerdFont
-		_ = w.App.SetStyle(c.Styles.CurrentStyle)
+	if item := w.form.GetFormItemByLabel("MCP enabled"); item != nil {
+		c.MCP.Enabled = item.(*tview.Checkbox).IsChecked()
 	}
-
-	c.MCP.Enabled = w.form.GetFormItemByLabel("MCP enabled").(*tview.Checkbox).IsChecked()
-	if w.mcpOptions != nil && w.mcpOptions.IsVisible() {
+	if item := w.form.GetFormItemByLabel("MCP port"); item != nil {
 		mcpPort := 9741
-		if _, err := fmt.Sscanf(w.form.GetFormItemByLabel("MCP port").(*tview.InputField).GetText(), "%d", &mcpPort); err != nil {
+		if _, err := fmt.Sscanf(item.(*tview.InputField).GetText(), "%d", &mcpPort); err != nil {
 			mcpPort = 9741
 		}
 		c.MCP.Port = mcpPort
-		c.MCP.AllowExecute = w.form.GetFormItemByLabel("Allow execute").(*tview.Checkbox).IsChecked()
-		c.MCP.AllowWrite = w.form.GetFormItemByLabel("Allow writes").(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Allow execute"); item != nil {
+		c.MCP.AllowExecute = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Allow writes"); item != nil {
+		c.MCP.AllowWrite = item.(*tview.Checkbox).IsChecked()
 	}
 
-	_, methodIdx := w.form.GetFormItemByLabel("Encryption method").(*tview.ButtonGroup).GetCurrentOption()
-	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
-	c.Security.Method = methodKeys[methodIdx]
+	if item := w.form.GetFormItemByLabel("Encryption method"); item != nil {
+		_, idx := item.(*tview.ButtonGroup).GetCurrentOption()
+		c.Security.Method = methodKeys[idx]
+	}
+}
 
+func (w *Options) saveConfig() error {
+	w.applyFormToConfig()
 	return w.App.GetConfig().UpdateConfig()
 }
 
