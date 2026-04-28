@@ -352,10 +352,41 @@ func (c *Data) setLayout() {
 
 func (c *Data) setKeybindings(ctx context.Context) {
 	k := c.App.GetKeys()
+	cfg := c.App.GetConfig()
+
+	var cr *core.ChordResolver
+	if cfg.UI.VimMode {
+		cr = core.NewChordResolver()
+		cr.Register("gg", func() {
+			_, col := c.table.GetSelection()
+			if c.table.GetRowCount() > 1 {
+				c.table.Select(1, col)
+			}
+		})
+		cr.Register("gd", func() {
+			row, col := c.table.GetSelection()
+			c.handleFollowForeignKey(ctx, row, col)
+		})
+	}
 
 	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if cr != nil {
+			if event.Key() == tcell.KeyRune {
+				if cr.Feed(event.Rune()) {
+					return nil
+				}
+			} else {
+				cr.Reset()
+			}
+		}
+
 		row, col := c.table.GetSelection()
 		switch {
+		case cfg.UI.VimMode && event.Key() == tcell.KeyRune && event.Rune() == 'G':
+			if rc := c.table.GetRowCount(); rc > 1 {
+				c.table.Select(rc-1, col)
+			}
+			return nil
 		case k.Contains(k.Data.PeekRow, event.Name()):
 			return c.handlePeekRow(ctx, row, false)
 		case k.Contains(k.Data.FullPagePeek, event.Name()):
@@ -394,7 +425,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			return nil
 		case k.Contains(k.Data.ExportData, event.Name()):
 			return c.handleExportData(ctx)
-		case k.Contains(k.Data.FollowForeignKey, event.Name()):
+		case !cfg.UI.VimMode && k.Contains(k.Data.FollowForeignKey, event.Name()):
 			return c.handleFollowForeignKey(ctx, row, col)
 		}
 

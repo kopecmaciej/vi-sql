@@ -118,12 +118,58 @@ func (s *SchemaTree) setStyle() {
 
 func (s *SchemaTree) setKeybindings() {
 	k := s.App.GetKeys()
+	cfg := s.App.GetConfig()
 	ctx := context.Background()
 
 	closedNodeIcon := s.style.IconWithColor(s.style.ClosedNode, s.App.GetStyles().Global.SecondaryTextColor)
 	openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
 
+	var cr *core.ChordResolver
+	if cfg.UI.VimMode {
+		cr = core.NewChordResolver()
+		cr.Register("gg", func() {
+			root := s.tree.GetRoot()
+			if root == nil {
+				return
+			}
+			if children := root.GetChildren(); len(children) > 0 {
+				s.tree.SetCurrentNode(children[0])
+			}
+		})
+		cr.Register("gd", func() {
+			current := s.tree.GetCurrentNode()
+			if current == nil || current.GetLevel() < 2 || s.isSubnode(current) {
+				return
+			}
+			parent := current.GetReference().(*tview.TreeNode)
+			schemaName, tableName := s.removeIcons(parent.GetText(), current.GetText())
+			if s.nodeColumnsFunc != nil {
+				s.nodeColumnsFunc(ctx, schemaName, tableName)
+			}
+		})
+	}
+
 	s.tree.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if cr != nil {
+			if event.Key() == tcell.KeyRune {
+				if cr.Feed(event.Rune()) {
+					return nil
+				}
+			} else {
+				cr.Reset()
+			}
+		}
+
+		if cfg.UI.VimMode && event.Key() == tcell.KeyRune && event.Rune() == 'G' {
+			root := s.tree.GetRoot()
+			if root != nil {
+				if last := lastVisibleTreeNode(root); last != nil {
+					s.tree.SetCurrentNode(last)
+				}
+			}
+			return nil
+		}
+
 		switch {
 		case k.Contains(k.Schema.ExpandAll, event.Name()):
 			s.expandAllNodes(closedNodeIcon, openNodeIcon)
@@ -215,6 +261,17 @@ func (s *SchemaTree) restoreExpanded(expanded map[string]bool) {
 			node.SetText(fmt.Sprintf("%s%s", openIcon, name))
 		}
 	}
+}
+
+// lastVisibleTreeNode returns the last visible node in a tree, descending into
+// expanded nodes recursively. Call with the invisible root; it returns the last
+// selectable node the user can see.
+func lastVisibleTreeNode(node *tview.TreeNode) *tview.TreeNode {
+	children := node.GetChildren()
+	if !node.IsExpanded() || len(children) == 0 {
+		return node
+	}
+	return lastVisibleTreeNode(children[len(children)-1])
 }
 
 func isDDLQuery(sql string) bool {
