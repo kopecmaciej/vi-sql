@@ -225,7 +225,7 @@ func (w *Options) buildGroups() {
 		var statusText string
 		switch w.securityMethod {
 		case config.SecurityMethodKeyring:
-			if security.Available() {
+			if security.IsKeyringAvailable() {
 				statusText = "[green]Keyring available — key managed automatically[-]"
 			} else {
 				statusText = "[red]⚠ Keyring backend not available on this system[-]"

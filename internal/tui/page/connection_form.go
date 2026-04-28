@@ -374,7 +374,7 @@ func (cf *ConnectionForm) save() {
 			// be decrypted with the current key. Orphan ciphertext (sealed under a
 			// previous encryption method) is dropped so the user is forced to
 			// re-enter rather than persist an unreadable blob.
-			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && !cf.editConn.IsPasswordUnreadable() {
+			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && cf.editConn.IsPasswordReadable() {
 				password = cf.editConn.Password
 			}
 			database := cf.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()

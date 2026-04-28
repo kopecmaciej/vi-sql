@@ -33,8 +33,8 @@ func IsEncrypted(s string) bool {
 	return strings.HasPrefix(s, EncPrefix)
 }
 
-// TaggedEncrypt encrypts password and returns enc:<method>:<hex-ciphertext>.
-func TaggedEncrypt(password, hexKey, method string) (string, error) {
+// EncryptPasswordWithMethod encrypts password and embeds the security method enc:<method>:<ciphertext>.
+func EncryptPasswordWithMethod(password, hexKey, method string) (ciphertext string, err error) {
 	enc, err := EncryptPassword(password, hexKey)
 	if err != nil {
 		return "", err
@@ -42,9 +42,8 @@ func TaggedEncrypt(password, hexKey, method string) (string, error) {
 	return EncPrefix + method + ":" + strings.TrimPrefix(enc, EncPrefix), nil
 }
 
-// TaggedDecrypt decrypts an enc:<method>:<hex-ciphertext> value.
-// Returns plaintext and the embedded method tag.
-func TaggedDecrypt(encryptedHex, hexKey string) (string, string, error) {
+// DecryptPasswordWithMethod decrypts an enc:<method>:<hex-ciphertext> value
+func DecryptPasswordWithMethod(encryptedHex, hexKey string) (plaintext string, method string, err error) {
 	rest, ok := strings.CutPrefix(encryptedHex, EncPrefix)
 	if !ok {
 		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("not a tagged value")}
@@ -53,7 +52,7 @@ func TaggedDecrypt(encryptedHex, hexKey string) (string, string, error) {
 	if !ok {
 		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("invalid tagged format")}
 	}
-	plaintext, err := DecryptPassword(EncPrefix+hex, hexKey)
+	plaintext, err = DecryptPassword(EncPrefix+hex, hexKey)
 	return plaintext, method, err
 }
 

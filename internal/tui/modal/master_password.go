@@ -170,7 +170,7 @@ func (m *MasterPasswordModal) submit() {
 	}
 }
 
-func (m *MasterPasswordModal) password(label string) string {
+func (m *MasterPasswordModal) passwordFieldText(label string) string {
 	item := m.Form.GetFormItemByLabel(label)
 	if item == nil {
 		return ""
@@ -182,8 +182,8 @@ func (m *MasterPasswordModal) password(label string) string {
 }
 
 func (m *MasterPasswordModal) runSetup() {
-	pass := m.password("New password")
-	confirm := m.password("Confirm")
+	pass := m.passwordFieldText("New password")
+	confirm := m.passwordFieldText("Confirm")
 	if pass == "" {
 		m.setStatus("[red]Password must not be empty[-]")
 		return
@@ -225,7 +225,7 @@ func (m *MasterPasswordModal) runSetup() {
 // not by an in-app counter. Add a counter here if local rate-limiting becomes
 // a concern.
 func (m *MasterPasswordModal) runUnlock() {
-	pass := m.password("Password")
+	pass := m.passwordFieldText("Password")
 	if pass == "" {
 		m.setStatus("[red]Password must not be empty[-]")
 		return
@@ -256,9 +256,9 @@ func (m *MasterPasswordModal) runUnlock() {
 }
 
 func (m *MasterPasswordModal) runChange() {
-	current := m.password("Current password")
-	newPass := m.password("New password")
-	confirm := m.password("Confirm new")
+	current := m.passwordFieldText("Current password")
+	newPass := m.passwordFieldText("New password")
+	confirm := m.passwordFieldText("Confirm new")
 	if current == "" || newPass == "" {
 		m.setStatus("[red]Passwords must not be empty[-]")
 		return

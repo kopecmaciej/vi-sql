@@ -60,7 +60,7 @@ func TestMasterFullRoundTrip(t *testing.T) {
 		t.Fatalf("data key mismatch after unlock")
 	}
 
-	decrypted, _, err := util.TaggedDecrypt(cfg2.Connections[0].Password, EncryptionKey)
+	decrypted, _, err := util.DecryptPasswordWithMethod(cfg2.Connections[0].Password, EncryptionKey)
 	if err != nil {
 		t.Fatalf("decrypt failed: %v", err)
 	}

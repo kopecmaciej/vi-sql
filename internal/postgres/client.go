@@ -32,7 +32,7 @@ func (c *Client) Connect() error {
 			if config.EncryptionKey == "" {
 				return fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
 			}
-			decrypted, _, err := util.TaggedDecrypt(password, config.EncryptionKey)
+			decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
 			if err != nil {
 				return err
 			}

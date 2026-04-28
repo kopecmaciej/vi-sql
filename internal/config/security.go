@@ -54,7 +54,7 @@ func (c *Config) LoadEncryptionKey() error {
 }
 
 func (c *Config) loadKeyringKey() error {
-	key, err := sec.EnsureKey(c.Security.KeyringService, c.Security.KeyringAccount)
+	key, err := sec.GetOrCreateKey(c.Security.KeyringService, c.Security.KeyringAccount)
 	if err != nil {
 		return fmt.Errorf("keyring unavailable: %w", err)
 	}

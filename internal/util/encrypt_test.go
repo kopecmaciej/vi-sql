@@ -115,11 +115,11 @@ func TestTaggedEncryptDecryptRoundtrip(t *testing.T) {
 	methods := []string{"keyring", "master", "env"}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			tagged, err := TaggedEncrypt("secret", validHexKey, method)
+			tagged, err := EncryptPasswordWithMethod("secret", validHexKey, method)
 			require.NoError(t, err)
 			assert.True(t, strings.HasPrefix(tagged, "enc:"+method+":"))
 
-			plaintext, got, err := TaggedDecrypt(tagged, validHexKey)
+			plaintext, got, err := DecryptPasswordWithMethod(tagged, validHexKey)
 			require.NoError(t, err)
 			assert.Equal(t, "secret", plaintext)
 			assert.Equal(t, method, got)
@@ -128,19 +128,19 @@ func TestTaggedEncryptDecryptRoundtrip(t *testing.T) {
 }
 
 func TestTaggedDecryptWrongKeyFails(t *testing.T) {
-	tagged, err := TaggedEncrypt("secret", validHexKey, "master")
+	tagged, err := EncryptPasswordWithMethod("secret", validHexKey, "master")
 	require.NoError(t, err)
 
 	wrongKey := "0000000000000000000000000000000000000000000000000000000000000000"
-	_, _, err = TaggedDecrypt(tagged, wrongKey)
+	_, _, err = DecryptPasswordWithMethod(tagged, wrongKey)
 	assert.Error(t, err)
 }
 
 func TestTaggedDecryptInvalidFormatFails(t *testing.T) {
-	_, _, err := TaggedDecrypt("enc:nocolon", validHexKey)
+	_, _, err := DecryptPasswordWithMethod("enc:nocolon", validHexKey)
 	assert.Error(t, err)
 
-	_, _, err = TaggedDecrypt("plaintext", validHexKey)
+	_, _, err = DecryptPasswordWithMethod("plaintext", validHexKey)
 	assert.Error(t, err)
 }
 

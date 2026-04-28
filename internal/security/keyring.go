@@ -10,16 +10,13 @@ const (
 	DefaultAccount = "encryption-key"
 )
 
-// Available reports whether the OS keyring backend is accessible.
-func Available() bool {
+func IsKeyringAvailable() bool {
 	_, err := keyring.Get(DefaultService, DefaultAccount+"_probe")
-	// ErrNotFound means the backend is reachable but has no entry — that's fine.
+	// ErrNotFound - backend is reachable but has no entry.
 	return err == nil || err == keyring.ErrNotFound
 }
 
-// EnsureKey fetches the encryption key from the keyring, generating and storing
-// a new random one if no entry exists yet.
-func EnsureKey(service, account string) (string, error) {
+func GetOrCreateKey(service, account string) (string, error) {
 	if service == "" {
 		service = DefaultService
 	}
@@ -35,7 +32,6 @@ func EnsureKey(service, account string) (string, error) {
 		return "", err
 	}
 
-	// Generate and persist a new key.
 	key, err = util.GenerateEncryptionKey()
 	if err != nil {
 		return "", err

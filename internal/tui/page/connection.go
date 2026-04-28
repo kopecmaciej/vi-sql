@@ -512,7 +512,7 @@ func (c *Connection) updatePreview(row int) {
 	case conn.Password != "" && !util.IsEncrypted(conn.Password):
 		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorRed))
 		c.preview.SetCell(4, 1, tview.NewTableCell("[red]password stored unencrypted[-]").SetExpansion(1))
-	case conn.IsPasswordUnreadable():
+	case !conn.IsPasswordReadable():
 		storedMethod := util.ParseMethodTag(conn.Password)
 		currentMethod := c.App.GetConfig().Security.Method
 		var msg string

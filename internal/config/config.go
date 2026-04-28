@@ -253,7 +253,7 @@ func (c *Config) AddConnection(sqlConfig *SQLConfig) error {
 	}
 
 	if EncryptionKey != "" && sqlConfig.Password != "" && !util.IsEncrypted(sqlConfig.Password) {
-		encryptedPass, err := util.TaggedEncrypt(sqlConfig.Password, EncryptionKey, c.Security.Method)
+		encryptedPass, err := util.EncryptPasswordWithMethod(sqlConfig.Password, EncryptionKey, c.Security.Method)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt password: %w", err)
 		}
@@ -323,7 +323,7 @@ func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) err
 	for i, connection := range c.Connections {
 		if connection.Name == originalName {
 			if sqlConfig.Password != "" && EncryptionKey != "" && !util.IsEncrypted(sqlConfig.Password) {
-				encryptedPass, err := util.TaggedEncrypt(sqlConfig.Password, EncryptionKey, c.Security.Method)
+				encryptedPass, err := util.EncryptPasswordWithMethod(sqlConfig.Password, EncryptionKey, c.Security.Method)
 				if err != nil {
 					return fmt.Errorf("failed to encrypt password: %w", err)
 				}
@@ -376,7 +376,7 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 		if connection.Name == name {
 			conn := connection
 			if util.IsEncrypted(conn.Password) && EncryptionKey != "" {
-				decryptedPass, _, err := util.TaggedDecrypt(conn.Password, EncryptionKey)
+				decryptedPass, _, err := util.DecryptPasswordWithMethod(conn.Password, EncryptionKey)
 				if err != nil {
 					log.Warn().Err(err).Msg("Failed to decrypt password")
 				} else {
@@ -389,15 +389,15 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 	return nil, fmt.Errorf("connection '%s' not found", name)
 }
 
-func (m *SQLConfig) IsPasswordUnreadable() bool {
+func (m *SQLConfig) IsPasswordReadable() bool {
 	if !util.IsEncrypted(m.Password) {
-		return false
-	}
-	if EncryptionKey == "" {
 		return true
 	}
-	_, _, err := util.TaggedDecrypt(m.Password, EncryptionKey)
-	return err != nil
+	if EncryptionKey == "" {
+		return false
+	}
+	_, _, err := util.DecryptPasswordWithMethod(m.Password, EncryptionKey)
+	return err == nil
 }
 
 // GetDSN returns the DSN from config. If the stored DSN starts with "$" it is
@@ -427,7 +427,7 @@ func (m *SQLConfig) GetDecryptedDSN() string {
 		return dsn
 	}
 
-	decryptedPass, _, err := util.TaggedDecrypt(m.Password, EncryptionKey)
+	decryptedPass, _, err := util.DecryptPasswordWithMethod(m.Password, EncryptionKey)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to decrypt password")
 		return dsn
