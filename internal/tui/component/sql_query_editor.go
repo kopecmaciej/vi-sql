@@ -58,7 +58,7 @@ func NewSQLQueryEditor() *SQLQueryEditor {
 func (e *SQLQueryEditor) init() error {
 	e.style = &e.App.GetStyles().SQLEditor
 	if e.App.GetConfig().UI.VimMode {
-		e.vim = newVimHandler(e)
+		e.vim = newVimHandler(e, e.App.GetKeys())
 	}
 	e.setStyle()
 	e.setAutocomplete()

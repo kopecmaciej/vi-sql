@@ -127,7 +127,7 @@ func (s *SchemaTree) setKeybindings() {
 	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
 		cr = core.NewChordResolver()
-		cr.Register("gg", func() {
+		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
 			root := s.tree.GetRoot()
 			if root == nil {
 				return
@@ -136,31 +136,11 @@ func (s *SchemaTree) setKeybindings() {
 				s.tree.SetCurrentNode(children[0])
 			}
 		})
-		cr.Register("gd", func() {
-			current := s.tree.GetCurrentNode()
-			if current == nil || current.GetLevel() < 2 || s.isSubnode(current) {
-				return
-			}
-			parent := current.GetReference().(*tview.TreeNode)
-			schemaName, tableName := s.removeIcons(parent.GetText(), current.GetText())
-			if s.nodeColumnsFunc != nil {
-				s.nodeColumnsFunc(ctx, schemaName, tableName)
-			}
-		})
 	}
 
-	s.tree.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if cr != nil {
-			if event.Key() == tcell.KeyRune {
-				if cr.Feed(event.Rune()) {
-					return nil
-				}
-			} else {
-				cr.Reset()
-			}
-		}
-
-		if cfg.UI.VimMode && event.Key() == tcell.KeyRune && event.Rune() == 'G' {
+	s.tree.SetInputCapture(core.WithChords(cr, func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Contains(k.Navigation.GoBottom, event.Name()):
 			root := s.tree.GetRoot()
 			if root != nil {
 				if last := lastVisibleTreeNode(root); last != nil {
@@ -168,9 +148,6 @@ func (s *SchemaTree) setKeybindings() {
 				}
 			}
 			return nil
-		}
-
-		switch {
 		case k.Contains(k.Schema.ExpandAll, event.Name()):
 			s.expandAllNodes(closedNodeIcon, openNodeIcon)
 			return nil
@@ -204,7 +181,7 @@ func (s *SchemaTree) setKeybindings() {
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (s *SchemaTree) handleEvents() {

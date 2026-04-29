@@ -1,6 +1,10 @@
 package core
 
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+
+	"github.com/gdamore/tcell/v2"
+)
 
 // ChordResolver resolves 2-rune vim-style chords (e.g. "gg", "gd").
 // Call Feed from an input handler; it returns true when the rune was
@@ -50,4 +54,30 @@ func (c *ChordResolver) Feed(r rune) bool {
 // Reset clears any pending prefix (call on mode switches or Escape).
 func (c *ChordResolver) Reset() {
 	c.pending = 0
+}
+
+// RegisterChords registers every chord string from chords into cr with fn.
+func RegisterChords(chords []string, cr *ChordResolver, fn func()) {
+	for _, ch := range chords {
+		cr.Register(ch, fn)
+	}
+}
+
+// WithChords wraps an input capture function so that rune events are first
+// offered to cr; if consumed, nil is returned immediately.
+// Non-rune events reset the pending prefix before continuing.
+// A nil cr is a no-op — the inner function receives every event unchanged.
+func WithChords(cr *ChordResolver, inner func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
+	return func(ev *tcell.EventKey) *tcell.EventKey {
+		if cr != nil {
+			if ev.Key() == tcell.KeyRune {
+				if cr.Feed(ev.Rune()) {
+					return nil
+				}
+			} else {
+				cr.Reset()
+			}
+		}
+		return inner(ev)
+	}
 }

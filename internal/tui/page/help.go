@@ -119,7 +119,7 @@ func (h *Help) setLayout() {
 
 	captureHint := tview.NewTextView()
 	captureHint.SetDynamicColors(true)
-	captureHint.SetText(" [::d]any key=add  Enter=save  Ctrl+Q=cancel  Backspace=clear[-:-:-]")
+	captureHint.SetText(" [::d]any key=add  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
 
 	h.captureDisplay.SetDynamicColors(true)
 	h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")
@@ -246,7 +246,13 @@ func (h *Help) setKeybindings() {
 		case k == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 			h.saveEdit()
 		case (k == tcell.KeyBackspace || k == tcell.KeyBackspace2 || k == tcell.KeyDelete) && event.Modifiers() == tcell.ModNone:
-			h.capturedKey = config.Key{}
+			if len(h.capturedKey.Runes) > 0 {
+				h.capturedKey.Runes = h.capturedKey.Runes[:len(h.capturedKey.Runes)-1]
+			} else if len(h.capturedKey.Keys) > 0 {
+				h.capturedKey.Keys = h.capturedKey.Keys[:len(h.capturedKey.Keys)-1]
+			} else {
+				h.capturedKey = config.Key{}
+			}
 			h.updateCaptureDisplay()
 		default:
 			captured := eventKeyToConfigKey(event)
@@ -310,7 +316,7 @@ func (h *Help) exitEditMode() {
 }
 
 func (h *Help) saveEdit() {
-	if h.capturedKey.Keys == nil && h.capturedKey.Runes == nil {
+	if h.capturedKey.Keys == nil && h.capturedKey.Runes == nil && h.capturedKey.Chords == nil {
 		h.exitEditMode()
 		return
 	}
@@ -324,10 +330,12 @@ func (h *Help) saveEdit() {
 		return
 	}
 
-	newKey := config.Key{
-		Keys:        h.capturedKey.Keys,
-		Runes:       h.capturedKey.Runes,
-		Description: section.Keys[h.editKeyIdx].Description,
+	newKey := config.Key{Description: section.Keys[h.editKeyIdx].Description}
+	if len(h.capturedKey.Runes) == 2 {
+		newKey.Chords = []string{strings.Join(h.capturedKey.Runes, "")}
+	} else {
+		newKey.Keys = h.capturedKey.Keys
+		newKey.Runes = h.capturedKey.Runes
 	}
 
 	kb := h.App.GetKeys()
@@ -351,7 +359,11 @@ func (h *Help) saveEdit() {
 func (h *Help) updateCaptureDisplay() {
 	var parts []string
 	parts = append(parts, h.capturedKey.Keys...)
-	parts = append(parts, h.capturedKey.Runes...)
+	if len(h.capturedKey.Runes) == 2 {
+		parts = append(parts, "<"+strings.Join(h.capturedKey.Runes, "")+">"+" (chord)")
+	} else {
+		parts = append(parts, h.capturedKey.Runes...)
+	}
 	if len(parts) == 0 {
 		h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")
 	} else {
@@ -518,11 +530,10 @@ func (h *Help) renderKeysForSection(idx int) {
 
 func formatHelpKeyString(key config.Key) string {
 	var parts []string
-	if len(key.Keys) > 0 {
-		parts = append(parts, strings.Join(key.Keys, ", "))
-	}
-	if len(key.Runes) > 0 {
-		parts = append(parts, strings.Join(key.Runes, ", "))
+	parts = append(parts, key.Keys...)
+	parts = append(parts, key.Runes...)
+	for _, ch := range key.Chords {
+		parts = append(parts, "<"+ch+">")
 	}
 	return strings.Join(parts, ", ")
 }

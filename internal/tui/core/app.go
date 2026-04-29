@@ -68,7 +68,7 @@ func NewApp(appConfig *config.Config) *App {
 		log.Fatal().Err(err).Msg("Failed to load styles")
 	}
 	styles.LoadMainStyles()
-	keyBindings, err := config.LoadKeybindings()
+	keyBindings, err := config.LoadKeybindings(appConfig.UI.VimMode)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load keybindings")
 	}

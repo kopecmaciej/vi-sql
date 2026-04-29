@@ -357,32 +357,22 @@ func (c *Data) setKeybindings(ctx context.Context) {
 	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
 		cr = core.NewChordResolver()
-		cr.Register("gg", func() {
+		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
 			_, col := c.table.GetSelection()
 			if c.table.GetRowCount() > 1 {
 				c.table.Select(1, col)
 			}
 		})
-		cr.Register("gd", func() {
+		core.RegisterChords(k.Data.FollowForeignKey.Chords, cr, func() {
 			row, col := c.table.GetSelection()
 			c.handleFollowForeignKey(ctx, row, col)
 		})
 	}
 
-	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if cr != nil {
-			if event.Key() == tcell.KeyRune {
-				if cr.Feed(event.Rune()) {
-					return nil
-				}
-			} else {
-				cr.Reset()
-			}
-		}
-
+	c.table.SetInputCapture(core.WithChords(cr, func(event *tcell.EventKey) *tcell.EventKey {
 		row, col := c.table.GetSelection()
 		switch {
-		case cfg.UI.VimMode && event.Key() == tcell.KeyRune && event.Rune() == 'G':
+		case k.Contains(k.Navigation.GoBottom, event.Name()):
 			if rc := c.table.GetRowCount(); rc > 1 {
 				c.table.Select(rc-1, col)
 			}
@@ -457,7 +447,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		}
 
 		return event
-	})
+	}))
 }
 
 // TabOptions carries optional initial state for a new table tab.

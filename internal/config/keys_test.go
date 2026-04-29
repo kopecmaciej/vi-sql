@@ -25,7 +25,7 @@ func writePartialKeybindings(t *testing.T, path string) {
 
 func defaultKB() *KeyBindings {
 	kb := &KeyBindings{}
-	kb.loadDefaults()
+	kb.loadDefaults(true) // vim mode for backwards-compatibility with existing tests
 	return kb
 }
 
@@ -69,7 +69,7 @@ func TestNewKeyInExistingStructFilledInMemory(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings.yaml")
 
 	partial := KeyBindings{}
-	partial.loadDefaults()
+	partial.loadDefaults(true)
 	partial.Data.ExplainQuery = Key{}
 	data, err := yaml.Marshal(&partial)
 	require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestNewKeyInExistingStructWrittenBackToFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings.yaml")
 
 	partial := KeyBindings{}
-	partial.loadDefaults()
+	partial.loadDefaults(true)
 	partial.Data.ExplainQuery = Key{}
 	data, err := yaml.Marshal(&partial)
 	require.NoError(t, err)
@@ -143,4 +143,85 @@ func TestFileCreatedFromDefaultsWhenMissing(t *testing.T) {
 
 	assert.NotEmpty(t, onDisk.Global.CloseApp.Keys,
 		"created file should contain default keys")
+}
+
+func vimKB() *KeyBindings {
+	kb := &KeyBindings{}
+	kb.loadDefaults(true)
+	return kb
+}
+
+func normalKB() *KeyBindings {
+	kb := &KeyBindings{}
+	kb.loadDefaults(false)
+	return kb
+}
+
+func TestVimProfileDefaults(t *testing.T) {
+	kb := vimKB()
+	assert.Equal(t, []string{"gg"}, kb.Navigation.GoTop.Chords, "vim GoTop should default to gg chord")
+	assert.Equal(t, []string{"G"}, kb.Navigation.GoBottom.Runes, "vim GoBottom should default to G rune")
+	assert.Equal(t, []string{"k"}, kb.Navigation.MoveUp.Runes, "vim MoveUp should include k rune")
+	assert.Contains(t, kb.Data.FollowForeignKey.Chords, "gd", "vim FollowForeignKey should include gd chord")
+}
+
+func TestNormalProfileDefaults(t *testing.T) {
+	kb := normalKB()
+	assert.Equal(t, []string{"Ctrl+Home"}, kb.Navigation.GoTop.Keys, "normal GoTop should default to Ctrl+Home")
+	assert.Equal(t, []string{"Ctrl+End"}, kb.Navigation.GoBottom.Keys, "normal GoBottom should default to Ctrl+End")
+	assert.Empty(t, kb.Navigation.MoveUp.Runes, "normal MoveUp should have no runes")
+	assert.Empty(t, kb.Data.FollowForeignKey.Chords, "normal FollowForeignKey should have no chords")
+}
+
+func TestProfilesAreIndependent(t *testing.T) {
+	vimPath := filepath.Join(t.TempDir(), "keybindings-vim.yaml")
+	normalPath := filepath.Join(t.TempDir(), "keybindings-normal.yaml")
+
+	// Save a modified vim profile.
+	vim := vimKB()
+	vim.Navigation.GoTop = Key{Keys: []string{"F9"}, Description: "custom"}
+	data, err := yaml.Marshal(vim)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(vimPath, data, 0600))
+
+	// Load normal profile from its own path — must be unaffected.
+	loaded, err := util.LoadConfigFile(normalKB(), normalPath)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"Ctrl+Home"}, loaded.Navigation.GoTop.Keys,
+		"normal profile should retain its own defaults regardless of vim profile changes")
+}
+
+func TestUserOverridesPreservedPerProfile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings-vim.yaml")
+
+	custom := vimKB()
+	custom.Navigation.MoveDown = Key{Runes: []string{"n"}, Keys: []string{"Down"}, Description: "custom move down"}
+	data, err := yaml.Marshal(custom)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+
+	loaded, err := util.LoadConfigFile(vimKB(), path)
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"n"}, loaded.Navigation.MoveDown.Runes,
+		"user-set rune must survive reload")
+}
+
+func TestNewKeyAddedToProfileFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "keybindings-vim.yaml")
+
+	// Simulate an old vim profile file that predates Schema.ExpandAll.
+	old := vimKB()
+	old.Schema.ExpandAll = Key{}
+	data, err := yaml.Marshal(old)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, data, 0600))
+
+	// Load — merge must restore ExpandAll from vim defaults.
+	loaded, err := util.LoadConfigFile(vimKB(), path)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, loaded.Schema.ExpandAll.Runes,
+		"new key must be filled from profile defaults and written back")
 }

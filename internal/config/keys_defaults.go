@@ -1,6 +1,6 @@
 package config
 
-func (k *KeyBindings) loadDefaults() {
+func (k *KeyBindings) loadDefaults(vimMode bool) {
 	k.Common = CommonKeys{
 		Close: Key{
 			Keys:        []string{"Esc"},
@@ -48,56 +48,29 @@ func (k *KeyBindings) loadDefaults() {
 		},
 	}
 
-	k.Navigation = NavigationKeys{
-		MoveUp: Key{
-			Runes:       []string{"k"},
-			Keys:        []string{"Up"},
-			Description: "Move up",
-		},
-		MoveDown: Key{
-			Runes:       []string{"j"},
-			Keys:        []string{"Down"},
-			Description: "Move down",
-		},
-		MoveLeft: Key{
-			Runes:       []string{"h"},
-			Keys:        []string{"Left"},
-			Description: "Move left",
-		},
-		MoveRight: Key{
-			Runes:       []string{"l"},
-			Keys:        []string{"Right"},
-			Description: "Move right",
-		},
-		FocusUp: Key{
-			Keys:        []string{"Ctrl+k", "Backtab"},
-			Description: "Focus up",
-		},
-		FocusDown: Key{
-			Keys:        []string{"Ctrl+j", "Tab"},
-			Description: "Focus down",
-		},
-		FocusLeft: Key{
-			Keys:        []string{"Ctrl+h", "Backtab"},
-			Description: "Focus left",
-		},
-		FocusRight: Key{
-			Keys:        []string{"Ctrl+l", "Tab"},
-			Description: "Focus right",
-		},
-		AutocompleteUp: Key{
-			Keys:        []string{"Ctrl+p", "Up"},
-			Description: "Autocomplete up",
-		},
-		AutocompleteDown: Key{
-			Keys:        []string{"Ctrl+n", "Down"},
-			Description: "Autocomplete down",
-		},
-		AutocompleteAccept: Key{
-			Keys:        []string{"Ctrl+y", "Enter"},
-			Description: "Autocomplete accept",
-		},
+	if vimMode {
+		k.Navigation.MoveUp = Key{Runes: []string{"k"}, Keys: []string{"Up"}, Description: "Move up"}
+		k.Navigation.MoveDown = Key{Runes: []string{"j"}, Keys: []string{"Down"}, Description: "Move down"}
+		k.Navigation.MoveLeft = Key{Runes: []string{"h"}, Keys: []string{"Left"}, Description: "Move left"}
+		k.Navigation.MoveRight = Key{Runes: []string{"l"}, Keys: []string{"Right"}, Description: "Move right"}
+		k.Navigation.GoTop = Key{Chords: []string{"gg"}, Description: "Go to first item"}
+		k.Navigation.GoBottom = Key{Runes: []string{"G"}, Description: "Go to last item"}
+	} else {
+		k.Navigation.MoveUp = Key{Keys: []string{"Up"}, Description: "Move up"}
+		k.Navigation.MoveDown = Key{Keys: []string{"Down"}, Description: "Move down"}
+		k.Navigation.MoveLeft = Key{Keys: []string{"Left"}, Description: "Move left"}
+		k.Navigation.MoveRight = Key{Keys: []string{"Right"}, Description: "Move right"}
+		k.Navigation.GoTop = Key{Keys: []string{"Ctrl+Home"}, Description: "Go to first item"}
+		k.Navigation.GoBottom = Key{Keys: []string{"Ctrl+End"}, Description: "Go to last item"}
 	}
+
+	k.Navigation.FocusUp = Key{Keys: []string{"Ctrl+k", "Backtab"}, Description: "Focus up"}
+	k.Navigation.FocusDown = Key{Keys: []string{"Ctrl+j", "Tab"}, Description: "Focus down"}
+	k.Navigation.FocusLeft = Key{Keys: []string{"Ctrl+h", "Backtab"}, Description: "Focus left"}
+	k.Navigation.FocusRight = Key{Keys: []string{"Ctrl+l", "Tab"}, Description: "Focus right"}
+	k.Navigation.AutocompleteUp = Key{Keys: []string{"Ctrl+p", "Up"}, Description: "Autocomplete up"}
+	k.Navigation.AutocompleteDown = Key{Keys: []string{"Ctrl+n", "Down"}, Description: "Autocomplete down"}
+	k.Navigation.AutocompleteAccept = Key{Keys: []string{"Ctrl+y", "Enter"}, Description: "Autocomplete accept"}
 
 	k.Global = GlobalKeys{
 		CloseApp: Key{
@@ -175,7 +148,6 @@ func (k *KeyBindings) loadDefaults() {
 			Description: "Expand table",
 		},
 	}
-
 	k.Data = DataKeys{
 		PeekRow: Key{
 			Runes:       []string{"o"},
@@ -238,10 +210,11 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Alt+m"},
 			Description: "Export data",
 		},
-		FollowForeignKey: Key{
-			Keys:        []string{"Ctrl+b"},
-			Description: "Follow FK",
-		},
+	}
+	if vimMode {
+		k.Data.FollowForeignKey = Key{Chords: []string{"gd"}, Description: "Follow FK"}
+	} else {
+		k.Data.FollowForeignKey = Key{Keys: []string{"Ctrl+b"}, Description: "Follow FK"}
 	}
 
 	k.ExplainViewer = ExplainViewerKeys{
@@ -252,14 +225,18 @@ func (k *KeyBindings) loadDefaults() {
 	}
 
 	k.Peeker = PeekerKeys{
-		MoveToTop: Key{
-			Runes:       []string{"g"},
-			Description: "Go to top",
-		},
-		MoveToBottom: Key{
-			Runes:       []string{"G"},
-			Description: "Go to bottom",
-		},
+		MoveToTop: func() Key {
+			if vimMode {
+				return Key{Runes: []string{"g"}, Description: "Go to top"}
+			}
+			return Key{Keys: []string{"Ctrl+Home"}, Description: "Go to top"}
+		}(),
+		MoveToBottom: func() Key {
+			if vimMode {
+				return Key{Runes: []string{"G"}, Description: "Go to bottom"}
+			}
+			return Key{Keys: []string{"Ctrl+End"}, Description: "Go to bottom"}
+		}(),
 		CopyHighlight: Key{
 			Runes:       []string{"C"},
 			Description: "Copy highlight",
