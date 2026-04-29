@@ -127,6 +127,9 @@ func (s *SchemaTree) setKeybindings() {
 	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
 		cr = core.NewChordResolver()
+		cr.OnPending = func(r rune) {
+			s.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
+		}
 		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
 			root := s.tree.GetRoot()
 			if root == nil {

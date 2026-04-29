@@ -3,6 +3,7 @@ package component
 import (
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/rs/zerolog/log"
 
@@ -30,6 +31,7 @@ type (
 		expanded       bool
 		centered       bool
 		pinnedKeys     []config.Key
+		chordPending   rune
 		onHeightChange func()
 	}
 )
@@ -171,6 +173,9 @@ func (f *Footer) Render() {
 	}
 
 	col := 0
+	f.Table.SetCell(0, col, f.chordPendingCell(f.chordPending))
+	col++
+
 	for _, key := range f.pinnedKeys {
 		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
 		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
@@ -182,6 +187,7 @@ func (f *Footer) Render() {
 		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
 		col += 2
 	}
+
 }
 
 func (f *Footer) handleEvents() {
@@ -196,6 +202,9 @@ func (f *Footer) handleEvents() {
 		case manager.StyleChanged:
 			f.setStyle()
 			f.Render()
+		case manager.ChordPendingChanged:
+			f.chordPending = event.Message.Data.(rune)
+			f.Render()
 		}
 	})
 }
@@ -209,6 +218,17 @@ func (f *Footer) keyCell(text string) *tview.TableCell {
 func (f *Footer) valueCell(text string) *tview.TableCell {
 	cell := tview.NewTableCell(text + " ")
 	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color())
+	return cell
+}
+
+// chordPendingCell renders the pending chord prefix (e.g. "g")
+func (f *Footer) chordPendingCell(prefix rune) *tview.TableCell {
+	text := string(prefix)
+	if prefix == 0 {
+		text = " "
+	}
+	cell := tview.NewTableCell(text)
+	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color()).SetAttributes(tcell.AttrBold)
 	return cell
 }
 

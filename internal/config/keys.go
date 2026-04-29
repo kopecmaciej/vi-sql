@@ -126,8 +126,6 @@ type (
 		ExpandRow        Key `yaml:"expandRow"`
 		OpenValueViewer  Key `yaml:"openValueViewer"`
 		ToggleFullScreen Key `yaml:"toggleFullScreen"`
-		MoveToTop        Key `yaml:"moveToTop"`
-		MoveToBottom     Key `yaml:"moveToBottom"`
 	}
 
 	HistoryKeys struct {

@@ -357,6 +357,9 @@ func (c *Data) setKeybindings(ctx context.Context) {
 	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
 		cr = core.NewChordResolver()
+		cr.OnPending = func(r rune) {
+			c.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
+		}
 		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
 			_, col := c.table.GetSelection()
 			if c.table.GetRowCount() > 1 {

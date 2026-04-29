@@ -119,7 +119,7 @@ func (h *Help) setLayout() {
 
 	captureHint := tview.NewTextView()
 	captureHint.SetDynamicColors(true)
-	captureHint.SetText(" [::d]any key=add  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
+	captureHint.SetText(" [::d]any key=add  2 runes=chord  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
 
 	h.captureDisplay.SetDynamicColors(true)
 	h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")

@@ -12,8 +12,9 @@ import (
 // Unknown chords (registered prefix + unregistered second rune) silently consume
 // both runes, matching vim's behaviour.
 type ChordResolver struct {
-	prefixes map[rune]map[rune]func()
-	pending  rune
+	prefixes  map[rune]map[rune]func()
+	pending   rune
+	OnPending func(rune) // called on every pending-state change; 0 means cleared
 }
 
 func NewChordResolver() *ChordResolver {
@@ -39,6 +40,9 @@ func (c *ChordResolver) Feed(r rune) bool {
 	if c.pending != 0 {
 		motions := c.prefixes[c.pending]
 		c.pending = 0
+		if c.OnPending != nil {
+			c.OnPending(0)
+		}
 		if fn, ok := motions[r]; ok {
 			fn()
 		}
@@ -46,6 +50,9 @@ func (c *ChordResolver) Feed(r rune) bool {
 	}
 	if _, isPrefix := c.prefixes[r]; isPrefix {
 		c.pending = r
+		if c.OnPending != nil {
+			c.OnPending(r)
+		}
 		return true
 	}
 	return false
@@ -53,7 +60,12 @@ func (c *ChordResolver) Feed(r rune) bool {
 
 // Reset clears any pending prefix (call on mode switches or Escape).
 func (c *ChordResolver) Reset() {
-	c.pending = 0
+	if c.pending != 0 {
+		c.pending = 0
+		if c.OnPending != nil {
+			c.OnPending(0)
+		}
+	}
 }
 
 // RegisterChords registers every chord string from chords into cr with fn.

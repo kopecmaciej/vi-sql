@@ -6,7 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
-	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
@@ -27,10 +27,13 @@ type vimHandler struct {
 	editor   *SQLQueryEditor
 }
 
-func newVimHandler(e *SQLQueryEditor, k *config.KeyBindings) *vimHandler {
+func newVimHandler(e *SQLQueryEditor) *vimHandler {
 	v := &vimHandler{mode: vimInsert, editor: e}
 	v.chord = core.NewChordResolver()
-	core.RegisterChords(k.Navigation.GoTop.Chords, v.chord, func() { e.TextArea.MoveCursorTo(0, 0) })
+	v.chord.OnPending = func(r rune) {
+		e.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
+	}
+	core.RegisterChords(e.App.GetKeys().Navigation.GoTop.Chords, v.chord, func() { e.TextArea.MoveCursorTo(0, 0) })
 	return v
 }
 

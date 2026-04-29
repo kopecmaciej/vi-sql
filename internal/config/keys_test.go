@@ -208,6 +208,14 @@ func TestUserOverridesPreservedPerProfile(t *testing.T) {
 		"user-set rune must survive reload")
 }
 
+// TestGetAvailableKeysSkipsNonStructFields guards against the panic caused by
+// calling reflect.Value.NumField on the unexported vimMode bool field.
+func TestGetAvailableKeysSkipsNonStructFields(t *testing.T) {
+	kb := vimKB()
+	sections := kb.GetAvailableKeys()
+	assert.NotEmpty(t, sections, "GetAvailableKeys should return sections")
+}
+
 func TestNewKeyAddedToProfileFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "keybindings-vim.yaml")
 

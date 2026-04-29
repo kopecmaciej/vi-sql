@@ -91,10 +91,10 @@ func (p *Peeker) setKeybindings() {
 	k := p.App.GetKeys()
 	p.ViewModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Peeker.MoveToTop, event.Name()):
+		case k.Contains(k.Navigation.GoTop, event.Name()):
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Peeker.MoveToBottom, event.Name()):
+		case k.Contains(k.Navigation.GoBottom, event.Name()):
 			p.ViewModal.MoveToBottom()
 			return nil
 		case k.Contains(k.Peeker.CopyHighlight, event.Name()):

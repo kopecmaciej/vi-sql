@@ -225,18 +225,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 	}
 
 	k.Peeker = PeekerKeys{
-		MoveToTop: func() Key {
-			if vimMode {
-				return Key{Runes: []string{"g"}, Description: "Go to top"}
-			}
-			return Key{Keys: []string{"Ctrl+Home"}, Description: "Go to top"}
-		}(),
-		MoveToBottom: func() Key {
-			if vimMode {
-				return Key{Runes: []string{"G"}, Description: "Go to bottom"}
-			}
-			return Key{Keys: []string{"Ctrl+End"}, Description: "Go to bottom"}
-		}(),
 		CopyHighlight: Key{
 			Runes:       []string{"C"},
 			Description: "Copy highlight",
