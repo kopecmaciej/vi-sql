@@ -76,6 +76,25 @@ func (a *App) Run() error {
 	return a.Application.Run()
 }
 
+func (a *App) shutdown() {
+	if a.mcpCancelFunc != nil {
+		a.mcpCancelFunc()
+		log.Debug().Msg("MCP server stopped")
+	}
+
+	if driver := a.GetDriver(); driver != nil {
+		if err := driver.Close(context.Background()); err != nil {
+			log.Error().Err(err).Msg("Failed to close database connection")
+		}
+	}
+
+	a.GetManager().Stop()
+	log.Debug().Msg("Event manager stopped")
+
+	a.Stop()
+	log.Debug().Msg("App stopped")
+}
+
 // startWatchdog periodically probes the tview event loop, if the loop does not
 // respond, all goroutine stacks are dumped to the log. Only active in debug mode.
 func (a *App) startWatchdog() {
@@ -114,7 +133,7 @@ func (a *App) setKeybindings() {
 
 		switch {
 		case a.GetKeys().Contains(a.GetKeys().Global.CloseApp, event.Name()):
-			a.Stop()
+			a.shutdown()
 			return nil
 		case a.GetKeys().Contains(a.GetKeys().Global.OpenConnection, event.Name()):
 			a.renderConnection()
