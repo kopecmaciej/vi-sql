@@ -195,16 +195,20 @@ func (f *Footer) handleEvents() {
 		switch event.Message.Type {
 		case manager.FocusChanged:
 			f.currentFocus = tview.Identifier(event.Message.Data.(tview.Identifier))
-			if f.expanded && f.onHeightChange != nil {
-				f.onHeightChange()
-			}
-			f.Render()
+			go f.App.QueueUpdateDraw(func() {
+				if f.expanded && f.onHeightChange != nil {
+					f.onHeightChange()
+				}
+				f.Render()
+			})
 		case manager.StyleChanged:
-			f.setStyle()
-			f.Render()
+			go f.App.QueueUpdateDraw(func() {
+				f.setStyle()
+				f.Render()
+			})
 		case manager.ChordPendingChanged:
 			f.chordPending = event.Message.Data.(rune)
-			f.Render()
+			go f.App.QueueUpdateDraw(f.Render)
 		}
 	})
 }
