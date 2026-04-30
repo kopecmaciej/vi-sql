@@ -7,10 +7,8 @@ import (
 )
 
 // ChordResolver resolves 2-rune vim-style chords (e.g. "gg", "gd").
-// Call Feed from an input handler; it returns true when the rune was
-// absorbed — either stored as a pending prefix or completing/discarding a chord.
 // Unknown chords (registered prefix + unregistered second rune) silently consume
-// both runes, matching vim's behaviour.
+// both runes.
 type ChordResolver struct {
 	prefixes  map[rune]map[rune]func()
 	pending   rune
@@ -21,8 +19,7 @@ func NewChordResolver() *ChordResolver {
 	return &ChordResolver{prefixes: make(map[rune]map[rune]func())}
 }
 
-// Register binds a 2-rune chord (e.g. "gg") to fn. Silently ignored if chord
-// is not exactly 2 runes.
+// Register binds a 2-rune chord (e.g. "gg") to fn.
 func (c *ChordResolver) Register(chord string, fn func()) {
 	if utf8.RuneCountInString(chord) != 2 {
 		return
@@ -34,8 +31,8 @@ func (c *ChordResolver) Register(chord string, fn func()) {
 	c.prefixes[runes[0]][runes[1]] = fn
 }
 
-// Feed processes one rune from an input event. Returns true when the rune was
-// absorbed: either stored as a pending prefix, or completing/discarding a chord.
+// Feed processes one rune from an input event. Returns true when rune
+// was absorbed: either stored as a pending prefix, or completing/discarding a chord.
 func (c *ChordResolver) Feed(r rune) bool {
 	if c.pending != 0 {
 		motions := c.prefixes[c.pending]
@@ -75,10 +72,8 @@ func RegisterChords(chords []string, cr *ChordResolver, fn func()) {
 	}
 }
 
-// WithChords wraps an input capture function so that rune events are first
-// offered to cr; if consumed, nil is returned immediately.
-// Non-rune events reset the pending prefix before continuing.
-// A nil cr is a no-op — the inner function receives every event unchanged.
+// WithChords either consume event in ChordResolver or leaves it to the inner function intact
+// while also resetting pending rune if it was non-rune event
 func WithChords(cr *ChordResolver, inner func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
 	return func(ev *tcell.EventKey) *tcell.EventKey {
 		if cr != nil {

@@ -26,7 +26,7 @@ type (
 	}
 
 	KeyBindings struct {
-		vimMode        bool               // set at load time; controls which profile file SaveKeybindings writes
+		vimMode        bool
 		Navigation     NavigationKeys     `yaml:"navigation"`
 		Common         CommonKeys         `yaml:"common"`
 		Global         GlobalKeys         `yaml:"global"`

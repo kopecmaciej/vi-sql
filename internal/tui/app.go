@@ -252,9 +252,7 @@ func (a *App) Render() {
 }
 
 // gateOnMasterPassword shows the master-password modal (setup or unlock,
-// depending on whether a wrapped key already exists) when the configured
-// security method is "master" and the data key has not been loaded yet.
-// Other methods proceed straight through.
+// depending on whether a wrapped key already exists) if in master method.
 func (a *App) gateOnMasterPassword(next func()) {
 	cfg := a.App.GetConfig()
 	if cfg.Security.Method != config.SecurityMethodMaster || config.EncryptionKey != "" {
