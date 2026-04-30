@@ -20,11 +20,11 @@ func NewForm() *Form {
 // page-specific SetInputCapture so the translation wraps the inner handler.
 func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {
 	existing := f.Form.GetInputCapture()
-	f.Form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	f.Form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift)
 		case event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab:
 			return nil
@@ -33,7 +33,7 @@ func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {
 			return existing(event)
 		}
 		return event
-	})
+	}))
 }
 
 // ApplyDropdownNavKeys wires the configured dropdown navigation keys onto every

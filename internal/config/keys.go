@@ -26,7 +26,7 @@ type (
 	}
 
 	KeyBindings struct {
-		vimMode        bool
+		chordState     `yaml:"-"`
 		Navigation     NavigationKeys     `yaml:"navigation"`
 		Common         CommonKeys         `yaml:"common"`
 		Global         GlobalKeys         `yaml:"global"`
@@ -206,6 +206,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 	defaultKeybindings.vimMode = vimMode
 
 	if os.Getenv("ENV") == "vi-dev" {
+		defaultKeybindings.buildChordPrefixes()
 		return defaultKeybindings, nil
 	}
 
@@ -218,6 +219,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 		if err := writeKeybindingsWithHeader(defaultKeybindings, keybindingsPath); err != nil {
 			return nil, err
 		}
+		defaultKeybindings.buildChordPrefixes()
 		return defaultKeybindings, nil
 	}
 
@@ -226,6 +228,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 		return nil, err
 	}
 	loaded.vimMode = vimMode
+	loaded.buildChordPrefixes()
 	return loaded, nil
 }
 
@@ -270,12 +273,11 @@ func (kb KeyBindings) GetAvailableKeys() []OrderedKeys {
 		}
 		fieldName := t.Field(i).Name
 
-		orderedKeys := OrderedKeys{
-			Element: fieldName,
-			Keys:    extractKeysFromStruct(field),
+		extracted := extractKeysFromStruct(field)
+		if len(extracted) == 0 {
+			continue
 		}
-
-		keys = append(keys, orderedKeys)
+		keys = append(keys, OrderedKeys{Element: fieldName, Keys: extracted})
 	}
 
 	return keys
@@ -389,9 +391,8 @@ func normalizeConfigKey(k string) string {
 	return k
 }
 
-// Contains reports whether namedKey (as returned by tcell's EventKey.Name())
-// matches any single-event key in configKey. Chord matching is intentionally
-// excluded — chords are multi-event sequences handled by ChordResolver.Feed.
+// Contains reports whether namedKey (tcell EventKey.Name()) matches any
+// single-event Keys/Runes entry in configKey. Chord matching is in Match.
 func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
 	normalized, isRune := normalizeNamedKey(namedKey)
 

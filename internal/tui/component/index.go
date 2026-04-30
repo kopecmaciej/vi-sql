@@ -93,42 +93,42 @@ func (idx *Indexes) setKeybindings() {
 
 	idx.addForm.ApplyFormNavKeys(k)
 
-	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	idx.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Add, event.Name()):
+		case k.Match(k.Common.Add, event):
 			if !idx.isAddFormVisible {
 				idx.showAddForm()
 				return nil
 			}
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Delete, event):
 			if !idx.isAddFormVisible {
 				idx.showDeleteIndexModal(context.Background())
 				return nil
 			}
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			if idx.isAddFormVisible {
 				idx.closeAddForm()
 				return nil
 			}
-		case k.Contains(k.IndexAddForm.ToggleSQLMode, event.Name()):
+		case k.Match(k.IndexAddForm.ToggleSQLMode, event):
 			if idx.isAddFormVisible {
 				idx.isSQLMode = !idx.isSQLMode
 				idx.showAddForm()
 				return nil
 			}
-		case k.Contains(k.IndexAddForm.AddColumn, event.Name()):
+		case k.Match(k.IndexAddForm.AddColumn, event):
 			if idx.isAddFormVisible && !idx.isSQLMode {
 				idx.addColumn()
 				return nil
 			}
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			if idx.isAddFormVisible {
 				idx.handleCreate()
 				return nil
 			}
 		}
 		return event
-	})
+	}))
 }
 
 func (idx *Indexes) handleEvents() {

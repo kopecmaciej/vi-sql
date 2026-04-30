@@ -126,27 +126,28 @@ func (a *App) startWatchdog() {
 }
 
 func (a *App) setKeybindings() {
-	a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	k := a.GetKeys()
+	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if a.shouldHandleRune(event) {
 			return event
 		}
 
 		switch {
-		case a.GetKeys().Contains(a.GetKeys().Global.CloseApp, event.Name()):
+		case k.Match(k.Global.CloseApp, event):
 			a.shutdown()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.OpenConnection, event.Name()):
+		case k.Match(k.Global.OpenConnection, event):
 			a.renderConnection()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ChangeStyle, event.Name()):
+		case k.Match(k.Global.ChangeStyle, event):
 			a.ShowStyleChangeModal()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFooter, event.Name()):
+		case k.Match(k.Global.ToggleFooter, event):
 			if a.main.App != nil {
 				a.main.ToggleFooter()
 			}
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.FullScreenHelp, event.Name()):
+		case k.Match(k.Global.FullScreenHelp, event):
 			if a.Pages.HasPage(page.HelpPageId) {
 				a.Pages.RemovePage(page.HelpPageId)
 				return nil
@@ -156,7 +157,7 @@ func (a *App) setKeybindings() {
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (a *App) shouldHandleRune(event *tcell.EventKey) bool {

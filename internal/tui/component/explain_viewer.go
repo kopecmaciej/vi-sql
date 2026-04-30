@@ -86,19 +86,19 @@ func (e *ExplainViewer) setStyle() {
 
 func (e *ExplainViewer) setKeybindings() {
 	k := e.App.GetKeys()
-	e.tree.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	e.tree.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			if e.doneFunc != nil {
 				e.doneFunc()
 			}
 			return nil
-		case k.Contains(k.ExplainViewer.ToggleMode, event.Name()):
+		case k.Match(k.ExplainViewer.ToggleMode, event):
 			e.toggleMode()
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (e *ExplainViewer) toggleMode() {

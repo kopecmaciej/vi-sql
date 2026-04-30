@@ -179,56 +179,56 @@ func (h *Help) setKeybindings() {
 		h.renderKeysForSection(index)
 	})
 
-	h.sectionList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	h.sectionList.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
-		case k.Contains(k.Navigation.FocusRight, event.Name()):
+		case k.Match(k.Navigation.FocusRight, event):
 			h.App.SetFocusOnly(h.keysTable)
 			return nil
-		case k.Contains(k.Common.Filter, event.Name()):
+		case k.Match(k.Common.Filter, event):
 			h.enterSearchMode()
 			return nil
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			curr := h.sectionList.GetCurrentItem()
 			h.sectionList.SetCurrentItem(curr + 1)
 			return nil
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
+		case k.Match(k.Navigation.MoveUp, event):
 			if curr := h.sectionList.GetCurrentItem(); curr > 0 {
 				h.sectionList.SetCurrentItem(curr - 1)
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 
-	h.keysTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	h.keysTable.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			h.App.Pages.RemovePage(HelpPageId)
 			return nil
-		case k.Contains(k.Navigation.FocusLeft, event.Name()):
+		case k.Match(k.Navigation.FocusLeft, event):
 			h.App.SetFocusOnly(h.sectionList)
 			return nil
-		case k.Contains(k.Common.Edit, event.Name()):
+		case k.Match(k.Common.Edit, event):
 			row, _ := h.keysTable.GetSelection()
 			h.enterEditMode(row)
 			return nil
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			row, _ := h.keysTable.GetSelection()
 			if row < h.keysTable.GetRowCount()-1 {
 				h.keysTable.Select(row+1, 0)
 			}
 			return nil
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
+		case k.Match(k.Navigation.MoveUp, event):
 			if row, _ := h.keysTable.GetSelection(); row > 0 {
 				h.keysTable.Select(row-1, 0)
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 
 	h.searchInput.SetDoneFunc(func(key tcell.Key) {
 		h.exitSearchMode(key == tcell.KeyEsc)

@@ -89,36 +89,36 @@ func (p *Peeker) setStyle() {
 
 func (p *Peeker) setKeybindings() {
 	k := p.App.GetKeys()
-	p.ViewModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	p.ViewModal.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.GoTop, event.Name()):
+		case k.Match(k.Navigation.GoTop, event):
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Navigation.GoBottom, event.Name()):
+		case k.Match(k.Navigation.GoBottom, event):
 			p.ViewModal.MoveToBottom()
 			return nil
-		case k.Contains(k.Peeker.CopyHighlight, event.Name()):
+		case k.Match(k.Peeker.CopyHighlight, event):
 			p.ViewModal.CopySelectedLine(util.Copy, "full")
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			p.ViewModal.CopySelectedLine(util.Copy, "value")
 			return nil
-		case k.Contains(k.Peeker.ExpandRow, event.Name()):
+		case k.Match(k.Peeker.ExpandRow, event):
 			p.ViewModal.ToggleExpand()
 			return nil
-		case k.Contains(k.Peeker.OpenValueViewer, event.Name()):
+		case k.Match(k.Peeker.OpenValueViewer, event):
 			p.openValueViewer()
 			return nil
-		case k.Contains(k.Peeker.ToggleFullScreen, event.Name()):
+		case k.Match(k.Peeker.ToggleFullScreen, event):
 			p.ViewModal.SetFullScreen(!p.ViewModal.IsFullScreen())
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			p.App.Pages.RemovePage(p.GetIdentifier())
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (p *Peeker) SetDoneFunc(doneFunc func()) {

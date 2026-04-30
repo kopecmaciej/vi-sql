@@ -248,13 +248,13 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.form.AddButton("Cancel", cf.cancel)
 
 	// --- Keybindings ---
-	cf.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := cf.App.GetKeys()
+	k := cf.App.GetKeys()
+	cf.form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case event.Key() == tcell.KeyEscape:
 			cf.cancel()
 			return nil
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			_, buttonIdx := cf.form.GetFocusedItemIndex()
 			if buttonIdx >= 0 && buttonIdx < cf.form.GetButtonCount() {
 				if cf.form.GetButton(buttonIdx).GetLabel() == "Cancel" {
@@ -265,7 +265,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 			return nil
 		}
 		return event
-	})
+	}))
 	cf.form.ApplyFormNavKeys(cf.App.GetKeys())
 	cf.form.ApplyDropdownNavKeys(cf.App.GetKeys())
 }

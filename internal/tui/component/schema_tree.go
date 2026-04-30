@@ -39,7 +39,6 @@ type SchemaTree struct {
 	deleteModal      *modal.Confirm
 	createTableModal *modal.CreateTableModal
 
-	chordResolver   *core.ChordResolver
 	schemas         []database.Schema
 	nodeSelectFunc  func(ctx context.Context, schema, table string) error
 	nodeColumnsFunc func(ctx context.Context, schema, table string)
@@ -119,28 +118,23 @@ func (s *SchemaTree) setStyle() {
 
 func (s *SchemaTree) setKeybindings() {
 	k := s.App.GetKeys()
-	cfg := s.App.GetConfig()
 	ctx := context.Background()
 
 	closedNodeIcon := s.style.IconWithColor(s.style.ClosedNode, s.App.GetStyles().Global.SecondaryTextColor)
 	openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
 
-	if cfg.UI.VimMode {
-		s.chordResolver = newVimChordResolver(s.App)
-		core.RegisterChords(k.Navigation.GoTop.Chords, s.chordResolver, func() {
+	s.tree.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Match(k.Navigation.GoTop, event):
 			root := s.tree.GetRoot()
 			if root == nil {
-				return
+				return nil
 			}
 			if children := root.GetChildren(); len(children) > 0 {
 				s.tree.SetCurrentNode(children[0])
 			}
-		})
-	}
-
-	s.tree.SetInputCapture(core.WithChords(s.chordResolver, func(event *tcell.EventKey) *tcell.EventKey {
-		switch {
-		case k.Contains(k.Navigation.GoBottom, event.Name()):
+			return nil
+		case k.Match(k.Navigation.GoBottom, event):
 			root := s.tree.GetRoot()
 			if root != nil {
 				if last := lastVisibleTreeNode(root); last != nil {
@@ -148,35 +142,35 @@ func (s *SchemaTree) setKeybindings() {
 				}
 			}
 			return nil
-		case k.Contains(k.Schema.ExpandAll, event.Name()):
+		case k.Match(k.Schema.ExpandAll, event):
 			s.expandAllNodes(closedNodeIcon, openNodeIcon)
 			return nil
-		case k.Contains(k.Schema.CollapseAll, event.Name()):
+		case k.Match(k.Schema.CollapseAll, event):
 			s.collapseAllNodes(openNodeIcon, closedNodeIcon)
 			return nil
-		case k.Contains(k.Common.Add, event.Name()):
+		case k.Match(k.Common.Add, event):
 			s.showAddTableModal(ctx)
 			return nil
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Delete, event):
 			s.showDeleteTableModal(ctx)
 			return nil
-		case k.Contains(k.Schema.RenameTable, event.Name()):
+		case k.Match(k.Schema.RenameTable, event):
 			s.showRenameTableModal(ctx)
 			return nil
-		case k.Contains(k.Schema.ExpandTable, event.Name()):
+		case k.Match(k.Schema.ExpandTable, event):
 			current := s.tree.GetCurrentNode()
 			if current != nil && !s.isSubnode(current) && current.GetLevel() >= 2 {
 				current.SetExpanded(!current.IsExpanded())
 			}
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			s.copyCurrentNode()
 			return nil
-		case k.Contains(k.Common.Filter, event.Name()):
+		case k.Match(k.Common.Filter, event):
 			s.filterBar.Enable()
 			s.renderLayout()
 			return nil
-		case k.Contains(k.Common.Clear, event.Name()):
+		case k.Match(k.Common.Clear, event):
 			s.clearFilter()
 			return nil
 		}
@@ -187,12 +181,6 @@ func (s *SchemaTree) setKeybindings() {
 func (s *SchemaTree) handleEvents() {
 	go s.HandleEvents(SchemaTreeId, func(event manager.EventMsg) {
 		switch event.Message.Type {
-		case manager.FocusChanged:
-			if s.chordResolver != nil {
-				if id, ok := event.Message.Data.(tview.Identifier); ok && id != s.GetIdentifier() && id != s.tree.GetIdentifier() {
-					s.chordResolver.Reset()
-				}
-			}
 		case manager.StyleChanged:
 			s.setStyle()
 			s.refreshStyle()

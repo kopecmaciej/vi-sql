@@ -85,22 +85,20 @@ func (i *InputBar) setStyle() {
 func (i *InputBar) setKeybindings() {
 	k := i.App.GetKeys()
 
-	inputBarCapture := func(event *tcell.EventKey) *tcell.EventKey {
-		k := i.App.GetKeys()
-
+	inputBarCapture := k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			if i.rejectFunc != nil {
 				i.Toggle("")
 				i.rejectFunc()
 			}
 			return nil
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			if i.acceptFunc != nil {
 				i.acceptFunc(i.GetText())
 			}
 			return nil
-		case k.Contains(k.Common.Clear, event.Name()):
+		case k.Match(k.Common.Clear, event):
 			i.SetText("")
 			if i.defaultText != "" {
 				go i.SetWordAtCursor(i.defaultText)
@@ -108,7 +106,7 @@ func (i *InputBar) setKeybindings() {
 		}
 
 		return event
-	}
+	})
 
 	i.SetInputCapture(core.DropdownInputCapture(k, inputBarCapture))
 }

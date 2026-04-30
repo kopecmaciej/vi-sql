@@ -210,13 +210,13 @@ func (c *Changelog) InputHandler() func(event *tcell.EventKey, setFocus func(p t
 		switch {
 		case event.Key() == tcell.KeyEnter:
 			c.activateButton()
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			c.textView.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
+		case k.Match(k.Navigation.MoveUp, event):
 			c.textView.InputHandler()(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveLeft, event.Name()):
+		case k.Match(k.Navigation.MoveLeft, event):
 			c.form.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveRight, event.Name()):
+		case k.Match(k.Navigation.MoveRight, event):
 			c.form.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), setFocus)
 		default:
 			c.form.InputHandler()(event, setFocus)

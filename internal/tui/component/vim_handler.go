@@ -6,8 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
-	"github.com/kopecmaciej/vi-sql/internal/manager"
-	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
@@ -22,30 +20,18 @@ const (
 type vimHandler struct {
 	mode     vimMode
 	pending  string // buffer for operator sequences: "d", "c", "y", "f", "F", "t", "T", "r"
-	chord    *core.ChordResolver
-	selStart int // byte offset where visual selection began
+	selStart int    // byte offset where visual selection began
 	editor   *SQLQueryEditor
 }
 
-func newVimChordResolver(app *core.App) *core.ChordResolver {
-	cr := core.NewChordResolver()
-	cr.OnPending = func(r rune) {
-		app.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
-	}
-	return cr
-}
-
 func newVimHandler(e *SQLQueryEditor) *vimHandler {
-	v := &vimHandler{mode: vimInsert, editor: e}
-	v.chord = newVimChordResolver(e.App)
-	core.RegisterChords(e.App.GetKeys().Navigation.GoTop.Chords, v.chord, func() { e.TextArea.MoveCursorTo(0, 0) })
-	return v
+	return &vimHandler{mode: vimInsert, editor: e}
 }
 
 func (v *vimHandler) reset() {
 	v.mode = vimNormal
 	v.pending = ""
-	v.chord.Reset()
+	v.editor.App.GetKeys().Reset()
 }
 
 // Handle processes an input event and returns true if it was consumed.
@@ -82,21 +68,21 @@ func (v *vimHandler) Handle(event *tcell.EventKey, setFocus func(tview.Primitive
 func (v *vimHandler) enterNormal() {
 	v.mode = vimNormal
 	v.pending = ""
-	v.chord.Reset()
+	v.editor.App.GetKeys().Reset()
 	v.editor.refreshTitle()
 }
 
 func (v *vimHandler) enterInsert() {
 	v.mode = vimInsert
 	v.pending = ""
-	v.chord.Reset()
+	v.editor.App.GetKeys().Reset()
 	v.editor.refreshTitle()
 }
 
 func (v *vimHandler) enterVisual() {
 	v.mode = vimVisual
 	v.pending = ""
-	v.chord.Reset()
+	v.editor.App.GetKeys().Reset()
 	ta := v.editor.TextArea
 	v.selStart = ta.GetCursorByteOffset()
 	// Select the char under the cursor immediately (vim inclusive visual).
@@ -237,7 +223,16 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 	}
 
 	// 2-rune chord resolution (gg, ...) — only when no operator is pending.
-	if v.chord.Feed(ch) {
+	kb := v.editor.App.GetKeys()
+	if kb.HasPending() {
+		if kb.Match(kb.Navigation.GoTop, ev) {
+			v.editor.TextArea.MoveCursorTo(0, 0)
+		}
+		kb.Reset()
+		return true
+	}
+	if kb.IsChordPrefix(ch) {
+		kb.SetPending(ch)
 		return true
 	}
 

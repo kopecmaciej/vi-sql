@@ -408,51 +408,51 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		}
 
 		switch {
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			execute()
 			return
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			if !e.TextArea.IsAutocompleteVisible() {
 				if e.onFocusDown != nil {
 					e.onFocusDown()
 				}
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Common.Paste, event.Name()):
+		case k.Match(k.Common.Paste, event):
 			if text := util.Paste(); text != "" {
 				cursorPos := len(e.GetTextBeforeCursor())
 				e.Replace(cursorPos, cursorPos, text)
 			}
 			return
-		case k.Contains(k.SQLQueryEditor.Fullscreen, event.Name()):
+		case k.Match(k.SQLQueryEditor.Fullscreen, event):
 			if e.onFullscreen != nil {
 				e.onFullscreen()
 			}
 			return
-		case k.Contains(k.Common.Clear, event.Name()):
+		case k.Match(k.Common.Clear, event):
 			e.SetText("", true)
 			return
-		case k.Contains(k.SQLQueryEditor.OpenHistory, event.Name()):
+		case k.Match(k.SQLQueryEditor.OpenHistory, event):
 			if e.history != nil {
 				e.history.Render()
 			}
 			return
-		case k.Contains(k.SQLQueryEditor.TermEditor, event.Name()):
+		case k.Match(k.SQLQueryEditor.TermEditor, event):
 			if e.onOpenInEditor != nil {
 				e.onOpenInEditor()
 			}

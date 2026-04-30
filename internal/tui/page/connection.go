@@ -95,9 +95,9 @@ func (c *Connection) setKeybindings() {
 	c.table.SetSelectionChangedFunc(func(row, col int) {
 		c.updatePreview(row)
 	})
-	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	c.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Select, event.Name()):
+		case k.Match(k.Common.Select, event):
 			row, _ := c.table.GetSelection()
 			if row >= c.table.GetRowCount()-1 {
 				c.openAddForm()
@@ -105,18 +105,18 @@ func (c *Connection) setKeybindings() {
 				c.setConnection()
 			}
 			return nil
-		case k.Contains(k.Common.Add, event.Name()):
+		case k.Match(k.Common.Add, event):
 			c.openAddForm()
 			return nil
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Delete, event):
 			c.deleteCurrConnection()
 			return nil
-		case k.Contains(k.Common.Edit, event.Name()):
+		case k.Match(k.Common.Edit, event):
 			c.openEditForm()
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (c *Connection) openAddForm() {

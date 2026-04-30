@@ -86,9 +86,8 @@ type Data struct {
 	lastExecTime   time.Duration
 	countPending   bool
 	// TODO: refactor - move some of the logic elsewhere to not have 5k file next week
-	cancelQuery   context.CancelFunc
-	queryRunning  bool
-	chordResolver *core.ChordResolver
+	cancelQuery  context.CancelFunc
+	queryRunning bool
 }
 
 func newData(mode QueryTabMode) *Data {
@@ -313,12 +312,6 @@ func (c *Data) init() error {
 func (c *Data) handleEvents(ctx context.Context) {
 	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
-		case manager.FocusChanged:
-			if c.chordResolver != nil {
-				if id, ok := event.Message.Data.(tview.Identifier); ok && id != c.table.GetIdentifier() {
-					c.chordResolver.Reset()
-				}
-			}
 		case manager.StyleChanged:
 			c.setStyle()
 			_ = c.updateData(ctx, true)
@@ -359,95 +352,85 @@ func (c *Data) setLayout() {
 
 func (c *Data) setKeybindings(ctx context.Context) {
 	k := c.App.GetKeys()
-	cfg := c.App.GetConfig()
 
-	if cfg.UI.VimMode {
-		c.chordResolver = newVimChordResolver(c.App)
-		core.RegisterChords(k.Navigation.GoTop.Chords, c.chordResolver, func() {
-			_, col := c.table.GetSelection()
+	c.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		row, col := c.table.GetSelection()
+		switch {
+		case k.Match(k.Navigation.GoTop, event):
 			if c.table.GetRowCount() > 1 {
 				c.table.Select(1, col)
 			}
-		})
-		core.RegisterChords(k.Data.FollowForeignKey.Chords, c.chordResolver, func() {
-			row, col := c.table.GetSelection()
-			c.handleFollowForeignKey(ctx, row, col)
-		})
-	}
-
-	c.table.SetInputCapture(core.WithChords(c.chordResolver, func(event *tcell.EventKey) *tcell.EventKey {
-		row, col := c.table.GetSelection()
-		switch {
-		case k.Contains(k.Navigation.GoBottom, event.Name()):
+			return nil
+		case k.Match(k.Navigation.GoBottom, event):
 			if rc := c.table.GetRowCount(); rc > 1 {
 				c.table.Select(rc-1, col)
 			}
 			return nil
-		case k.Contains(k.Data.PeekRow, event.Name()):
+		case k.Match(k.Data.PeekRow, event):
 			return c.handlePeekRow(ctx, row, false)
-		case k.Contains(k.Data.FullPagePeek, event.Name()):
+		case k.Match(k.Data.FullPagePeek, event):
 			return c.handlePeekRow(ctx, row, true)
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			return c.handleCopyCell(row, col)
-		case k.Contains(k.Data.CopyRow, event.Name()):
+		case k.Match(k.Data.CopyRow, event):
 			return c.handleCopyRow(row)
-		case k.Contains(k.Common.Refresh, event.Name()):
+		case k.Match(k.Common.Refresh, event):
 			return c.handleRefresh(ctx)
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			if c.mode == QueryMode {
 				c.App.SetFocusOnly(c.sqlQueryEditor)
 				return nil
 			}
-		case k.Contains(k.Data.HideColumn, event.Name()):
+		case k.Match(k.Data.HideColumn, event):
 			return c.handleHideColumn(ctx, col)
-		case k.Contains(k.Data.ResetHiddenColumns, event.Name()):
+		case k.Match(k.Data.ResetHiddenColumns, event):
 			return c.handleResetHiddenColumns(ctx)
-		case k.Contains(k.Data.NextPage, event.Name()):
+		case k.Match(k.Data.NextPage, event):
 			return c.handleNextPage(ctx)
-		case k.Contains(k.Data.PreviousPage, event.Name()):
+		case k.Match(k.Data.PreviousPage, event):
 			return c.handlePreviousPage(ctx)
-		case k.Contains(k.Data.MultipleSelect, event.Name()):
+		case k.Match(k.Data.MultipleSelect, event):
 			return c.handleMultipleSelect(row)
-		case k.Contains(k.Data.ClearSelection, event.Name()):
+		case k.Match(k.Data.ClearSelection, event):
 			if c.queryRunning && c.cancelQuery != nil {
 				c.cancelQuery()
 				return nil
 			}
 			return c.handleClearSelection()
-		case k.Contains(k.Data.ExplainQuery, event.Name()):
+		case k.Match(k.Data.ExplainQuery, event):
 			if c.state.LastQuery != "" {
 				go c.runExplain(ctx, c.state.LastQuery)
 			}
 			return nil
-		case k.Contains(k.Data.ExportData, event.Name()):
+		case k.Match(k.Data.ExportData, event):
 			return c.handleExportData(ctx)
-		case !cfg.UI.VimMode && k.Contains(k.Data.FollowForeignKey, event.Name()):
+		case k.Match(k.Data.FollowForeignKey, event):
 			return c.handleFollowForeignKey(ctx, row, col)
 		}
 
 		// SortByColumn works in both modes.
-		if k.Contains(k.Data.SortByColumn, event.Name()) {
+		if k.Match(k.Data.SortByColumn, event) {
 			return c.handleSortByColumn(ctx, col)
 		}
 
 		// CRUD keybindings — only available in TableMode.
 		if c.mode == TableMode {
 			switch {
-			case k.Contains(k.Common.Edit, event.Name()):
+			case k.Match(k.Common.Edit, event):
 				return c.handleInlineEdit(ctx, row, col)
-			case k.Contains(k.Data.EditRow, event.Name()):
+			case k.Match(k.Data.EditRow, event):
 				return c.handleEditRow(ctx, row)
-			case k.Contains(k.Common.Add, event.Name()):
+			case k.Match(k.Common.Add, event):
 				c.handleAddRow(ctx)
 				return nil
-			case k.Contains(k.Data.DuplicateRow, event.Name()):
+			case k.Match(k.Data.DuplicateRow, event):
 				c.handleDuplicateRow(ctx, row)
 				return nil
-			case k.Contains(k.Common.Delete, event.Name()):
+			case k.Match(k.Common.Delete, event):
 				return c.handleDeleteRow(ctx, row, col)
-			case k.Contains(k.Common.Filter, event.Name()):
+			case k.Match(k.Common.Filter, event):
 				return c.handleToggleFilter()
-			case k.Contains(k.Data.ToggleSortBar, event.Name()):
+			case k.Match(k.Data.ToggleSortBar, event):
 				return c.handleToggleSort()
 			}
 		}
