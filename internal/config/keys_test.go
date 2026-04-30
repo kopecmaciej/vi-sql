@@ -174,22 +174,34 @@ func TestNormalProfileDefaults(t *testing.T) {
 }
 
 func TestProfilesAreIndependent(t *testing.T) {
-	vimPath := filepath.Join(t.TempDir(), "keybindings-vim.yaml")
-	normalPath := filepath.Join(t.TempDir(), "keybindings-normal.yaml")
+	dir := t.TempDir()
+	vimPath := filepath.Join(dir, "keybindings-vim.yaml")
+	normalPath := filepath.Join(dir, "keybindings-normal.yaml")
 
-	// Save a modified vim profile.
+	// Write a vim profile that overrides GoTop to F9.
 	vim := vimKB()
-	vim.Navigation.GoTop = Key{Keys: []string{"F9"}, Description: "custom"}
-	data, err := yaml.Marshal(vim)
+	vim.Navigation.GoTop = Key{Keys: []string{"F9"}, Description: "vim-custom"}
+	vimData, err := yaml.Marshal(vim)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(vimPath, data, 0600))
+	require.NoError(t, os.WriteFile(vimPath, vimData, 0600))
 
-	// Load normal profile from its own path — must be unaffected.
-	loaded, err := util.LoadConfigFile(normalKB(), normalPath)
+	// Write a normal profile that overrides GoTop to F10.
+	normal := normalKB()
+	normal.Navigation.GoTop = Key{Keys: []string{"F10"}, Description: "normal-custom"}
+	normalData, err := yaml.Marshal(normal)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(normalPath, normalData, 0600))
+
+	// Load each profile from its own file — values must not bleed across.
+	loadedVim, err := util.LoadConfigFile(vimKB(), vimPath)
+	require.NoError(t, err)
+	loadedNormal, err := util.LoadConfigFile(normalKB(), normalPath)
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"Ctrl+Home"}, loaded.Navigation.GoTop.Keys,
-		"normal profile should retain its own defaults regardless of vim profile changes")
+	assert.Equal(t, []string{"F9"}, loadedVim.Navigation.GoTop.Keys,
+		"vim profile should load its own override")
+	assert.Equal(t, []string{"F10"}, loadedNormal.Navigation.GoTop.Keys,
+		"normal profile should load its own override, not the vim one")
 }
 
 func TestUserOverridesPreservedPerProfile(t *testing.T) {
