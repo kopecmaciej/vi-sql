@@ -39,6 +39,7 @@ type SchemaTree struct {
 	deleteModal      *modal.Confirm
 	createTableModal *modal.CreateTableModal
 
+	chordResolver   *core.ChordResolver
 	schemas         []database.Schema
 	nodeSelectFunc  func(ctx context.Context, schema, table string) error
 	nodeColumnsFunc func(ctx context.Context, schema, table string)
@@ -124,13 +125,9 @@ func (s *SchemaTree) setKeybindings() {
 	closedNodeIcon := s.style.IconWithColor(s.style.ClosedNode, s.App.GetStyles().Global.SecondaryTextColor)
 	openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
 
-	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
-		cr = core.NewChordResolver()
-		cr.OnPending = func(r rune) {
-			s.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
-		}
-		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
+		s.chordResolver = newVimChordResolver(s.App)
+		core.RegisterChords(k.Navigation.GoTop.Chords, s.chordResolver, func() {
 			root := s.tree.GetRoot()
 			if root == nil {
 				return
@@ -141,7 +138,7 @@ func (s *SchemaTree) setKeybindings() {
 		})
 	}
 
-	s.tree.SetInputCapture(core.WithChords(cr, func(event *tcell.EventKey) *tcell.EventKey {
+	s.tree.SetInputCapture(core.WithChords(s.chordResolver, func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case k.Contains(k.Navigation.GoBottom, event.Name()):
 			root := s.tree.GetRoot()
@@ -190,6 +187,12 @@ func (s *SchemaTree) setKeybindings() {
 func (s *SchemaTree) handleEvents() {
 	go s.HandleEvents(SchemaTreeId, func(event manager.EventMsg) {
 		switch event.Message.Type {
+		case manager.FocusChanged:
+			if s.chordResolver != nil {
+				if id, ok := event.Message.Data.(tview.Identifier); ok && id != s.GetIdentifier() && id != s.tree.GetIdentifier() {
+					s.chordResolver.Reset()
+				}
+			}
 		case manager.StyleChanged:
 			s.setStyle()
 			s.refreshStyle()

@@ -314,6 +314,12 @@ func (e *SQLQueryEditor) setAutocomplete() {
 func (e *SQLQueryEditor) handleEvents() {
 	go e.HandleEvents(e.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
+		case manager.FocusChanged:
+			if e.vim != nil {
+				if id, ok := event.Message.Data.(tview.Identifier); ok && id != e.GetIdentifier() {
+					e.vim.reset()
+				}
+			}
 		case manager.StyleChanged:
 			e.style = &e.App.GetStyles().SQLEditor
 			e.setStyle()

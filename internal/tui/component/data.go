@@ -86,8 +86,9 @@ type Data struct {
 	lastExecTime   time.Duration
 	countPending   bool
 	// TODO: refactor - move some of the logic elsewhere to not have 5k file next week
-	cancelQuery  context.CancelFunc
-	queryRunning bool
+	cancelQuery   context.CancelFunc
+	queryRunning  bool
+	chordResolver *core.ChordResolver
 }
 
 func newData(mode QueryTabMode) *Data {
@@ -312,6 +313,12 @@ func (c *Data) init() error {
 func (c *Data) handleEvents(ctx context.Context) {
 	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
+		case manager.FocusChanged:
+			if c.chordResolver != nil {
+				if id, ok := event.Message.Data.(tview.Identifier); ok && id != c.table.GetIdentifier() {
+					c.chordResolver.Reset()
+				}
+			}
 		case manager.StyleChanged:
 			c.setStyle()
 			_ = c.updateData(ctx, true)
@@ -354,25 +361,21 @@ func (c *Data) setKeybindings(ctx context.Context) {
 	k := c.App.GetKeys()
 	cfg := c.App.GetConfig()
 
-	var cr *core.ChordResolver
 	if cfg.UI.VimMode {
-		cr = core.NewChordResolver()
-		cr.OnPending = func(r rune) {
-			c.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
-		}
-		core.RegisterChords(k.Navigation.GoTop.Chords, cr, func() {
+		c.chordResolver = newVimChordResolver(c.App)
+		core.RegisterChords(k.Navigation.GoTop.Chords, c.chordResolver, func() {
 			_, col := c.table.GetSelection()
 			if c.table.GetRowCount() > 1 {
 				c.table.Select(1, col)
 			}
 		})
-		core.RegisterChords(k.Data.FollowForeignKey.Chords, cr, func() {
+		core.RegisterChords(k.Data.FollowForeignKey.Chords, c.chordResolver, func() {
 			row, col := c.table.GetSelection()
 			c.handleFollowForeignKey(ctx, row, col)
 		})
 	}
 
-	c.table.SetInputCapture(core.WithChords(cr, func(event *tcell.EventKey) *tcell.EventKey {
+	c.table.SetInputCapture(core.WithChords(c.chordResolver, func(event *tcell.EventKey) *tcell.EventKey {
 		row, col := c.table.GetSelection()
 		switch {
 		case k.Contains(k.Navigation.GoBottom, event.Name()):

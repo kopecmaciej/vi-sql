@@ -27,14 +27,25 @@ type vimHandler struct {
 	editor   *SQLQueryEditor
 }
 
+func newVimChordResolver(app *core.App) *core.ChordResolver {
+	cr := core.NewChordResolver()
+	cr.OnPending = func(r rune) {
+		app.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
+	}
+	return cr
+}
+
 func newVimHandler(e *SQLQueryEditor) *vimHandler {
 	v := &vimHandler{mode: vimInsert, editor: e}
-	v.chord = core.NewChordResolver()
-	v.chord.OnPending = func(r rune) {
-		e.App.GetManager().Broadcast(manager.NewChordPendingChangedMsg(r))
-	}
+	v.chord = newVimChordResolver(e.App)
 	core.RegisterChords(e.App.GetKeys().Navigation.GoTop.Chords, v.chord, func() { e.TextArea.MoveCursorTo(0, 0) })
 	return v
+}
+
+func (v *vimHandler) reset() {
+	v.mode = vimNormal
+	v.pending = ""
+	v.chord.Reset()
 }
 
 // Handle processes an input event and returns true if it was consumed.
