@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	visqlmcp "github.com/kopecmaciej/vi-sql/internal/mcp"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
@@ -127,8 +128,9 @@ func (a *App) startWatchdog() {
 
 func (a *App) setKeybindings() {
 	k := a.GetKeys()
+	k.SkipAbsorb = a.isTextInputFocused
 	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if a.shouldHandleRune(event) {
+		if event.Key() == tcell.KeyRune && a.isTextInputFocused() {
 			return event
 		}
 
@@ -160,25 +162,30 @@ func (a *App) setKeybindings() {
 	}))
 }
 
-func (a *App) shouldHandleRune(event *tcell.EventKey) bool {
-	if !strings.HasPrefix(event.Name(), "Rune") {
+// isTextInputFocused reports whether the currently focused primitive is
+// accepting raw text input. When true, single-rune events must pass through
+// untouched — both the global key switch and chord-prefix absorption are
+// bypassed so the user can type freely.
+func (a *App) isTextInputFocused() bool {
+	focus := a.GetFocus()
+	if focus == nil {
 		return false
 	}
 
-	focus := a.GetFocus()
-	identifier := string(focus.GetIdentifier())
-
-	// TODO: find better way of handling this focus problem in input fields
-	if strings.Contains(identifier, "Bar") || strings.Contains(identifier, "Input") || strings.Contains(identifier, "CreateTable") {
+	switch f := focus.(type) {
+	case *tview.InputField, *core.InputField, *primitives.InputModal:
+		return true
+	case *component.SQLQueryEditor:
+		return f.IsInsertMode()
+	}
+	if _, ok := focus.(tview.FormItem); ok {
 		return true
 	}
 
-	_, isInputField := focus.(*tview.InputField)
-	_, isCustomInputField := focus.(*core.InputField)
-	_, isFormItem := focus.(tview.FormItem)
-	_, isInputModal := focus.(*primitives.InputModal)
-
-	return isInputField || isCustomInputField || isFormItem || isInputModal
+	// Fallback for wrapper components that contain inputs but don't satisfy
+	// the type assertions above (filter bars, input bars, create-table modal).
+	id := string(focus.GetIdentifier())
+	return strings.Contains(id, "Bar") || strings.Contains(id, "Input") || strings.Contains(id, "CreateTable")
 }
 
 func (a *App) connectToDatabase() error {

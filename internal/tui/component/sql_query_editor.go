@@ -117,6 +117,10 @@ func (e *SQLQueryEditor) SetOnModeChange(f func(indicator string)) {
 	e.refreshTitle()
 }
 
+func (e *SQLQueryEditor) IsInsertMode() bool {
+	return e.vim == nil || e.vim.mode == vimInsert
+}
+
 func (e *SQLQueryEditor) setStyle() {
 	styles := e.App.GetStyles()
 	e.TextArea.SetStyle(styles)

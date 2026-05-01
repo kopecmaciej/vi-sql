@@ -1,9 +1,6 @@
 package config
 
 import (
-	"reflect"
-	"slices"
-
 	"github.com/gdamore/tcell/v2"
 )
 
@@ -13,7 +10,12 @@ type chordState struct {
 	vimMode          bool
 	pending          rune
 	chordPrefixes    map[rune]struct{}
-	OnPendingChanged func(rune) `yaml:"-"`
+	OnPendingChanged func(rune)
+	// SkipAbsorb, when set and returning true, disables chord-prefix
+	// absorption in WrapInputCapture so runes pass through untouched. Used to
+	// keep chord prefixes (e.g. `g`) functional inside text inputs and vim
+	// insert mode where every rune must be typed verbatim.
+	SkipAbsorb func() bool
 }
 
 func (cs *chordState) HasPending() bool { return cs.pending != 0 }
@@ -46,8 +48,16 @@ func (cs *chordState) notifyPending(r rune) {
 // absorbed and the second rune is delivered to inner — where each k.Match arm
 // can recognize its own chord. Non-rune events reset pending. No-op in normal
 // mode (chordPrefixes is empty there).
+//
+// When SkipAbsorb is set and returns true, chord-prefix handling is bypassed
+// entirely so runes pass through to inner verbatim — used inside text inputs
+// and vim insert mode.
 func (cs *chordState) WrapInputCapture(inner func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
 	return func(ev *tcell.EventKey) *tcell.EventKey {
+		if cs.SkipAbsorb != nil && cs.SkipAbsorb() {
+			cs.Reset()
+			return inner(ev)
+		}
 		if ev.Key() != tcell.KeyRune {
 			cs.Reset()
 			return inner(ev)
@@ -65,49 +75,4 @@ func (cs *chordState) WrapInputCapture(inner func(*tcell.EventKey) *tcell.EventK
 		}
 		return inner(ev)
 	}
-}
-
-// Match reports whether ev should fire configKey's handler. Chord-aware
-// replacement for Contains: when a chord prefix is pending, matches the second
-// rune against configKey.Chords; otherwise delegates to the Keys/Runes match.
-// Must be used inside a handler wrapped with WrapInputCapture.
-func (kb *KeyBindings) Match(configKey Key, ev *tcell.EventKey) bool {
-	if ev.Key() == tcell.KeyRune && kb.pending != 0 {
-		chord := string([]rune{kb.pending, ev.Rune()})
-		return slices.Contains(configKey.Chords, chord)
-	}
-	return kb.Contains(configKey, ev.Name())
-}
-
-// buildChordPrefixes scans every Key in the bindings and records the first
-// rune of every chord so WrapInputCapture knows which runes to absorb.
-// Vim mode only — leaves the map nil/empty otherwise.
-func (kb *KeyBindings) buildChordPrefixes() {
-	kb.chordPrefixes = nil
-	if !kb.vimMode {
-		return
-	}
-	prefixes := make(map[rune]struct{})
-	v := reflect.ValueOf(*kb)
-	for i := 0; i < v.NumField(); i++ {
-		f := v.Field(i)
-		if f.Kind() != reflect.Struct {
-			continue
-		}
-		for _, k := range extractKeysFromStruct(f) {
-			for _, ch := range k.Chords {
-				if r, _ := utf8FirstRune(ch); r != 0 {
-					prefixes[r] = struct{}{}
-				}
-			}
-		}
-	}
-	kb.chordPrefixes = prefixes
-}
-
-func utf8FirstRune(s string) (rune, int) {
-	for _, r := range s {
-		return r, 1
-	}
-	return 0, 0
 }

@@ -177,18 +177,18 @@ func (e *ExportModal) wrapDropDown(dd *tview.DropDown, filenameField *tview.Inpu
 		e.setStyle()
 	}
 
-	dd.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	dd.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		idx, _ := dd.GetCurrentOption()
 		switch {
-		case keys.Contains(keys.Navigation.MoveDown, event.Name()):
+		case keys.Match(keys.Navigation.MoveDown, event):
 			onChange((idx + 1) % n)
 			return nil
-		case keys.Contains(keys.Navigation.MoveUp, event.Name()):
+		case keys.Match(keys.Navigation.MoveUp, event):
 			onChange((idx - 1 + n) % n)
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 // rebuildCheckboxes removes all dynamic items (index ≥ fmtItemFirst) and adds

@@ -377,3 +377,59 @@ func TestReset_DoesNotFireWhenAlreadyClear(t *testing.T) {
 	kb.Reset()
 	assert.Equal(t, 0, called, "Reset on already-clear state must not fire OnPendingChanged")
 }
+
+func TestWrapInputCapture_SkipAbsorbBypassesPrefix(t *testing.T) {
+	kb := &KeyBindings{chordState: chordState{
+		vimMode:       true,
+		chordPrefixes: map[rune]struct{}{'g': {}},
+		SkipAbsorb:    func() bool { return true },
+	}}
+
+	innerReceived := rune(0)
+	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		innerReceived = ev.Rune()
+		return ev
+	})
+
+	out := fn(mkRune('g'))
+	assert.NotNil(t, out, "SkipAbsorb must let the rune through")
+	assert.Equal(t, rune('g'), innerReceived, "inner must receive the prefix rune verbatim")
+	assert.Equal(t, rune(0), kb.pending, "no pending state must be set when absorption is skipped")
+}
+
+func TestWrapInputCapture_SkipAbsorbResetsStalePending(t *testing.T) {
+	kb := &KeyBindings{chordState: chordState{
+		vimMode:       true,
+		chordPrefixes: map[rune]struct{}{'g': {}},
+		pending:       'g',
+		SkipAbsorb:    func() bool { return true },
+	}}
+	var notified []rune
+	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+
+	innerReceived := rune(0)
+	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
+		innerReceived = ev.Rune()
+		return ev
+	})
+
+	out := fn(mkRune('x'))
+	assert.NotNil(t, out, "SkipAbsorb must pass the event through even with stale pending")
+	assert.Equal(t, rune('x'), innerReceived)
+	assert.Equal(t, rune(0), kb.pending, "stale pending must be cleared on bypass")
+	assert.Equal(t, []rune{0}, notified, "OnPendingChanged(0) must fire when clearing stale pending")
+}
+
+func TestWrapInputCapture_SkipAbsorbFalseStillAbsorbs(t *testing.T) {
+	kb := &KeyBindings{chordState: chordState{
+		vimMode:       true,
+		chordPrefixes: map[rune]struct{}{'g': {}},
+		SkipAbsorb:    func() bool { return false },
+	}}
+
+	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey { return ev })
+
+	out := fn(mkRune('g'))
+	assert.Nil(t, out, "SkipAbsorb returning false must keep absorption behavior")
+	assert.Equal(t, rune('g'), kb.pending)
+}

@@ -59,20 +59,20 @@ func (s *ServerInfoModal) setStyle() {
 }
 
 func (s *ServerInfoModal) setKeybindings() {
-	s.content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		keys := s.App.GetKeys()
+	keys := s.App.GetKeys()
+	s.content.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case keys.Contains(keys.Common.Close, event.Name()):
+		case keys.Match(keys.Common.Close, event):
 			s.App.Pages.RemovePage(ServerInfoModalId)
 			return nil
-		case keys.Contains(keys.Common.Refresh, event.Name()):
+		case keys.Match(keys.Common.Refresh, event):
 			if s.refreshFn != nil {
 				s.refreshFn()
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (s *ServerInfoModal) handleEvents() {
