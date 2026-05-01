@@ -128,7 +128,7 @@ func (a *App) startWatchdog() {
 
 func (a *App) setKeybindings() {
 	k := a.GetKeys()
-	k.SkipAbsorb = a.isTextInputFocused
+	k.ChordsDisabled = a.isTextInputFocused
 	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune && a.isTextInputFocused() {
 			return event

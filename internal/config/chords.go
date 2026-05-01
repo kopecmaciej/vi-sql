@@ -11,11 +11,9 @@ type chordState struct {
 	pending          rune
 	chordPrefixes    map[rune]struct{}
 	OnPendingChanged func(rune)
-	// SkipAbsorb, when set and returning true, disables chord-prefix
-	// absorption in WrapInputCapture so runes pass through untouched. Used to
-	// keep chord prefixes (e.g. `g`) functional inside text inputs and vim
-	// insert mode where every rune must be typed verbatim.
-	SkipAbsorb func() bool
+	// ChordsDisabled is set for text inputs and vim insert mode where
+	// every rune must reach the inner handler verbatim
+	ChordsDisabled func() bool
 }
 
 func (cs *chordState) HasPending() bool { return cs.pending != 0 }
@@ -52,9 +50,12 @@ func (cs *chordState) notifyPending(r rune) {
 // When SkipAbsorb is set and returns true, chord-prefix handling is bypassed
 // entirely so runes pass through to inner verbatim — used inside text inputs
 // and vim insert mode.
+
+// WrapInputCapture wraps InputCapture handler to absorb runes by chordState first
+// so that chords like `gg` could be properly processed.
 func (cs *chordState) WrapInputCapture(inner func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
 	return func(ev *tcell.EventKey) *tcell.EventKey {
-		if cs.SkipAbsorb != nil && cs.SkipAbsorb() {
+		if cs.ChordsDisabled != nil && cs.ChordsDisabled() {
 			cs.Reset()
 			return inner(ev)
 		}

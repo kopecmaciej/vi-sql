@@ -380,9 +380,9 @@ func TestReset_DoesNotFireWhenAlreadyClear(t *testing.T) {
 
 func TestWrapInputCapture_SkipAbsorbBypassesPrefix(t *testing.T) {
 	kb := &KeyBindings{chordState: chordState{
-		vimMode:       true,
-		chordPrefixes: map[rune]struct{}{'g': {}},
-		SkipAbsorb:    func() bool { return true },
+		vimMode:        true,
+		chordPrefixes:  map[rune]struct{}{'g': {}},
+		ChordsDisabled: func() bool { return true },
 	}}
 
 	innerReceived := rune(0)
@@ -399,10 +399,10 @@ func TestWrapInputCapture_SkipAbsorbBypassesPrefix(t *testing.T) {
 
 func TestWrapInputCapture_SkipAbsorbResetsStalePending(t *testing.T) {
 	kb := &KeyBindings{chordState: chordState{
-		vimMode:       true,
-		chordPrefixes: map[rune]struct{}{'g': {}},
-		pending:       'g',
-		SkipAbsorb:    func() bool { return true },
+		vimMode:        true,
+		chordPrefixes:  map[rune]struct{}{'g': {}},
+		pending:        'g',
+		ChordsDisabled: func() bool { return true },
 	}}
 	var notified []rune
 	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
@@ -422,9 +422,9 @@ func TestWrapInputCapture_SkipAbsorbResetsStalePending(t *testing.T) {
 
 func TestWrapInputCapture_SkipAbsorbFalseStillAbsorbs(t *testing.T) {
 	kb := &KeyBindings{chordState: chordState{
-		vimMode:       true,
-		chordPrefixes: map[rune]struct{}{'g': {}},
-		SkipAbsorb:    func() bool { return false },
+		vimMode:        true,
+		chordPrefixes:  map[rune]struct{}{'g': {}},
+		ChordsDisabled: func() bool { return false },
 	}}
 
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey { return ev })
