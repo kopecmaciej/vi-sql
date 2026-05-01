@@ -34,7 +34,7 @@ func NewSQLEditModal() *SQLEditModal {
 	m := &SQLEditModal{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
-		editor:      NewSQLQueryEditor(),
+		editor:      NewSQLQueryEditor(string(id)),
 	}
 	m.SetIdentifier(id)
 	m.SetAfterInitFunc(m.init)

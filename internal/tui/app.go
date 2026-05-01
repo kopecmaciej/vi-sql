@@ -182,10 +182,7 @@ func (a *App) isTextInputFocused() bool {
 		return true
 	}
 
-	// Fallback for wrapper components that contain inputs but don't satisfy
-	// the type assertions above (filter bars, input bars, create-table modal).
-	id := string(focus.GetIdentifier())
-	return strings.Contains(id, "Bar") || strings.Contains(id, "Input") || strings.Contains(id, "CreateTable")
+	return false
 }
 
 func (a *App) connectToDatabase() error {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
@@ -18,8 +17,6 @@ import (
 )
 
 const SQLQueryEditorId = "SQLQueryEditor"
-
-var sqlQueryEditorCounter int32
 
 // SQLQueryEditor is an in-TUI multi-line SQL editor backed by a tview.TextArea.
 // It supports syntax highlighting via SetStyleFunc and context-aware autocomplete.
@@ -42,15 +39,13 @@ type SQLQueryEditor struct {
 	onModeChange   func(indicator string)
 }
 
-func NewSQLQueryEditor() *SQLQueryEditor {
-	n := atomic.AddInt32(&sqlQueryEditorCounter, 1)
-	id := tview.Identifier(fmt.Sprintf("%s-%d", SQLQueryEditorId, n))
+func NewSQLQueryEditor(ownerID string) *SQLQueryEditor {
 	e := &SQLQueryEditor{
 		BaseElement: core.NewBaseElement(),
 		TextArea:    core.NewTextArea(),
 		columnCache: make(map[string][]string),
 	}
-	e.SetIdentifier(id)
+	e.SetIdentifier(tview.Identifier(ownerID + EditorSuffix))
 	e.SetAfterInitFunc(e.init)
 	return e
 }

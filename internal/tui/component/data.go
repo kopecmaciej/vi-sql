@@ -22,11 +22,13 @@ import (
 )
 
 const (
-	DataId            = "Data"
-	FilterBarId       = "FilterBar"
-	SortBarId         = "SortBar"
-	DataDeleteModalId = "DataDeleteModal"
-	DataEditModalId   = "DataEditModal"
+	DataId = "Data"
+
+	FilterBarSuffix   = "-filter"
+	SortBarSuffix     = "-sort"
+	ResultsSuffix     = "-results"
+	DeleteModalSuffix = "-delete"
+	EditorSuffix      = "-editor"
 
 	maxQueryResultRows = 100
 )
@@ -100,13 +102,13 @@ func newData(mode QueryTabMode) *Data {
 		tableFlex:      core.NewFlex(),
 		resultsBar:     widget.NewResultsBar(),
 		table:          core.NewTable(),
-		filterBar:      NewInputBar(id+"-filter", "WHERE"),
-		sortBar:        NewInputBar(id+"-sort", "ORDER BY"),
+		filterBar:      NewInputBar(id+FilterBarSuffix, "WHERE"),
+		sortBar:        NewInputBar(id+SortBarSuffix, "ORDER BY"),
 		termEditor:     NewTermEditor(),
-		sqlQueryEditor: NewSQLQueryEditor(),
+		sqlQueryEditor: NewSQLQueryEditor(string(id)),
 		editorSize:     editorSizeNormal,
 		inlineEdit:     modal.NewInlineEditModal(),
-		confirmModal:   modal.NewConfirm(id + "-delete"),
+		confirmModal:   modal.NewConfirm(id + DeleteModalSuffix),
 		exportModal:    modal.NewExportModal(),
 		sqlEditModal:   NewSQLEditModal(),
 		peeker:         NewPeeker(),
@@ -117,7 +119,7 @@ func newData(mode QueryTabMode) *Data {
 
 	c.SetIdentifier(id)
 	if mode == QueryMode {
-		c.table.SetIdentifier(id + "-results")
+		c.table.SetIdentifier(id + ResultsSuffix)
 	} else {
 		c.table.SetIdentifier(id)
 	}
