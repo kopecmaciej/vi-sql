@@ -106,14 +106,14 @@ func (w *Options) setLayout() {
 	w.descPanel.SetDynamicColors(true)
 	w.descPanel.SetScrollable(false)
 
-	w.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := w.App.GetKeys()
-		if k.Contains(k.Common.Confirm, event.Name()) {
+	k := w.App.GetKeys()
+	w.form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if k.Match(k.Common.Confirm, event) {
 			w.submit()
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (w *Options) setStyle() {

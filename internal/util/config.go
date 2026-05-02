@@ -27,6 +27,9 @@ func MergeConfigs(loaded, defaultConfig any) {
 func mergeConfigsRecursive(loaded, defaultValue reflect.Value) {
 	for i := 0; i < loaded.NumField(); i++ {
 		field := loaded.Field(i)
+		if !field.CanSet() {
+			continue
+		}
 		defaultField := defaultValue.Field(i)
 
 		if field.Type().Name() == "Key" {

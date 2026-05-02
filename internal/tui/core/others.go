@@ -167,18 +167,18 @@ func (f *FormModal) SetStyle(style *config.Styles) {
 // dropdown keys to the arrow/enter keys that tview's autocomplete list understands.
 // Use this on any InputField with autocomplete or tview.DropDown.
 func DropdownInputCapture(k *config.KeyBindings, next func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
-	return func(event *tcell.EventKey) *tcell.EventKey {
+	return k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 		}
 		if next != nil {
 			return next(event)
 		}
 		return event
-	}
+	})
 }

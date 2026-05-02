@@ -81,18 +81,18 @@ func (a *ActionsModal) setStyle() {
 }
 
 func (a *ActionsModal) setKeybindings() {
+	k := a.App.GetKeys()
 	a.filter.SetChangedFunc(func(text string) {
 		a.filterEntries(text)
 		a.renderList()
 	})
 
-	a.filter.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := a.App.GetKeys()
+	a.filter.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case event.Key() == tcell.KeyDown || k.Contains(k.Navigation.FocusDown, event.Name()):
+		case event.Key() == tcell.KeyDown || k.Match(k.Navigation.FocusDown, event):
 			a.moveSelection(1)
 			return nil
-		case event.Key() == tcell.KeyUp || k.Contains(k.Navigation.FocusUp, event.Name()):
+		case event.Key() == tcell.KeyUp || k.Match(k.Navigation.FocusUp, event):
 			a.moveSelection(-1)
 			return nil
 		case event.Key() == tcell.KeyEnter:
@@ -103,7 +103,7 @@ func (a *ActionsModal) setKeybindings() {
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (a *ActionsModal) moveSelection(delta int) {

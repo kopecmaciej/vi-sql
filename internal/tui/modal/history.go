@@ -140,9 +140,9 @@ func (h *History) rebuildLayout() {
 func (h *History) setKeybindings() {
 	keys := h.App.GetKeys()
 
-	h.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	h.table.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case keys.Contains(keys.Common.Select, event.Name()):
+		case keys.Match(keys.Common.Select, event):
 			row, _ := h.table.GetSelection()
 			h.App.Pages.RemovePage(HistoryModalId)
 			if h.onAccept != nil {
@@ -151,18 +151,18 @@ func (h *History) setKeybindings() {
 				}
 			}
 			return nil
-		case keys.Contains(keys.Common.Close, event.Name()):
+		case keys.Match(keys.Common.Close, event):
 			h.App.Pages.RemovePage(HistoryModalId)
 			if h.onClose != nil {
 				h.onClose()
 			}
 			return nil
-		case keys.Contains(keys.History.PurgeHistory, event.Name()):
+		case keys.Match(keys.History.PurgeHistory, event):
 			return h.clearHistory()
-		case keys.Contains(keys.Common.Delete, event.Name()):
+		case keys.Match(keys.Common.Delete, event):
 			h.deleteCurrentEntry()
 			return nil
-		case keys.Contains(keys.History.CopyQuery, event.Name()):
+		case keys.Match(keys.History.CopyQuery, event):
 			h.copyCurrentQuery()
 			return nil
 		case event.Rune() == '/':
@@ -170,7 +170,7 @@ func (h *History) setKeybindings() {
 			return nil
 		}
 		return event
-	})
+	}))
 
 	h.searchInput.SetChangedFunc(func(text string) {
 		h.filterEntries(text)

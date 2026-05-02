@@ -68,15 +68,15 @@ func (c *Confirm) setStyle() {
 
 func (c *Confirm) setKeybindings() {
 	kb := c.App.GetKeys()
-	c.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	c.SetInputCapture(kb.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case kb.Contains(kb.Navigation.MoveLeft, event.Name()):
+		case kb.Match(kb.Navigation.MoveLeft, event):
 			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-		case kb.Contains(kb.Navigation.MoveRight, event.Name()):
+		case kb.Match(kb.Navigation.MoveRight, event):
 			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
 		}
 		return event
-	})
+	}))
 }
 
 func (c *Confirm) handleEvents() {

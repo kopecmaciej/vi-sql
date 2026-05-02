@@ -434,13 +434,13 @@ func (m *Main) ToggleFooter() {
 
 func (m *Main) setKeybindings() {
 	k := m.App.GetKeys()
-	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	m.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if _, isInputBar := m.App.GetFocus().(*component.InputBar); isInputBar {
 			return event
 		}
 
 		switch {
-		case k.Contains(k.Navigation.FocusRight, event.Name()):
+		case k.Match(k.Navigation.FocusRight, event):
 			if !m.topBar.HasTabs() {
 				return nil
 			}
@@ -456,7 +456,7 @@ func (m *Main) setKeybindings() {
 			}
 			// On last tab: do nothing; focus and footer keys stay intact
 			return nil
-		case k.Contains(k.Navigation.FocusLeft, event.Name()):
+		case k.Match(k.Navigation.FocusLeft, event):
 			if m.topBar.HasTabs() {
 				if active, ok := m.topBar.GetActiveComponent().(*component.Indexes); ok && active.IsAddFormFocused() {
 					return event
@@ -470,14 +470,14 @@ func (m *Main) setKeybindings() {
 				m.setFocusToActiveTab()
 			}
 			return nil
-		case k.Contains(k.Main.FocusSchemaTree, event.Name()):
+		case k.Match(k.Main.FocusSchemaTree, event):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); !ok {
 				m.showSchemas()
 			} else {
 				m.App.SetFocus(m.schemas)
 			}
 			return nil
-		case k.Contains(k.Main.HideSchema, event.Name()):
+		case k.Match(k.Main.HideSchema, event):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
 				m.RemoveItem(m.schemas)
 				if m.topBar.HasTabs() {
@@ -487,27 +487,27 @@ func (m *Main) setKeybindings() {
 				m.showSchemas()
 			}
 			return nil
-		case k.Contains(k.Main.ServerInfo, event.Name()):
+		case k.Match(k.Main.ServerInfo, event):
 			m.showServerInfo()
 			return nil
-		case k.Contains(k.Main.OpenActions, event.Name()):
+		case k.Match(k.Main.OpenActions, event):
 			m.openActionsModal()
 			return nil
-		case k.Contains(k.Main.NewTab, event.Name()):
+		case k.Match(k.Main.NewTab, event):
 			m.openNewQueryTab()
 			return nil
-		case k.Contains(k.Main.CloseTab, event.Name()):
+		case k.Match(k.Main.CloseTab, event):
 			m.closeActiveTab()
 			return nil
-		case k.Contains(k.Main.RenameTab, event.Name()):
+		case k.Match(k.Main.RenameTab, event):
 			m.renameActiveTab()
 			return nil
-		case k.Contains(k.Main.ImportData, event.Name()):
+		case k.Match(k.Main.ImportData, event):
 			m.importModal.Render(m.schemas.SelectedTable())
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 // setFocusToActiveTab sets focus on the right inner primitive of the currently active tab.

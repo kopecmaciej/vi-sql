@@ -272,21 +272,19 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	focus := string(f.currentFocus)
 
 	// QueryMode results table: show only read-only keys from DataKeys.
-	if strings.HasSuffix(focus, "-results") {
+	if strings.HasSuffix(focus, ResultsSuffix) {
 		keys := f.App.GetKeys().DataKeysForQueryMode()
 		f.keys = keys
 		return keys, nil
 	}
 
 	switch {
-	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort"):
+	case strings.HasSuffix(focus, FilterBarSuffix) || strings.HasSuffix(focus, SortBarSuffix):
 		focus = "InputBar"
-	case focus == "FilterBar" || focus == "SortBar":
-		focus = "InputBar"
-	case strings.HasPrefix(focus, "QueryTab-"):
-		focus = "Data"
-	case strings.HasPrefix(focus, SQLQueryEditorId+"-"):
+	case strings.HasSuffix(focus, EditorSuffix):
 		focus = SQLQueryEditorId
+	case strings.HasPrefix(focus, "QueryTab-"):
+		focus = DataId
 	case strings.HasPrefix(focus, PeekerId+"-"):
 		focus = string(PeekerId)
 	case strings.HasPrefix(focus, ExplainViewerId+"-"):

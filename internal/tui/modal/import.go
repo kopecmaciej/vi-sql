@@ -180,20 +180,20 @@ func (m *ImportModal) applyAutocompleteKeys() {
 	}
 	k := m.App.GetKeys()
 	existing := field.GetInputCapture()
-	field.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	field.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 		}
 		if existing != nil {
 			return existing(event)
 		}
 		return event
-	})
+	}))
 }
 
 func (m *ImportModal) autocompleteTable(text string) []tview.AutocompleteItem {

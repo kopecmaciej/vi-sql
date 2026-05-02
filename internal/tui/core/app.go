@@ -81,6 +81,10 @@ func NewApp(appConfig *config.Config) *App {
 		keys:        keyBindings,
 	}
 
+	keyBindings.OnPendingChanged = func(r rune) {
+		app.manager.Broadcast(manager.NewChordPendingChangedMsg(r))
+	}
+
 	app.Pages = NewPages(app.manager, app)
 	app.Pages.SetStyle(styles)
 
@@ -128,6 +132,7 @@ func (a *App) RestoreFocus() {
 }
 
 func (a *App) FocusChanged(p tview.Primitive) {
+	a.keys.Reset()
 	a.manager.Broadcast(manager.NewFocusChangedMsg(p.GetIdentifier()))
 }
 

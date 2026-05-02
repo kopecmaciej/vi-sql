@@ -94,41 +94,41 @@ func (s *Structure) setLayout() {
 
 func (s *Structure) setKeybindings() {
 	k := s.App.GetKeys()
-	s.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	s.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Refresh, event.Name()):
+		case k.Match(k.Common.Refresh, event):
 			s.loadData(context.Background(), false)
 			return nil
-		case k.Contains(k.Structure.RenameColumn, event.Name()):
+		case k.Match(k.Structure.RenameColumn, event):
 			s.handleRenameColumn(context.Background())
 			return nil
-		case k.Contains(k.Structure.ToggleDDLPane, event.Name()):
+		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
 			s.Render()
 			return nil
-		case s.showDDL && k.Contains(k.Navigation.FocusDown, event.Name()):
+		case s.showDDL && k.Match(k.Navigation.FocusDown, event):
 			s.App.SetFocusOnly(s.ddlView)
 			return nil
 		}
 		return event
-	})
+	}))
 
-	s.ddlView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	s.ddlView.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			s.App.SetFocusOnly(s.table)
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			util.Copy(s.ddl)
 			return nil
-		case k.Contains(k.Structure.ToggleDDLPane, event.Name()):
+		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
 			s.Render()
 			s.App.SetFocusOnly(s.table)
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (s *Structure) handleRenameColumn(ctx context.Context) {

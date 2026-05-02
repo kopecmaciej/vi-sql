@@ -26,7 +26,7 @@ type (
 	}
 
 	KeyBindings struct {
-		vimMode        bool
+		chordState     `yaml:"-"`
 		Navigation     NavigationKeys     `yaml:"navigation"`
 		Common         CommonKeys         `yaml:"common"`
 		Global         GlobalKeys         `yaml:"global"`
@@ -206,6 +206,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 	defaultKeybindings.vimMode = vimMode
 
 	if os.Getenv("ENV") == "vi-dev" {
+		defaultKeybindings.buildChordPrefixes()
 		return defaultKeybindings, nil
 	}
 
@@ -218,6 +219,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 		if err := writeKeybindingsWithHeader(defaultKeybindings, keybindingsPath); err != nil {
 			return nil, err
 		}
+		defaultKeybindings.buildChordPrefixes()
 		return defaultKeybindings, nil
 	}
 
@@ -226,6 +228,7 @@ func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 		return nil, err
 	}
 	loaded.vimMode = vimMode
+	loaded.buildChordPrefixes()
 	return loaded, nil
 }
 
@@ -270,12 +273,11 @@ func (kb KeyBindings) GetAvailableKeys() []OrderedKeys {
 		}
 		fieldName := t.Field(i).Name
 
-		orderedKeys := OrderedKeys{
-			Element: fieldName,
-			Keys:    extractKeysFromStruct(field),
+		extracted := extractKeysFromStruct(field)
+		if len(extracted) == 0 {
+			continue
 		}
-
-		keys = append(keys, orderedKeys)
+		keys = append(keys, OrderedKeys{Element: fieldName, Keys: extracted})
 	}
 
 	return keys
@@ -375,24 +377,21 @@ func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	return namedKey, false
 }
 
-// normalizeConfigKey converts a config key string to the canonical form used
-// for comparison against normalized tcell key names.
-func normalizeConfigKey(k string) string {
-	// Ctrl+letter: normalize to uppercase to match tcell's reporting.
-	if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
-		return "Ctrl+" + strings.ToUpper(string(k[5]))
+// Match reports whether ev should fire configKey's handler. When a chord
+// prefix is pending, matches the second rune against configKey.Chords;
+// otherwise checks the Keys/Runes lists. Must be used inside a handler
+// wrapped with WrapInputCapture so chord state is maintained.
+func (kb *KeyBindings) Match(configKey Key, ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyRune && kb.pending != 0 {
+		chord := string([]rune{kb.pending, ev.Rune()})
+		return slices.Contains(configKey.Chords, chord)
 	}
-	// Accept "Ctrl-Word" (tcell internal KeyNames dash) as "Ctrl+Word".
-	if strings.HasPrefix(k, "Ctrl-") && len(k) > 6 {
-		return "Ctrl+" + k[5:]
-	}
-	return k
+	return kb.contains(configKey, ev.Name())
 }
 
-// Contains reports whether namedKey (as returned by tcell's EventKey.Name())
-// matches any single-event key in configKey. Chord matching is intentionally
-// excluded — chords are multi-event sequences handled by ChordResolver.Feed.
-func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
+// contains reports whether namedKey (tcell EventKey.Name()) matches any
+// single-event Keys/Runes entry in configKey. Chord matching is in Match.
+func (kb *KeyBindings) contains(configKey Key, namedKey string) bool {
 	normalized, isRune := normalizeNamedKey(namedKey)
 
 	if isRune {
@@ -400,11 +399,41 @@ func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
 	}
 
 	for _, k := range configKey.Keys {
-		if normalizeConfigKey(k) == normalized {
+		if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
+			k = "Ctrl+" + strings.ToUpper(string(k[5]))
+		}
+		if k == normalized {
 			return true
 		}
 	}
 	return false
+}
+
+// buildChordPrefixes scans every Key in the bindings and records the first
+// rune of every chord so WrapInputCapture knows which runes to absorb.
+// Vim mode only — leaves the map nil/empty otherwise.
+func (kb *KeyBindings) buildChordPrefixes() {
+	kb.chordPrefixes = nil
+	if !kb.vimMode {
+		return
+	}
+	prefixes := make(map[rune]struct{})
+	v := reflect.ValueOf(*kb)
+	for i := 0; i < v.NumField(); i++ {
+		f := v.Field(i)
+		if f.Kind() != reflect.Struct {
+			continue
+		}
+		for _, k := range extractKeysFromStruct(f) {
+			for _, ch := range k.Chords {
+				for _, r := range ch {
+					prefixes[r] = struct{}{}
+					break
+				}
+			}
+		}
+	}
+	kb.chordPrefixes = prefixes
 }
 
 func (k *Key) String() string {

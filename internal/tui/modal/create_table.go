@@ -130,42 +130,42 @@ func (m *CreateTableModal) focusTarget(t focusTarget) {
 func (m *CreateTableModal) setKeybindings() {
 	k := m.App.GetKeys()
 
-	m.tableNameInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	m.tableNameInput.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			m.focusTarget(focusColumns)
 			return nil
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			m.handleCancel()
 			return nil
 		}
 		return event
-	})
+	}))
 
-	m.columnsTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	m.columnsTable.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if m.editing {
 			return event
 		}
 		switch {
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			m.focusTarget(focusTableName)
 			return nil
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			m.focusTarget(focusPreview)
 			return nil
-		case k.Contains(k.Common.Add, event.Name()):
+		case k.Match(k.Common.Add, event):
 			m.addColumn()
 			return nil
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Delete, event):
 			m.deleteColumn()
 			return nil
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			m.handleExecute()
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			util.Copy(m.buildDDL())
 			return nil
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			m.handleCancel()
 			return nil
 		}
@@ -177,25 +177,25 @@ func (m *CreateTableModal) setKeybindings() {
 		}
 
 		return event
-	})
+	}))
 
-	m.preview.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	m.preview.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			m.focusTarget(focusColumns)
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			util.Copy(m.buildDDL())
 			return nil
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			m.handleExecute()
 			return nil
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			m.handleCancel()
 			return nil
 		}
 		return event
-	})
+	}))
 
 	m.columnsTable.SetSelectionChangedFunc(func(row, col int) {
 		if row >= 1 {

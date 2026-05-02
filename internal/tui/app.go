@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	visqlmcp "github.com/kopecmaciej/vi-sql/internal/mcp"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
@@ -126,27 +127,29 @@ func (a *App) startWatchdog() {
 }
 
 func (a *App) setKeybindings() {
-	a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if a.shouldHandleRune(event) {
+	k := a.GetKeys()
+	k.ChordsDisabled = a.isTextInputFocused
+	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune && a.isTextInputFocused() {
 			return event
 		}
 
 		switch {
-		case a.GetKeys().Contains(a.GetKeys().Global.CloseApp, event.Name()):
+		case k.Match(k.Global.CloseApp, event):
 			a.shutdown()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.OpenConnection, event.Name()):
+		case k.Match(k.Global.OpenConnection, event):
 			a.renderConnection()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ChangeStyle, event.Name()):
+		case k.Match(k.Global.ChangeStyle, event):
 			a.ShowStyleChangeModal()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFooter, event.Name()):
+		case k.Match(k.Global.ToggleFooter, event):
 			if a.main.App != nil {
 				a.main.ToggleFooter()
 			}
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.FullScreenHelp, event.Name()):
+		case k.Match(k.Global.FullScreenHelp, event):
 			if a.Pages.HasPage(page.HelpPageId) {
 				a.Pages.RemovePage(page.HelpPageId)
 				return nil
@@ -156,28 +159,30 @@ func (a *App) setKeybindings() {
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
-func (a *App) shouldHandleRune(event *tcell.EventKey) bool {
-	if !strings.HasPrefix(event.Name(), "Rune") {
+// isTextInputFocused reports whether the currently focused primitive is
+// accepting raw text input. When true, single-rune events must pass through
+// untouched — both the global key switch and chord-prefix absorption are
+// bypassed so the user can type freely.
+func (a *App) isTextInputFocused() bool {
+	focus := a.GetFocus()
+	if focus == nil {
 		return false
 	}
 
-	focus := a.GetFocus()
-	identifier := string(focus.GetIdentifier())
-
-	// TODO: find better way of handling this focus problem in input fields
-	if strings.Contains(identifier, "Bar") || strings.Contains(identifier, "Input") || strings.Contains(identifier, "CreateTable") {
+	switch f := focus.(type) {
+	case *tview.InputField, *core.InputField, *primitives.InputModal:
+		return true
+	case *component.SQLQueryEditor:
+		return f.IsInsertMode()
+	}
+	if _, ok := focus.(tview.FormItem); ok {
 		return true
 	}
 
-	_, isInputField := focus.(*tview.InputField)
-	_, isCustomInputField := focus.(*core.InputField)
-	_, isFormItem := focus.(tview.FormItem)
-	_, isInputModal := focus.(*primitives.InputModal)
-
-	return isInputField || isCustomInputField || isFormItem || isInputModal
+	return false
 }
 
 func (a *App) connectToDatabase() error {
