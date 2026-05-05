@@ -16,13 +16,15 @@ const (
 	vimInsert vimMode = iota
 	vimNormal
 	vimVisual
+	vimVisualLine
 )
 
 type vimHandler struct {
-	mode     vimMode
-	pending  string // buffer for operator sequences: "d", "c", "y", "f", "F", "t", "T", "r"
-	selStart int    // byte offset where visual selection began
-	editor   *SQLQueryEditor
+	mode       vimMode
+	pending    string // buffer for operator sequences: "d", "c", "y"...
+	selStart   int    // byte offset of the anchor char (where visual/visual-line began)
+	selCurrent int    // byte offset of the active cursor char in visual modes
+	editor     *SQLQueryEditor
 }
 
 func newVimHandler(e *SQLQueryEditor) *vimHandler {
@@ -57,7 +59,7 @@ func (v *vimHandler) Handle(event *tcell.EventKey, setFocus func(tview.Primitive
 			}
 			v.enterNormal()
 			return true
-		case vimVisual:
+		case vimVisual, vimVisualLine:
 			v.enterNormal()
 			return true
 		case vimNormal:
@@ -71,6 +73,8 @@ func (v *vimHandler) Handle(event *tcell.EventKey, setFocus func(tview.Primitive
 		return v.handleNormal(event, setFocus)
 	case vimVisual:
 		return v.handleVisual(event, setFocus)
+	case vimVisualLine:
+		return v.handleVisualLine(event, setFocus)
 	}
 	return false // Insert — don't consume
 }
@@ -95,15 +99,74 @@ func (v *vimHandler) enterVisual() {
 	v.editor.App.GetKeys().Reset()
 	ta := v.editor.TextArea
 	v.selStart = ta.GetCursorByteOffset()
-	// Select the char under the cursor immediately (vim inclusive visual).
-	end := v.selStart
-	after := ta.GetTextAfterCursor()
-	if len(after) > 0 && after[0] != '\n' {
-		_, size := utf8.DecodeRuneInString(after)
-		end = v.selStart + size
-	}
-	ta.Select(v.selStart, end)
+	v.selCurrent = v.selStart
+	v.applyVisualSelection()
 	v.editor.refreshTitle()
+}
+
+// applyVisualSelection calls ta.Select with the correct [start, end) range for
+// the current visual anchor (selStart) and active cursor (selCurrent).
+func (v *vimHandler) applyVisualSelection() {
+	ta := v.editor.TextArea
+	start, end := visualSelectionRange(ta.GetText(), v.selStart, v.selCurrent)
+	ta.Select(start, end)
+}
+
+func (v *vimHandler) enterVisualLine() {
+	v.mode = vimVisualLine
+	v.setPending("")
+	v.editor.App.GetKeys().Reset()
+	ta := v.editor.TextArea
+	text := ta.GetText()
+	pos := ta.GetCursorByteOffset()
+	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
+	v.selStart = lineStart
+	v.selCurrent = lineStart
+	v.applyVisualLineSelection()
+	v.editor.refreshTitle()
+}
+
+func (v *vimHandler) applyVisualLineSelection() {
+	ta := v.editor.TextArea
+	start, end := visualLineRange(ta.GetText(), v.selStart, v.selCurrent)
+	ta.Select(start, end)
+}
+
+// visualSelectionRange returns the [start, end) byte range for ta.Select given
+// anchor and cursor as inclusive char positions. The char at cursor is always
+// included (vim-inclusive visual semantics).
+func visualSelectionRange(text string, anchor, cursor int) (start, end int) {
+	if cursor >= anchor {
+		end = cursor
+		if cursor < len(text) {
+			_, sz := utf8.DecodeRuneInString(text[cursor:])
+			end = cursor + sz
+		}
+		return anchor, end
+	}
+	end = anchor
+	if anchor < len(text) {
+		_, sz := utf8.DecodeRuneInString(text[anchor:])
+		end = anchor + sz
+	}
+	return cursor, end
+}
+
+// visualLineRange returns the [start, end) byte range for a linewise selection
+// given two line-start byte offsets (either order). The trailing newline of the
+// last selected line is included so that `dd` / `V d` removes full lines.
+func visualLineRange(text string, lineA, lineB int) (start, end int) {
+	if lineA > lineB {
+		lineA, lineB = lineB, lineA
+	}
+	start = lineA
+	eol := strings.IndexByte(text[lineB:], '\n')
+	if eol < 0 {
+		end = len(text)
+	} else {
+		end = lineB + eol + 1
+	}
+	return
 }
 
 func synth(key tcell.Key) *tcell.EventKey {
@@ -376,6 +439,8 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 
 	case 'v':
 		v.enterVisual()
+	case 'V':
+		v.enterVisualLine()
 
 	default:
 		return true // consume all unrecognised runes — Normal mode doesn't type
@@ -391,20 +456,19 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	}
 	ch := ev.Rune()
 
-	applySelection := func(newCursor int) {
-		if newCursor >= v.selStart {
-			ta.Select(v.selStart, newCursor)
-		} else {
-			ta.Select(newCursor, v.selStart)
-		}
+	applySelection := func(newCurrent int) {
+		v.selCurrent = newCurrent
+		v.applyVisualSelection()
 	}
 
-	// Clear current selection, run move, then reapply from selStart.
+	// Clear current selection to selCurrent, run move, then reapply from selStart.
+	// Using selCurrent (not ta.GetCursorByteOffset()) ensures the move starts from
+	// the active end even when the selection is backward.
 	clearAndMove := func(move func()) {
-		cur := ta.GetCursorByteOffset()
-		ta.Select(cur, cur)
+		ta.Select(v.selCurrent, v.selCurrent)
 		move()
-		applySelection(ta.GetCursorByteOffset())
+		v.selCurrent = ta.GetCursorByteOffset()
+		v.applyVisualSelection()
 	}
 
 	// Resolve pending "g" in visual mode.
@@ -420,18 +484,17 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	case 'h':
 		// Bypass InputHandler: KeyLeft with an active selection jumps to the
 		// selection start rather than moving left by one char.
-		cur := ta.GetCursorByteOffset()
 		text := ta.GetText()
-		if cur > 0 {
-			_, size := utf8.DecodeLastRuneInString(text[:cur])
-			applySelection(cur - size)
+		if v.selCurrent > 0 {
+			_, size := utf8.DecodeLastRuneInString(text[:v.selCurrent])
+			applySelection(v.selCurrent - size)
 		}
 	case 'l':
 		// Bypass InputHandler for the same reason.
-		after := ta.GetTextAfterCursor()
-		if len(after) > 0 {
-			_, size := utf8.DecodeRuneInString(after)
-			applySelection(ta.GetCursorByteOffset() + size)
+		text := ta.GetText()
+		if v.selCurrent < len(text) {
+			_, size := utf8.DecodeRuneInString(text[v.selCurrent:])
+			applySelection(v.selCurrent + size)
 		}
 	case 'j':
 		clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyDown), setFocus) })
@@ -473,6 +536,80 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		v.enterNormal()
 	default:
 		return true // consume all unrecognised runes — Visual mode doesn't type
+	}
+	return true
+}
+
+func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive)) bool {
+	ta := v.editor.TextArea
+
+	if ev.Key() != tcell.KeyRune {
+		return false
+	}
+	ch := ev.Rune()
+
+	moveAndUpdate := func(move func()) {
+		move()
+		newPos := ta.GetCursorByteOffset()
+		text := ta.GetText()
+		v.selCurrent = strings.LastIndexByte(text[:newPos], '\n') + 1
+		v.applyVisualLineSelection()
+	}
+
+	if v.pending == "g" {
+		v.setPending("")
+		if ch == 'g' {
+			moveAndUpdate(func() { ta.MoveCursorTo(0, 0) })
+		}
+		return true
+	}
+
+	switch ch {
+	case 'j':
+		// Use byte search instead of KeyDown so wrapped screen lines don't confuse
+		// movement — KeyDown advances by screen row, not logical line.
+		text := ta.GetText()
+		if eol := strings.IndexByte(text[v.selCurrent:], '\n'); eol >= 0 {
+			v.selCurrent += eol + 1
+			v.applyVisualLineSelection()
+		}
+	case 'k':
+		text := ta.GetText()
+		if v.selCurrent > 0 {
+			prev := strings.LastIndexByte(text[:v.selCurrent-1], '\n')
+			v.selCurrent = prev + 1
+			v.applyVisualLineSelection()
+		}
+	case 'G':
+		text := ta.GetText()
+		lastRow := strings.Count(text, "\n")
+		moveAndUpdate(func() { ta.MoveCursorTo(lastRow, 0) })
+	case 'g':
+		v.setPending("g")
+		return true
+	case 'd', 'x':
+		_, start, end := ta.GetSelection()
+		ta.Replace(start, end, "")
+		v.enterNormal()
+	case 'c':
+		_, start, end := ta.GetSelection()
+		ta.Replace(start, end, "")
+		v.enterInsert()
+	case 'y':
+		sel, _, _ := ta.GetSelection()
+		write, _ := util.GetClipboard()
+		if write != nil {
+			write(sel)
+		}
+		v.enterNormal()
+	case 'v':
+		// Switch to char-visual at the current cursor position.
+		v.mode = vimVisual
+		v.selStart = v.selCurrent
+		v.applyVisualSelection()
+		v.editor.refreshTitle()
+	default:
+		return true
 	}
 	return true
 }

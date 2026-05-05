@@ -296,7 +296,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Description: "Fullscreen editor",
 		},
 		OpenHistory: Key{
-			Keys:        []string{"Ctrl+r"},
+			Keys:        []string{"Alt+r"},
 			Description: "Query history",
 		},
 		TermEditor: Key{

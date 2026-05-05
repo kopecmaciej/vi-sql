@@ -89,24 +89,29 @@ func (e *SQLQueryEditor) refreshTitle() {
 	s := e.style
 	switch e.vim.mode {
 	case vimNormal:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]NORMAL[-] ", s.KeywordColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Normal[-] ", s.KeywordColor))
 		if e.onModeChange != nil {
-			e.onModeChange(fmt.Sprintf("[%s]NORMAL[-]", s.KeywordColor))
+			e.onModeChange(fmt.Sprintf("[%s]Normal[-]", s.KeywordColor))
 		}
 	case vimVisual:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]VISUAL[-] ", s.NumberColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Visual[-] ", s.NumberColor))
 		if e.onModeChange != nil {
-			e.onModeChange(fmt.Sprintf("[%s]VISUAL[-]", s.NumberColor))
+			e.onModeChange(fmt.Sprintf("[%s]Visual[-]", s.NumberColor))
+		}
+	case vimVisualLine:
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]V-Line[-] ", s.NumberColor))
+		if e.onModeChange != nil {
+			e.onModeChange(fmt.Sprintf("[%s]V-Line[-]", s.NumberColor))
 		}
 	default:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]INSERT[-] ", s.OperatorColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Insert[-] ", s.OperatorColor))
 		if e.onModeChange != nil {
-			e.onModeChange(fmt.Sprintf("[%s]INSERT[-]", s.OperatorColor))
+			e.onModeChange(fmt.Sprintf("[%s]Insert[-]", s.OperatorColor))
 		}
 	}
 }
 
-// SetOnModeChange registers a callback invoked on every vim mode transition (NORMAL/INSERT/...).
+// SetOnModeChange registers a callback invoked on every vim mode transition (Normal/Insert/...).
 func (e *SQLQueryEditor) SetOnModeChange(f func(indicator string)) {
 	e.onModeChange = f
 	e.refreshTitle()
