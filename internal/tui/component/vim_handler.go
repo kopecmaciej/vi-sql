@@ -83,6 +83,10 @@ func (v *vimHandler) enterNormal() {
 	v.mode = vimNormal
 	v.setPending("")
 	v.editor.App.GetKeys().Reset()
+	// Collapse any active selection so the highlight disappears immediately.
+	ta := v.editor.TextArea
+	pos := ta.GetCursorByteOffset()
+	ta.Select(pos, pos)
 	v.editor.refreshTitle()
 }
 
