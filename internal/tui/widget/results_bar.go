@@ -34,11 +34,11 @@ func (r *ResultsBar) SetStyle(styles *config.Styles) {
 
 // Render updates the bar text, if TableMode it shows schema.table, if
 // Query Mode than simple "sql" label is shown
-func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration, countPending bool) {
+func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration) {
 	if r.styles == nil {
 		return
 	}
-	r.rerender = func() { r.SetText(r.build(state, execTime, countPending)) }
+	r.rerender = func() { r.SetText(r.build(state, execTime)) }
 	r.rerender()
 }
 
@@ -100,7 +100,7 @@ func (r *ResultsBar) RenderStatementResult(affected int64, execTime time.Duratio
 	r.rerender()
 }
 
-func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, countPending bool) string {
+func (r *ResultsBar) build(state *database.TableState, execTime time.Duration) string {
 	styles := r.styles
 	textColor := styles.Global.TextColor.String()
 	accentColor := styles.Global.SecondaryTextColor.String()
@@ -124,9 +124,9 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 	loaded := int64(state.RowCount())
 	var countSegment string
 	switch {
-	case state.Where != "" && state.RawSQL == "":
+	case state.Where != "" && state.RawSQL == "" && (state.Count == 0 || state.CountIsEstimate):
 		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ?[-]", dimColor, textColor, formatNumber(loaded))
-	case countPending && state.Count == 0:
+	case state.Count == 0 && !state.CountIsEstimate:
 		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s rows[-]", dimColor, textColor, formatNumber(loaded))
 	case state.CountIsEstimate:
 		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ~%s[-]", dimColor, textColor, formatNumber(loaded), formatNumber(state.Count))

@@ -83,8 +83,8 @@ func (m *MockDriver) GetEstimatedRowCount(ctx context.Context, schema, table str
 	return args.Get(0).(int64), args.Bool(1), args.Error(2)
 }
 
-func (m *MockDriver) ListRows(ctx context.Context, state *database.TableState, where, orderBy string, columns []string, countCallback func(int64)) (string, []database.Row, error) {
-	args := m.Called(ctx, state, where, orderBy, columns, countCallback)
+func (m *MockDriver) ListRows(ctx context.Context, state *database.TableState, where, orderBy string, columns []string) (string, []database.Row, error) {
+	args := m.Called(ctx, state, where, orderBy, columns)
 	if args.Get(1) == nil {
 		return args.String(0), nil, args.Error(2)
 	}
@@ -165,8 +165,8 @@ func (m *MockDriver) DropIndex(ctx context.Context, schema, indexName string) er
 	return m.Called(ctx, schema, indexName).Error(0)
 }
 
-func (m *MockDriver) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64, countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
-	args := m.Called(ctx, rawSQL, limit, offset, countCallback)
+func (m *MockDriver) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
+	args := m.Called(ctx, rawSQL, limit, offset)
 	rows, _ := args.Get(1).([]database.Row)
 	cols, _ := args.Get(2).([]database.ColumnInfo)
 	return args.String(0), rows, cols, args.Error(3)

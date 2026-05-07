@@ -3,6 +3,7 @@ package component
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,14 +18,14 @@ const maxBroadcastRows = 100
 // All callbacks are invoked via the scheduler, so they run on the tview main
 // goroutine and may update UI directly without QueueUpdateDraw.
 type RunCallbacks struct {
-	OnRunning   func()
-	OnEstimate  func(count int64) // fast row-count estimate shown while real count loads
-	OnCount     func(count int64) // real count from driver
-	OnSelect    func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration)
-	OnStatement func(affected int64, execTime time.Duration)
-	OnExplain   func(result, bareSql string, analyze bool)
-	OnError     func(error)
-	OnCancel    func()
+	OnRunning       func()
+	OnCountEstimate func(count int64)
+	OnCount         func(count int64)
+	OnSelect        func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration)
+	OnStatement     func(affected int64, execTime time.Duration)
+	OnExplain       func(result, bareSql string, analyze bool)
+	OnError         func(error)
+	OnCancel        func()
 }
 
 // QueryRunner manages a single in-flight database query.
@@ -54,8 +55,7 @@ func NewQueryRunner(
 	}
 }
 
-// Cancel cancels any in-flight run.
-func (r *QueryRunner) Cancel() {
+func (r *QueryRunner) CancelQuery() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cancel != nil {
@@ -63,8 +63,7 @@ func (r *QueryRunner) Cancel() {
 	}
 }
 
-// IsRunning reports whether a query is currently in flight.
-func (r *QueryRunner) IsRunning() bool {
+func (r *QueryRunner) IsQueryRunning() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.running
@@ -151,14 +150,7 @@ func (r *QueryRunner) runExplain(ctx context.Context, sql string, cbs RunCallbac
 
 func (r *QueryRunner) runSelect(ctx context.Context, sql string, batchSize, offset int64, cbs RunCallbacks) {
 	start := time.Now()
-	countCb := func(count int64) {
-		r.schedule(func() {
-			if cbs.OnCount != nil {
-				cbs.OnCount(count)
-			}
-		})
-	}
-	query, rows, cols, err := r.driver.ListQueryRows(ctx, sql, batchSize, offset, countCb)
+	query, rows, cols, err := r.driver.ListQueryRows(ctx, sql, batchSize, offset)
 	if err != nil {
 		r.dispatchError(ctx, err, cbs)
 		return
@@ -209,29 +201,24 @@ func (r *QueryRunner) runStatement(ctx context.Context, sql string, cbs RunCallb
 }
 
 func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState, cbs RunCallbacks) {
-	// Pre-fill with a fast estimate for first table visit so the results bar
-	// shows a number immediately while the real COUNT(*) runs in the background.
-	// Only fire for Postgres (isEstimate=true); SQLite returns an exact count via
-	// the countCb path below, so we skip the pre-fill there.
-	if state.RawSQL == "" && state.Count == 0 {
-		if est, isEstimate, err := r.driver.GetEstimatedRowCount(ctx, state.Schema, state.Table); err == nil && isEstimate && est > 0 {
+	// Get a row count before fetching rows. Only fires for unfiltered table views
+	if state.RawSQL == "" && state.Where == "" && state.Count == 0 {
+		if count, isEstimate, err := r.driver.GetEstimatedRowCount(ctx, state.Schema, state.Table); err == nil && (isEstimate || count > 0) {
 			r.schedule(func() {
-				if cbs.OnEstimate != nil {
-					cbs.OnEstimate(est)
+				if isEstimate {
+					if cbs.OnCountEstimate != nil {
+						cbs.OnCountEstimate(count)
+					}
+				} else {
+					if cbs.OnCount != nil {
+						cbs.OnCount(count)
+					}
 				}
 			})
 		}
 	}
 
 	start := time.Now()
-	// Only create countCb when the caller actually wants count updates; passing
-	// nil suppresses the background COUNT(*) query (used by scroll prefetch).
-	var countCb func(int64)
-	if cbs.OnCount != nil {
-		countCb = func(count int64) {
-			r.schedule(func() { cbs.OnCount(count) })
-		}
-	}
 
 	var (
 		query string
@@ -242,9 +229,9 @@ func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState
 
 	if state.RawSQL != "" {
 		offset := int64(state.RowCount())
-		query, rows, cols, err = r.driver.ListQueryRows(ctx, state.RawSQL, state.BatchSize, offset, countCb)
+		query, rows, cols, err = r.driver.ListQueryRows(ctx, state.RawSQL, state.BatchSize, offset)
 	} else {
-		query, rows, err = r.driver.ListRows(ctx, state, state.Where, state.OrderBy, nil, countCb)
+		query, rows, err = r.driver.ListRows(ctx, state, state.Where, state.OrderBy, nil)
 	}
 	if err != nil {
 		r.dispatchError(ctx, err, cbs)
@@ -298,6 +285,36 @@ func parseExplainPrefix(sql string) (bare string, analyze bool) {
 		rest = strings.TrimSpace(rest[7:])
 	}
 	return rest, analyze
+}
+
+// RunCount executes sql (expected to be a SELECT count(*) query) and fires
+// OnCount with the result. Runs through the normal runner so it can be cancelled.
+func (r *QueryRunner) RunCount(sql string, cbs RunCallbacks) {
+	ctx := r.start()
+	go func() {
+		defer r.done()
+		r.fire(cbs.OnRunning)
+		rows, _, err := r.driver.ExecuteQuery(ctx, sql)
+		if err != nil {
+			r.dispatchError(ctx, err, cbs)
+			return
+		}
+		if len(rows) == 0 {
+			return
+		}
+		var count int64
+		for _, v := range rows[0] {
+			if s, ok := v.(string); ok {
+				count, _ = strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+			}
+			break
+		}
+		r.schedule(func() {
+			if cbs.OnCount != nil {
+				cbs.OnCount(count)
+			}
+		})
+	}()
 }
 
 func isSelectQuery(sql string) bool {

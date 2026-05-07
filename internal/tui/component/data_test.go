@@ -21,7 +21,7 @@ func newDataMock(rows []database.Row, cols []database.ColumnInfo) *testutil.Mock
 	m.On("GetTableColumns", mock.Anything, mock.Anything, mock.Anything).Return(cols, nil)
 	m.On("GetTableForeignKeys", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return("SELECT *", rows, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).Return([]string{"id", "name"}, nil)
 	m.On("ListSchemas", mock.Anything, mock.Anything).
@@ -56,7 +56,7 @@ func TestData_HandleTableSelection_LimitDefault(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			state, ok := args.Get(1).(*database.TableState)
 			if ok {
@@ -104,7 +104,7 @@ func TestData_HandleTableSelection_LimitFromConfig(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			state, ok := args.Get(1).(*database.TableState)
 			if ok {
@@ -150,7 +150,7 @@ func TestData_HandleTableSelection_ReusesStateOnRevisit(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			callCount++
 			state, ok := args.Get(1).(*database.TableState)

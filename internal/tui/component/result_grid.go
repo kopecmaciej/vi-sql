@@ -206,8 +206,15 @@ func (g *ResultGrid) flashCells(cells []*tview.TableCell) {
 // Render paints the header row and all data rows. The table must be cleared
 // before calling this.
 func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, styles *config.Styles) {
-	g.SetFixed(1, 0)
+	// Column 0 is a fixed row-number column (#); data columns start at 1.
+	g.SetOffset(0, 0)
+	g.SetFixed(1, 1)
 	g.SetSelectable(true, true)
+
+	g.SetCell(0, 0, tview.NewTableCell("#").
+		SetSelectable(false).
+		SetBackgroundColor(styles.Global.ContrastBackgroundColor.Color()).
+		SetAlign(tview.AlignCenter))
 
 	visibleCols := g.VisibleColumns(rows[0], cols)
 
@@ -240,7 +247,7 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 				styles.Global.SecondaryTextColor.String(), name,
 				styles.Global.MoreContrastBackgroundColor.String(), t)
 		}
-		g.SetCell(0, col, tview.NewTableCell(headerText).
+		g.SetCell(0, col+1, tview.NewTableCell(headerText).
 			SetReference(name).
 			SetSelectable(false).
 			SetBackgroundColor(styles.Global.ContrastBackgroundColor.Color()).
@@ -248,6 +255,10 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 	}
 
 	for row, rowData := range rows {
+		g.SetCell(row+1, 0, tview.NewTableCell(fmt.Sprintf("[%s]%d[-]", styles.Global.DimColor, row+1)).
+			SetSelectable(true).
+			SetAlign(tview.AlignRight).
+			SetMaxWidth(6))
 		for col, colName := range visibleCols {
 			isNull := rowData[colName] == nil
 			cellText := database.StringifyValue(rowData[colName])
@@ -265,12 +276,12 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 			if isNull {
 				cellText = fmt.Sprintf("[%s]NULL[-:-:-]", styles.Global.DimColor)
 			}
-			g.SetCell(row+1, col, tview.NewTableCell(cellText).
+			g.SetCell(row+1, col+1, tview.NewTableCell(cellText).
 				SetAlign(tview.AlignLeft).
 				SetMaxWidth(30))
 		}
 	}
-	g.Select(1, 0)
+	g.Select(1, 1)
 }
 
 // orderedColumnNames returns column names in ordinal_position order using cols

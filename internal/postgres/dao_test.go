@@ -148,7 +148,7 @@ func TestListRows_BasicPagination(t *testing.T) {
 	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
 	state.BatchSize = 3
 
-	_, rows, err := testDao.ListRows(ctx, state, "", "", nil, nil)
+	_, rows, err := testDao.ListRows(ctx, state, "", "", nil)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), 3)
 }
@@ -267,7 +267,7 @@ func TestTruncateTable(t *testing.T) {
 
 	state := database.NewTableState("public", "trunc_pg_test")
 	state.BatchSize = 100
-	_, rows, err := testDao.ListRows(ctx, state, "", "", nil, nil)
+	_, rows, err := testDao.ListRows(ctx, state, "", "", nil)
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -376,7 +376,7 @@ func TestListRows_WithWhere(t *testing.T) {
 	state := database.NewTableState("public", "filter_pg_test")
 	state.BatchSize = 100
 
-	_, rows, err := testDao.ListRows(ctx, state, "status = 'active'", "", nil, nil)
+	_, rows, err := testDao.ListRows(ctx, state, "status = 'active'", "", nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	for _, r := range rows {
@@ -402,7 +402,7 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	state := database.NewTableState("public", "order_pg_test")
 	state.BatchSize = 100
 
-	_, rows, err := testDao.ListRows(ctx, state, "", "label ASC", nil, nil)
+	_, rows, err := testDao.ListRows(ctx, state, "", "label ASC", nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	for i := 1; i < len(rows); i++ {
@@ -441,32 +441,6 @@ func TestRenameTable_And_RenameBack(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// --- Async count callback ---
-
-func TestListRows_CountCallback(t *testing.T) {
-	ctx := context.Background()
-
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
-	state.BatchSize = 10
-
-	callbackCh := make(chan int64, 1)
-	_, _, err = testDao.ListRows(ctx, state, "", "", nil, func(n int64) {
-		callbackCh <- n
-	})
-	require.NoError(t, err)
-
-	select {
-	case count := <-callbackCh:
-		assert.GreaterOrEqual(t, count, int64(0))
-	case <-time.After(3 * time.Second):
-		t.Fatal("count callback was not invoked within 3s")
-	}
-}
-
 func TestGetEstimatedRowCount(t *testing.T) {
 	ctx := context.Background()
 
@@ -474,7 +448,7 @@ func TestGetEstimatedRowCount(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, schemas[0].Tables)
 
-	count, err := testDao.GetEstimatedRowCount(ctx, schemas[0].Schema, schemas[0].Tables[0])
+	count, _, err := testDao.GetEstimatedRowCount(ctx, schemas[0].Schema, schemas[0].Tables[0])
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, count, int64(0))
 }
@@ -508,7 +482,7 @@ func TestListQueryRows_WithPagination(t *testing.T) {
 	table := schemas[0].Tables[0]
 
 	_, rows, cols, err := testDao.ListQueryRows(ctx,
-		`SELECT * FROM "`+schema+`"."`+table+`"`, 2, 0, nil)
+		`SELECT * FROM "`+schema+`"."`+table+`"`, 2, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, cols)
 	assert.LessOrEqual(t, len(rows), 2)
@@ -518,13 +492,13 @@ func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
 	ctx := context.Background()
 
 	const batch = 3
-	_, rows, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0, nil)
+	_, rows, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
 	assert.NotEmpty(t, rows)
 
 	// auth.users has 1001 rows, so page 2 must also be full.
-	_, rows2, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch, nil)
+	_, rows2, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, rows2, batch, "second page should also have a full batch")
 }
@@ -536,36 +510,18 @@ func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
 	const batch = 2
 
 	_, page1, _, err := testDao.ListQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, 0, nil)
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, 0)
 	require.NoError(t, err)
 	assert.Len(t, page1, batch, "first page should return batch rows")
 
 	_, page2, _, err := testDao.ListQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch, nil)
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, page2, batch, "second page should return batch rows")
 
 	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
 	_, page3, _, err := testDao.ListQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch*2, nil)
+		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch*2)
 	require.NoError(t, err)
 	assert.Len(t, page3, 1, "last page should have the remainder row")
-}
-
-func TestListQueryRows_CountCallback_RespectsUserLimit(t *testing.T) {
-	ctx := context.Background()
-
-	countCh := make(chan int64, 1)
-	_, _, _, err := testDao.ListQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, 10, 0, func(n int64) {
-			countCh <- n
-		})
-	require.NoError(t, err)
-
-	select {
-	case count := <-countCh:
-		assert.Equal(t, int64(5), count, "count should be bounded by the user LIMIT")
-	case <-time.After(3 * time.Second):
-		t.Fatal("count callback was not invoked within 3s")
-	}
 }

@@ -28,7 +28,7 @@ func (s *scrollFetcher) updateState(state *database.TableState) {
 // fresh fetch (filter/sort/refresh/tab-close) so tryPrefetch starts clean.
 func (s *scrollFetcher) cancel() {
 	if s.pending {
-		s.runner.Cancel()
+		s.runner.CancelQuery()
 	}
 	s.pending = false
 	s.noMore = false
@@ -37,7 +37,7 @@ func (s *scrollFetcher) cancel() {
 // tryPrefetch fires a background fetch when the cursor is within one
 // visible-window of the buffer end. Safe to call on every cursor move.
 func (s *scrollFetcher) tryPrefetch(cursorRow, viewHeight int, onAppend func()) {
-	if s.pending || s.noMore || s.runner.IsRunning() {
+	if s.pending || s.noMore || s.runner.IsQueryRunning() {
 		return
 	}
 	bufLen := s.state.RowCount()

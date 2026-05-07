@@ -358,7 +358,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 }
 
 func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
-	columns []string, countCallback func(int64)) (string, []database.Row, error) {
+	columns []string) (string, []database.Row, error) {
 	colExpr := "*"
 	if len(columns) > 0 {
 		quoted := make([]string, len(columns))
@@ -391,21 +391,6 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 	result, err := scanTextRows(rows)
 	if err != nil {
 		return "", nil, err
-	}
-
-	if countCallback != nil {
-		go func() {
-			countQuery := fmt.Sprintf("SELECT count(*) FROM %s", fqTable)
-			if where != "" {
-				countQuery += " WHERE " + where
-			}
-			var count int64
-			if err := d.client.Pool.QueryRow(ctx, countQuery).Scan(&count); err != nil {
-				log.Error().Err(err).Msg("Failed to count rows")
-				return
-			}
-			countCallback(count)
-		}()
 	}
 
 	return query, result, nil
@@ -803,8 +788,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	return nil
 }
 
-func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64,
-	countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
+func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
 	bypassSubquery := database.IsExplainQuery(rawSQL) || database.IsReturningDML(rawSQL)
 
 	var paged string
@@ -834,18 +818,6 @@ func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset in
 	result, err := scanTextRows(rows)
 	if err != nil {
 		return "", nil, nil, err
-	}
-
-	if countCallback != nil && !bypassSubquery {
-		go func() {
-			countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) AS _q", rawSQL)
-			var count int64
-			if err := d.client.Pool.QueryRow(ctx, countQuery).Scan(&count); err != nil {
-				log.Error().Err(err).Msg("Failed to count query rows")
-				return
-			}
-			countCallback(count)
-		}()
 	}
 
 	return paged, result, cols, nil

@@ -83,7 +83,6 @@ type Data struct {
 	state          *database.TableState
 	stateMap       *database.StateMap
 	lastExecTime   time.Duration
-	countPending   bool
 	runner         *QueryRunner
 	scroll         *scrollFetcher
 }
@@ -173,7 +172,7 @@ func (c *Data) init() error {
 	)
 	c.scroll = newScrollFetcher(c.runner, c.state)
 	c.sqlQueryEditor.SetOnCancel(func() {
-		c.runner.Cancel()
+		c.runner.CancelQuery()
 	})
 	c.sqlQueryEditor.SetOnExecute(func(sql string) {
 		if c.editorSize == editorSizeFullscreen {
@@ -192,12 +191,9 @@ func (c *Data) init() error {
 		sqlState := database.NewTableState("", "")
 		sqlState.RawSQL = sql
 		sqlState.BatchSize = c.batchSize()
+		c.scroll.cancel()
 		c.runner.Execute(sql, sqlState.BatchSize, RunCallbacks{
 			OnRunning: func() { c.resultsBar.RenderRunning() },
-			OnCount: func(count int64) {
-				sqlState.Count = count
-				c.resultsBar.Render(sqlState, c.lastExecTime, false)
-			},
 			OnSelect: func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration) {
 				sqlState.LastQuery = query
 				if val, ok := database.ExtractLimitValue(sql); ok {
@@ -205,11 +201,11 @@ func (c *Data) init() error {
 				}
 				sqlState.PopulateRows(rows)
 				c.state = sqlState
+				c.scroll.updateState(c.state)
 				c.columns = cols
 				c.lastExecTime = execTime
-				c.countPending = sqlState.Count == 0
 				c.resultGrid.Clear()
-				c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+				c.resultsBar.Render(c.state, c.lastExecTime)
 				if len(rows) == 0 {
 					c.resultGrid.SetFixed(0, 0)
 					c.resultGrid.SetSelectable(false, false)
@@ -353,8 +349,8 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			c.resultGrid.ToggleVisualMode()
 			return nil
 		case k.Match(k.Data.ClearSelection, event):
-			if c.runner.IsRunning() {
-				c.runner.Cancel()
+			if c.runner.IsQueryRunning() {
+				c.runner.CancelQuery()
 				return nil
 			}
 			c.resultGrid.ClearSelection()
@@ -504,7 +500,7 @@ func (c *Data) SetSchemasForAutocomplete(schemas []database.Schema) {
 
 // IsQueryRunning reports whether a query is currently in flight.
 // Intended for tests that need to synchronise with the async runner.
-func (c *Data) IsQueryRunning() bool { return c.runner != nil && c.runner.IsRunning() }
+func (c *Data) IsQueryRunning() bool { return c.runner != nil && c.runner.IsQueryRunning() }
 
 // IsQueryTab reports whether this tab is in query mode (not a table tab).
 func (c *Data) IsQueryTab() bool {
@@ -756,20 +752,18 @@ func (c *Data) statementCallbacks(sql string) RunCallbacks {
 func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 	c.resultGrid.ClearSelection()
 	c.state.ClearBuffer()
-	c.countPending = true
 	c.scroll.cancel()
 	c.runner.Refresh(c.state, RunCallbacks{
 		OnRunning: func() { c.resultsBar.RenderRunning() },
-		OnEstimate: func(count int64) {
+		OnCountEstimate: func(count int64) {
 			c.state.Count = count
 			c.state.CountIsEstimate = true
-			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+			c.resultsBar.Render(c.state, c.lastExecTime)
 		},
 		OnCount: func(count int64) {
 			c.state.Count = count
 			c.state.CountIsEstimate = false
-			c.countPending = false
-			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+			c.resultsBar.Render(c.state, c.lastExecTime)
 		},
 		OnSelect: func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration) {
 			c.state.LastQuery = query
@@ -787,7 +781,7 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 				go c.loadAutocompleteKeys(context.Background())
 			}
 			c.resultGrid.Clear()
-			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+			c.resultsBar.Render(c.state, c.lastExecTime)
 			c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
 			if len(rows) == 0 {
 				c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows found"))
@@ -813,13 +807,45 @@ func (c *Data) reRenderState() {
 	c.resultGrid.ClearSelection()
 	rows := c.state.GetAllRows()
 	c.resultGrid.Clear()
-	c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
+	c.resultsBar.Render(c.state, c.lastExecTime)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
 	if len(rows) == 0 {
 		c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows found"))
 		return
 	}
 	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+}
+
+// RunCount fires an exact COUNT(*) for the current table/query and updates the results bar.
+func (c *Data) RunCount() {
+	sql := c.buildCountSQL()
+	if sql == "" {
+		return
+	}
+	c.runner.RunCount(sql, RunCallbacks{
+		OnRunning: func() { c.resultsBar.RenderRunning() },
+		OnCount: func(count int64) {
+			c.state.Count = count
+			c.state.CountIsEstimate = false
+			c.resultsBar.Render(c.state, c.lastExecTime)
+		},
+		OnError:  func(err error) { modal.ShowError(c.App.Pages, "Count error", err) },
+		OnCancel: func() { c.resultsBar.RenderCancelled() },
+	})
+}
+
+func (c *Data) buildCountSQL() string {
+	if c.state.RawSQL != "" {
+		return fmt.Sprintf("SELECT count(*) FROM (%s) AS _q", c.state.RawSQL)
+	}
+	if c.state.Table == "" {
+		return ""
+	}
+	q := fmt.Sprintf(`SELECT count(*) FROM "%s"."%s"`, c.state.Schema, c.state.Table)
+	if c.state.Where != "" {
+		q += " WHERE " + c.state.Where
+	}
+	return q
 }
 
 // batchSize returns the DB fetch granularity: Options.Limit when set, otherwise 100.
@@ -837,7 +863,7 @@ func (c *Data) renderAfterAppend() {
 	row, col := c.resultGrid.GetSelection()
 	rows := c.state.GetAllRows()
 	c.resultGrid.Clear()
-	c.resultsBar.Render(c.state, c.lastExecTime, false)
+	c.resultsBar.Render(c.state, c.lastExecTime)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
 	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
 	if row > 0 && row < c.resultGrid.GetRowCount() {

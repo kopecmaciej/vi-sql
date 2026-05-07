@@ -659,6 +659,11 @@ func (m *Main) openActionsModal() {
 
 		entries = append(entries,
 			modal.ActionEntry{
+				Label:    "Count rows",
+				Handler:  func() { data.RunCount() },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
 				Label:    "Export data",
 				KeyHint:  k.Data.ExportData.String(),
 				Handler:  func() { data.OpenExport(ctx) },
