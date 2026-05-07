@@ -124,19 +124,21 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration) s
 	loaded := int64(state.RowCount())
 	var countSegment string
 	switch {
+	case state.AllRowsLoaded:
+		countSegment = fmt.Sprintf("[%s]%s rows[-]", textColor, formatNumber(loaded))
 	case state.Where != "" && state.RawSQL == "" && (state.Count == 0 || state.CountIsEstimate):
-		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ?[-]", dimColor, textColor, formatNumber(loaded))
+		countSegment = fmt.Sprintf("[%s]%s+[-]", textColor, formatNumber(loaded))
 	case state.Count == 0 && !state.CountIsEstimate:
-		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s rows[-]", dimColor, textColor, formatNumber(loaded))
+		countSegment = fmt.Sprintf("[%s]%s rows[-]", textColor, formatNumber(loaded))
 	case state.CountIsEstimate:
-		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ~%s[-]", dimColor, textColor, formatNumber(loaded), formatNumber(state.Count))
+		countSegment = fmt.Sprintf("[%s]%s (~%s)[-]", textColor, formatNumber(loaded), formatNumber(state.Count))
 	default:
-		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of %s[-]", dimColor, textColor, formatNumber(loaded), formatNumber(state.Count))
+		countSegment = fmt.Sprintf("[%s]%s (%s)[-]", textColor, formatNumber(loaded), formatNumber(state.Count))
 	}
 
 	warnSegment := ""
-	if rowCount := state.RowCount(); rowCount >= 10_000 {
-		warnSegment = sep + fmt.Sprintf("[%s]%dK rows loaded — filter or LIMIT[-]", "#F87171", rowCount/1000)
+	if rowCount := state.RowCount(); rowCount >= 10000 {
+		warnSegment = sep + fmt.Sprintf("[%s]⚠ %dK rows in memory[-]", "#F87171", rowCount/1000)
 	}
 
 	line1 := fmt.Sprintf("%s%s%s%s[%s]⏱ %s[-]%s",

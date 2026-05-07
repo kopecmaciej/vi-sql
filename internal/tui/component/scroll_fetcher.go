@@ -57,9 +57,15 @@ func (s *scrollFetcher) tryPrefetch(cursorRow, viewHeight int, onAppend func()) 
 			s.pending = false
 			if len(rows) == 0 {
 				s.noMore = true
+				s.state.AllRowsLoaded = true
+				onAppend()
 				return
 			}
 			s.state.AppendRows(rows)
+			if s.state.BatchSize > 0 && int64(len(rows)) < s.state.BatchSize {
+				s.noMore = true
+				s.state.AllRowsLoaded = true
+			}
 			onAppend()
 		},
 		OnError:  func(_ error) { s.pending = false },

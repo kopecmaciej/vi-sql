@@ -16,6 +16,7 @@ type TableState struct {
 	UserLimit       int64 // user's explicit LIMIT value from SQL (0 = none)
 	Count           int64
 	CountIsEstimate bool // true when Count came from pg_class rather than COUNT(*)
+	AllRowsLoaded   bool // true once a scroll-fetch returned 0 rows (buffer holds every row)
 	Where           string
 	OrderBy         string
 	Columns         string
@@ -66,6 +67,7 @@ func (t *TableState) ClearBuffer() {
 	t.rows = nil
 	t.Count = 0
 	t.CountIsEstimate = false
+	t.AllRowsLoaded = false
 }
 
 func (t *TableState) SetWhere(where string) {
