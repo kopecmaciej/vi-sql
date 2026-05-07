@@ -320,7 +320,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			if rc := c.resultGrid.GetRowCount(); rc > 1 {
 				c.resultGrid.Select(rc-1, col)
 				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-				c.scroll.maybePrefetch(rc-1, viewHeight, c.renderAfterAppend)
+				c.scroll.tryPrefetch(rc-1, viewHeight, c.renderAfterAppend)
 			}
 			return nil
 		case k.Match(k.Data.PeekRow, event):
@@ -411,7 +411,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 
 		// Check if cursor is approaching buffer end — trigger prefetch if so.
 		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-		c.scroll.maybePrefetch(row, viewHeight, c.renderAfterAppend)
+		c.scroll.tryPrefetch(row, viewHeight, c.renderAfterAppend)
 
 		return event
 	}))
@@ -464,7 +464,7 @@ func (c *Data) HandleTableSelection(ctx context.Context, schema, table string, o
 			if focusCol != "" {
 				c.selectColumn(focusCol)
 			}
-			c.App.SetFocus(c)
+			c.App.SetFocus(c.resultGrid)
 		},
 		func(err error) {
 			modal.ShowError(c.App.Pages, "Error loading table", err)

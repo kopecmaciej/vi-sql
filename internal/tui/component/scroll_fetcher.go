@@ -25,7 +25,7 @@ func (s *scrollFetcher) updateState(state *database.TableState) {
 }
 
 // cancel aborts any in-flight prefetch and clears stale flags. Call before any
-// fresh fetch (filter/sort/refresh/tab-close) so maybePrefetch starts clean.
+// fresh fetch (filter/sort/refresh/tab-close) so tryPrefetch starts clean.
 func (s *scrollFetcher) cancel() {
 	if s.pending {
 		s.runner.Cancel()
@@ -34,13 +34,9 @@ func (s *scrollFetcher) cancel() {
 	s.noMore = false
 }
 
-// maybePrefetch fires a background fetch when the cursor is within one
-// visible-window of the buffer end. onAppend is called on the tview goroutine
-// after new rows are appended so the caller can redraw.
-//
-// Safe to call on every cursor move; it is a no-op unless the trigger
-// condition is met and no fetch is already in flight.
-func (s *scrollFetcher) maybePrefetch(cursorRow, viewHeight int, onAppend func()) {
+// tryPrefetch fires a background fetch when the cursor is within one
+// visible-window of the buffer end. Safe to call on every cursor move.
+func (s *scrollFetcher) tryPrefetch(cursorRow, viewHeight int, onAppend func()) {
 	if s.pending || s.noMore || s.runner.IsRunning() {
 		return
 	}
@@ -48,11 +44,9 @@ func (s *scrollFetcher) maybePrefetch(cursorRow, viewHeight int, onAppend func()
 	if bufLen == 0 {
 		return
 	}
-	// Don't prefetch if the buffer already covers the full result.
 	if s.state.Count > 0 && int64(bufLen) >= s.state.Count {
 		return
 	}
-	// Trigger: cursor within one visible window of the buffer end.
 	if cursorRow < bufLen-viewHeight {
 		return
 	}
