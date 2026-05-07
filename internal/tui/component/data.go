@@ -56,7 +56,7 @@ func nextDataID() string {
 	return fmt.Sprintf("QueryTab-%d", n)
 }
 
-// Data displays table rows in a grid with pagination, filtering,
+// Data displays table rows in a grid with scroll-buffered fetching, filtering,
 // sorting, column hide/show, and row CRUD.
 type Data struct {
 	*core.BaseElement
@@ -85,6 +85,7 @@ type Data struct {
 	lastExecTime   time.Duration
 	countPending   bool
 	runner         *QueryRunner
+	scroll         *scrollFetcher
 }
 
 func newData(mode QueryTabMode) *Data {
@@ -170,6 +171,7 @@ func (c *Data) init() error {
 			c.App.GetManager().Broadcast(manager.NewQueryExecutedMsg(result))
 		},
 	)
+	c.scroll = newScrollFetcher(c.runner, c.state)
 	c.sqlQueryEditor.SetOnCancel(func() {
 		c.runner.Cancel()
 	})
@@ -186,19 +188,11 @@ func (c *Data) init() error {
 				return
 			}
 		}
-		batchSize := c.state.BatchSize
-		if batchSize <= 0 {
-			_, _, _, height := c.resultGrid.GetInnerRect()
-			batchSize = int64(height - 1)
-			if batchSize <= 0 {
-				batchSize = 50
-			}
-		}
 		// Pre-create state so OnCount can reference it while the query runs.
 		sqlState := database.NewTableState("", "")
 		sqlState.RawSQL = sql
-		sqlState.BatchSize = batchSize
-		c.runner.Execute(sql, batchSize, RunCallbacks{
+		sqlState.BatchSize = c.batchSize()
+		c.runner.Execute(sql, sqlState.BatchSize, RunCallbacks{
 			OnRunning: func() { c.resultsBar.RenderRunning() },
 			OnCount: func(count int64) {
 				sqlState.Count = count
@@ -325,6 +319,8 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		case k.Match(k.Navigation.GoBottom, event):
 			if rc := c.resultGrid.GetRowCount(); rc > 1 {
 				c.resultGrid.Select(rc-1, col)
+				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+				c.scroll.maybePrefetch(rc-1, viewHeight, c.renderAfterAppend)
 			}
 			return nil
 		case k.Match(k.Data.PeekRow, event):
@@ -353,10 +349,6 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			c.resultGrid.ResetHiddenColumns()
 			c.reRenderState()
 			return nil
-		case k.Match(k.Data.NextPage, event):
-			return c.handleNextPage()
-		case k.Match(k.Data.PreviousPage, event):
-			return c.handlePreviousPage()
 		case k.Match(k.Data.MultipleSelect, event):
 			c.resultGrid.ToggleVisualMode()
 			return nil
@@ -417,6 +409,10 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			}
 		}
 
+		// Check if cursor is approaching buffer end — trigger prefetch if so.
+		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+		c.scroll.maybePrefetch(row, viewHeight, c.renderAfterAppend)
+
 		return event
 	}))
 }
@@ -437,22 +433,13 @@ func (c *Data) HandleTableSelection(ctx context.Context, schema, table string, o
 		c.state = state
 	} else {
 		c.state = database.NewTableState(schema, table)
-
-		conn := c.App.GetConfig().GetCurrentConnection()
-		if conn != nil && conn.Options.Limit != nil {
-			c.state.BatchSize = *conn.Options.Limit
-		} else {
-			_, _, _, height := c.resultGrid.GetInnerRect()
-			c.state.BatchSize = int64(height - 1)
-			if c.state.BatchSize <= 0 {
-				c.state.BatchSize = 50
-			}
-		}
+		c.state.BatchSize = c.batchSize()
 
 		if len(opts) > 0 && opts[0].Where != "" {
 			c.state.Where = opts[0].Where
 		}
 	}
+	c.scroll.updateState(c.state)
 
 	columns, err := c.Driver.GetTableColumns(ctx, schema, table)
 	if err == nil {
@@ -763,20 +750,24 @@ func (c *Data) statementCallbacks(sql string) RunCallbacks {
 	}
 }
 
-// triggerRefresh fetches fresh rows for the current state via the runner.
+// triggerRefresh discards the current buffer and fetches from offset 0.
 // onDone is called on the tview goroutine after the table re-renders.
 // onErr is called on the tview goroutine if the query fails.
 func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 	c.resultGrid.ClearSelection()
-	c.countPending = c.state.Count == 0
+	c.state.ClearBuffer()
+	c.countPending = true
+	c.scroll.cancel()
 	c.runner.Refresh(c.state, RunCallbacks{
 		OnRunning: func() { c.resultsBar.RenderRunning() },
 		OnEstimate: func(count int64) {
 			c.state.Count = count
+			c.state.CountIsEstimate = true
 			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
 		},
 		OnCount: func(count int64) {
 			c.state.Count = count
+			c.state.CountIsEstimate = false
 			c.countPending = false
 			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
 		},
@@ -829,6 +820,29 @@ func (c *Data) reRenderState() {
 		return
 	}
 	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+}
+
+// batchSize returns the DB fetch granularity: Options.Limit when set, otherwise 100.
+func (c *Data) batchSize() int64 {
+	conn := c.App.GetConfig().GetCurrentConnection()
+	if conn != nil && conn.Options.Limit != nil {
+		return *conn.Options.Limit
+	}
+	return 100
+}
+
+// renderAfterAppend re-renders the full buffer after a scroll prefetch appends rows.
+// Preserves the current cursor position.
+func (c *Data) renderAfterAppend() {
+	row, col := c.resultGrid.GetSelection()
+	rows := c.state.GetAllRows()
+	c.resultGrid.Clear()
+	c.resultsBar.Render(c.state, c.lastExecTime, false)
+	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
+	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+	if row > 0 && row < c.resultGrid.GetRowCount() {
+		c.resultGrid.Select(row, col)
+	}
 }
 
 // confirmIfDestructive shows a confirm modal for destructive SQL statements.
@@ -905,30 +919,6 @@ func (c *Data) handleHideColumn(col int) *tcell.EventKey {
 	row, _ := c.resultGrid.GetSelection()
 	c.reRenderState()
 	c.resultGrid.Select(row, c.resultGrid.ClampCol(col))
-	return nil
-}
-
-func (c *Data) handleNextPage() *tcell.EventKey {
-	if c.state.Offset+c.state.BatchSize >= c.state.Count {
-		return nil
-	}
-	c.state.SetOffset(c.state.Offset + c.state.BatchSize)
-	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	c.triggerRefresh(nil, func(err error) {
-		modal.ShowError(c.App.Pages, "Error loading page", err)
-	})
-	return nil
-}
-
-func (c *Data) handlePreviousPage() *tcell.EventKey {
-	if c.state.Offset == 0 {
-		return nil
-	}
-	c.state.SetOffset(c.state.Offset - c.state.BatchSize)
-	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	c.triggerRefresh(nil, func(err error) {
-		modal.ShowError(c.App.Pages, "Error loading page", err)
-	})
 	return nil
 }
 

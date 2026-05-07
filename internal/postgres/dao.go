@@ -339,7 +339,7 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 	return fks, rows.Err()
 }
 
-func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, error) {
+func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
 	var count int64
 	err := d.client.Pool.QueryRow(ctx,
 		`SELECT reltuples::bigint
@@ -349,12 +349,12 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 		schema, table,
 	).Scan(&count)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if count < 0 {
-		return 0, nil
+		return 0, false, nil
 	}
-	return count, nil
+	return count, true, nil
 }
 
 func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
@@ -380,7 +380,7 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 	if orderBy != "" {
 		query += " ORDER BY " + orderBy
 	}
-	query += fmt.Sprintf(" LIMIT %d OFFSET %d", state.BatchSize, state.Offset)
+	query += fmt.Sprintf(" LIMIT %d OFFSET %d", state.BatchSize, int64(state.RowCount()))
 
 	rows, err := d.client.Pool.Query(ctx, query, pgx.QueryResultFormats{pgx.TextFormatCode})
 	if err != nil {

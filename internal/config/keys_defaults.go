@@ -208,14 +208,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Runes:       []string{"r"},
 			Description: "Reset cols",
 		},
-		NextPage: Key{
-			Runes:       []string{"n"},
-			Description: "Next page",
-		},
-		PreviousPage: Key{
-			Runes:       []string{"b"},
-			Description: "Previous page",
-		},
 		ExplainQuery: Key{
 			Keys:        []string{"Ctrl+g"},
 			Description: "Explain query",

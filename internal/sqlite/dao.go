@@ -219,8 +219,13 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 	return result, nil
 }
 
-func (d *Dao) GetEstimatedRowCount(_ context.Context, _, _ string) (int64, error) {
-	return 0, nil
+func (d *Dao) GetEstimatedRowCount(ctx context.Context, _, table string) (int64, bool, error) {
+	var count int64
+	q := fmt.Sprintf("SELECT count(*) FROM %s", quoteSQLiteIdent(table))
+	if err := d.client.DB.QueryRowContext(ctx, q).Scan(&count); err != nil {
+		return 0, false, err
+	}
+	return count, false, nil
 }
 
 func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
@@ -246,9 +251,10 @@ func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, o
 	if orderBy != "" {
 		query += " ORDER BY " + orderBy
 	}
-	displayQuery := query + fmt.Sprintf(" LIMIT %d OFFSET %d", state.BatchSize, state.Offset)
+	offset := int64(state.RowCount())
+	displayQuery := query + fmt.Sprintf(" LIMIT %d OFFSET %d", state.BatchSize, offset)
 	query += " LIMIT ? OFFSET ?"
-	args = append(args, state.BatchSize, state.Offset)
+	args = append(args, state.BatchSize, offset)
 
 	rows, err := d.client.DB.QueryContext(ctx, query, args...)
 	if err != nil {

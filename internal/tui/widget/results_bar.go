@@ -116,26 +116,36 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 		execColor = accentColor
 	}
 
-	rowPrefix := ""
-	if countPending {
-		rowPrefix = "~"
-	}
-
 	label := fmt.Sprintf("[%s]%s.%s[-]", dimColor, state.Schema, state.Table)
 	if state.RawSQL != "" {
 		label = fmt.Sprintf("[%s]sql[-]", dimColor)
 	}
 
-	line1 := fmt.Sprintf("%s%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]batch %d[-]%s[%s]⏱ %s[-]",
+	loaded := int64(state.RowCount())
+	var countSegment string
+	switch {
+	case state.Where != "" && state.RawSQL == "":
+		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ?[-]", dimColor, textColor, formatNumber(loaded))
+	case countPending && state.Count == 0:
+		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s rows[-]", dimColor, textColor, formatNumber(loaded))
+	case state.CountIsEstimate:
+		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of ~%s[-]", dimColor, textColor, formatNumber(loaded), formatNumber(state.Count))
+	default:
+		countSegment = fmt.Sprintf("[%s]loaded[-] [%s]%s of %s[-]", dimColor, textColor, formatNumber(loaded), formatNumber(state.Count))
+	}
+
+	warnSegment := ""
+	if rowCount := state.RowCount(); rowCount >= 10_000 {
+		warnSegment = sep + fmt.Sprintf("[%s]%dK rows loaded — filter or LIMIT[-]", "#F87171", rowCount/1000)
+	}
+
+	line1 := fmt.Sprintf("%s%s%s%s[%s]⏱ %s[-]%s",
 		label,
 		sep,
-		textColor, rowPrefix, formatNumber(state.Count),
-		sep,
-		dimColor, state.GetCurrentPage(), state.GetTotalPages(),
-		sep,
-		dimColor, state.BatchSize,
+		countSegment,
 		sep,
 		execColor, formatDuration(execTime),
+		warnSegment,
 	)
 
 	// WHERE / ORDER BY are baked into raw SQL — skip second line in SQL mode.

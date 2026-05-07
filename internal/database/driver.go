@@ -19,10 +19,8 @@ type Driver interface {
 	GetTableForeignKeys(ctx context.Context, schema, table string) ([]ForeignKeyInfo, error)
 	GetIncomingForeignKeys(ctx context.Context, schema, table string) ([]IncomingForeignKeyInfo, error)
 	// Row CRUD
-	// GetEstimatedRowCount returns a fast row-count estimate for a table.
-	// PostgreSQL reads pg_class.reltuples (instant); SQLite returns 0 (no
-	// equivalent — the caller should fall back to the async exact count).
-	GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, error)
+	// GetEstimatedRowCount returns a row-count estimate for a table.
+	GetEstimatedRowCount(ctx context.Context, schema, table string) (count int64, isEstimate bool, err error)
 	// ListRows fetches a page of rows. ctx controls both the fetch and the
 	// background COUNT(*) goroutine; cancel it to abort an in-flight count.
 	ListRows(ctx context.Context, state *TableState, where, orderBy string,
@@ -52,9 +50,7 @@ type Driver interface {
 		countCallback func(int64)) (query string, rows []Row, cols []ColumnInfo, err error)
 	ExecuteQuery(ctx context.Context, query string) ([]Row, []ColumnInfo, error)
 	ExecuteStatement(ctx context.Context, stmt string) (int64, error)
-	// Postgres: EXPLAIN (FORMAT JSON); SQLite: EXPLAIN QUERY PLAN.
 	ExplainPlan(ctx context.Context, sql string) (string, error)
-	// Postgres: EXPLAIN (ANALYZE, FORMAT JSON); SQLite: same as ExplainPlan.
 	ExplainAnalyze(ctx context.Context, sql string) (string, error)
 	// Autocomplete
 	GetTableColumnNames(ctx context.Context, schema, table string) ([]string, error)

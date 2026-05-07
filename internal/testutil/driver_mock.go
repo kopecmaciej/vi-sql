@@ -78,9 +78,9 @@ func (m *MockDriver) GetIncomingForeignKeys(ctx context.Context, schema, table s
 	return args.Get(0).([]database.IncomingForeignKeyInfo), args.Error(1)
 }
 
-func (m *MockDriver) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, error) {
+func (m *MockDriver) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
 	args := m.Called(ctx, schema, table)
-	return args.Get(0).(int64), args.Error(1)
+	return args.Get(0).(int64), args.Bool(1), args.Error(2)
 }
 
 func (m *MockDriver) ListRows(ctx context.Context, state *database.TableState, where, orderBy string, columns []string, countCallback func(int64)) (string, []database.Row, error) {

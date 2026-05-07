@@ -105,8 +105,6 @@ type (
 		EditRow            Key `yaml:"editRow"`
 		DuplicateRow       Key `yaml:"duplicateRow"`
 		CopyRow            Key `yaml:"copyRow"`
-		NextPage           Key `yaml:"nextPage"`
-		PreviousPage       Key `yaml:"previousPage"`
 		ToggleSortBar      Key `yaml:"toggleSortBar"`
 		SortByColumn       Key `yaml:"sortByColumn"`
 		HideColumn         Key `yaml:"hideColumn"`
@@ -156,7 +154,7 @@ type (
 // in both QueryMode and TableMode; tableOnly are exclusive to TableMode.
 func (kb *KeyBindings) DataKeysSplit() (queryMode, tableOnly []Key) {
 	d := kb.Data
-	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyRow, d.MultipleSelect, d.ClearSelection, d.NextPage, d.PreviousPage, d.ExplainQuery, d.ExportData}
+	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyRow, d.MultipleSelect, d.ClearSelection, d.ExplainQuery, d.ExportData}
 	tableOnly = []Key{d.EditRow, d.DuplicateRow, d.ToggleSortBar, d.SortByColumn, d.HideColumn, d.ResetHiddenColumns, d.FollowForeignKey, d.FindReferences}
 	return
 }
@@ -168,7 +166,7 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	return []Key{
 		d.PeekRow, d.FullPagePeek,
 		kb.Common.Copy, d.CopyRow,
-		kb.Common.Refresh, d.NextPage, d.PreviousPage,
+		kb.Common.Refresh,
 		d.MultipleSelect, d.ClearSelection,
 		d.ExplainQuery,
 		d.ExportData,

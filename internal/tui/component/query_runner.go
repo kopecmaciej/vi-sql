@@ -211,8 +211,10 @@ func (r *QueryRunner) runStatement(ctx context.Context, sql string, cbs RunCallb
 func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState, cbs RunCallbacks) {
 	// Pre-fill with a fast estimate for first table visit so the results bar
 	// shows a number immediately while the real COUNT(*) runs in the background.
+	// Only fire for Postgres (isEstimate=true); SQLite returns an exact count via
+	// the countCb path below, so we skip the pre-fill there.
 	if state.RawSQL == "" && state.Count == 0 {
-		if est, err := r.driver.GetEstimatedRowCount(ctx, state.Schema, state.Table); err == nil && est > 0 {
+		if est, isEstimate, err := r.driver.GetEstimatedRowCount(ctx, state.Schema, state.Table); err == nil && isEstimate && est > 0 {
 			r.schedule(func() {
 				if cbs.OnEstimate != nil {
 					cbs.OnEstimate(est)
@@ -222,12 +224,13 @@ func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState
 	}
 
 	start := time.Now()
-	countCb := func(count int64) {
-		r.schedule(func() {
-			if cbs.OnCount != nil {
-				cbs.OnCount(count)
-			}
-		})
+	// Only create countCb when the caller actually wants count updates; passing
+	// nil suppresses the background COUNT(*) query (used by scroll prefetch).
+	var countCb func(int64)
+	if cbs.OnCount != nil {
+		countCb = func(count int64) {
+			r.schedule(func() { cbs.OnCount(count) })
+		}
 	}
 
 	var (
@@ -238,7 +241,8 @@ func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState
 	)
 
 	if state.RawSQL != "" {
-		query, rows, cols, err = r.driver.ListQueryRows(ctx, state.RawSQL, state.BatchSize, state.Offset, countCb)
+		offset := int64(state.RowCount())
+		query, rows, cols, err = r.driver.ListQueryRows(ctx, state.RawSQL, state.BatchSize, offset, countCb)
 	} else {
 		query, rows, err = r.driver.ListRows(ctx, state, state.Where, state.OrderBy, nil, countCb)
 	}

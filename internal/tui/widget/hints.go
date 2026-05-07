@@ -54,9 +54,6 @@ var appHints = []func(k *config.KeyBindings) string{
 		return fmt.Sprintf("[::b]%s[-:-:-] copies the current row to the clipboard in a key: value format.", k.Data.CopyRow.String())
 	},
 	func(k *config.KeyBindings) string {
-		return fmt.Sprintf("Use [::b]%s[-:-:-] / [::b]%s[-:-:-] to page through large result sets.", k.Data.PreviousPage.String(), k.Data.NextPage.String())
-	},
-	func(k *config.KeyBindings) string {
 		return fmt.Sprintf("[::b]%s[-:-:-] opens the SQL query editor history so you can re-run or edit past queries.", k.SQLQueryEditor.OpenHistory.String())
 	},
 	func(k *config.KeyBindings) string {

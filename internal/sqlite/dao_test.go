@@ -142,7 +142,6 @@ func TestListRows_BasicPagination(t *testing.T) {
 
 	state := database.NewTableState("main", "users")
 	state.BatchSize = 3
-	state.Offset = 0
 
 	_, rows, err := dao.ListRows(ctx, state, "", "", nil, nil)
 	require.NoError(t, err)
@@ -157,7 +156,6 @@ func TestListRows_WithWhere(t *testing.T) {
 
 	state := database.NewTableState("main", "users")
 	state.BatchSize = 100
-	state.Offset = 0
 
 	_, rows, err := dao.ListRows(ctx, state, "status = 'active'", "", nil, nil)
 	require.NoError(t, err)
@@ -173,7 +171,6 @@ func TestListRows_WithOrderBy(t *testing.T) {
 
 	state := database.NewTableState("main", "users")
 	state.BatchSize = 100
-	state.Offset = 0
 
 	_, rows, err := dao.ListRows(ctx, state, "", "email ASC", nil, nil)
 	require.NoError(t, err)
@@ -488,7 +485,6 @@ func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	const userLimit = 5
 	const batch = 2
 
 	_, page1, _, err := dao.ListQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, 0, nil)
