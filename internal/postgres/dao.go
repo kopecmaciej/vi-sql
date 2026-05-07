@@ -357,19 +357,9 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 	return count, true, nil
 }
 
-func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
-	columns []string) (string, []database.Row, error) {
-	colExpr := "*"
-	if len(columns) > 0 {
-		quoted := make([]string, len(columns))
-		for i, c := range columns {
-			quoted[i] = pgx.Identifier{c}.Sanitize()
-		}
-		colExpr = strings.Join(quoted, ", ")
-	}
-
+func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
 	fqTable := pgx.Identifier{state.Schema, state.Table}.Sanitize()
-	query := fmt.Sprintf("SELECT %s FROM %s", colExpr, fqTable)
+	query := fmt.Sprintf("SELECT * FROM %s", fqTable)
 
 	if where != "" {
 		if err := database.SanitizeWhereClause(where); err != nil {
@@ -788,7 +778,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	return nil
 }
 
-func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
+func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
 	bypassSubquery := database.IsExplainQuery(rawSQL) || database.IsReturningDML(rawSQL)
 
 	var paged string

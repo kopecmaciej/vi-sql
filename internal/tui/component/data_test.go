@@ -21,7 +21,7 @@ func newDataMock(rows []database.Row, cols []database.ColumnInfo) *testutil.Mock
 	m.On("GetTableColumns", mock.Anything, mock.Anything, mock.Anything).Return(cols, nil)
 	m.On("GetTableForeignKeys", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("FetchTableRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return("SELECT *", rows, nil)
 	m.On("GetTableColumnNames", mock.Anything, mock.Anything, mock.Anything).Return([]string{"id", "name"}, nil)
 	m.On("ListSchemas", mock.Anything, mock.Anything).
@@ -56,7 +56,7 @@ func TestData_HandleTableSelection_LimitDefault(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("FetchTableRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			state, ok := args.Get(1).(*database.TableState)
 			if ok {
@@ -96,7 +96,7 @@ func TestData_HandleTableSelection_LimitFromConfig(t *testing.T) {
 
 	var capturedLimit int64
 	m := newDataMock([]database.Row{}, []database.ColumnInfo{})
-	// Override ListRows to capture the limit.
+	// Override FetchTableRows to capture the limit.
 	m.ExpectedCalls = nil
 	m.On("GetTableColumns", mock.Anything, mock.Anything, mock.Anything).
 		Return([]database.ColumnInfo{}, nil)
@@ -104,7 +104,7 @@ func TestData_HandleTableSelection_LimitFromConfig(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("FetchTableRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			state, ok := args.Get(1).(*database.TableState)
 			if ok {
@@ -150,7 +150,7 @@ func TestData_HandleTableSelection_ReusesStateOnRevisit(t *testing.T) {
 		Return(nil, nil)
 	m.On("GetEstimatedRowCount", mock.Anything, mock.Anything, mock.Anything).
 		Return(int64(0), false, nil)
-	m.On("ListRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+	m.On("FetchTableRows", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) {
 			callCount++
 			state, ok := args.Get(1).(*database.TableState)
@@ -173,7 +173,7 @@ func TestData_HandleTableSelection_ReusesStateOnRevisit(t *testing.T) {
 	err := tab.HandleTableSelection(context.Background(), "public", "users")
 	require.NoError(t, err)
 	awaitIdle(t, app, tab) // wait for runner + flush OnSelect (which saves to stateMap)
-	require.Equal(t, 1, callCount, "ListRows should be called on first visit")
+	require.Equal(t, 1, callCount, "FetchTableRows should be called on first visit")
 
 	// Manually override the limit in the saved state to a known value.
 	// awaitIdle already flushed OnSelect which saved tab.state to stateMap,
@@ -185,7 +185,7 @@ func TestData_HandleTableSelection_ReusesStateOnRevisit(t *testing.T) {
 	err = tab.HandleTableSelection(context.Background(), "public", "users")
 	require.NoError(t, err)
 	awaitIdle(t, app, tab)
-	require.Equal(t, 2, callCount, "ListRows should be called on second visit too")
+	require.Equal(t, 2, callCount, "FetchTableRows should be called on second visit too")
 
 	assert.Equal(t, int64(123), limitsObserved[1],
 		"second visit should reuse the saved state limit, not recalculate from screen")

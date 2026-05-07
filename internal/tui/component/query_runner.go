@@ -88,7 +88,7 @@ func (r *QueryRunner) Execute(sql string, batchSize int64, cbs RunCallbacks) {
 }
 
 // Refresh loads rows for the given table state.
-// Picks ListQueryRows when state has RawSQL set, ListRows otherwise.
+// Picks FetchQueryRows when state has RawSQL set, FetchTableRows otherwise.
 // Any in-flight query is cancelled first. Returns immediately.
 func (r *QueryRunner) Refresh(state *database.TableState, cbs RunCallbacks) {
 	ctx := r.start()
@@ -150,7 +150,7 @@ func (r *QueryRunner) runExplain(ctx context.Context, sql string, cbs RunCallbac
 
 func (r *QueryRunner) runSelect(ctx context.Context, sql string, batchSize, offset int64, cbs RunCallbacks) {
 	start := time.Now()
-	query, rows, cols, err := r.driver.ListQueryRows(ctx, sql, batchSize, offset)
+	query, rows, cols, err := r.driver.FetchQueryRows(ctx, sql, batchSize, offset)
 	if err != nil {
 		r.dispatchError(ctx, err, cbs)
 		return
@@ -229,9 +229,9 @@ func (r *QueryRunner) runRefresh(ctx context.Context, state *database.TableState
 
 	if state.RawSQL != "" {
 		offset := int64(state.RowCount())
-		query, rows, cols, err = r.driver.ListQueryRows(ctx, state.RawSQL, state.BatchSize, offset)
+		query, rows, cols, err = r.driver.FetchQueryRows(ctx, state.RawSQL, state.BatchSize, offset)
 	} else {
-		query, rows, err = r.driver.ListRows(ctx, state, state.Where, state.OrderBy, nil)
+		query, rows, err = r.driver.FetchTableRows(ctx, state, state.Where, state.OrderBy)
 	}
 	if err != nil {
 		r.dispatchError(ctx, err, cbs)

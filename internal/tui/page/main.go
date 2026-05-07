@@ -210,7 +210,8 @@ func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error 
 	m.queryTabs = append(m.queryTabs, tab)
 	m.topBar.AddDynamicTab(table, tab, widget.KindTable)
 	m.rebuildInnerFlex()
-	// Defer data loading so the first draw properly get height from c.table.GetInnerRect()
+	// Defer so the empty tab frame renders before the blocking metadata queries
+	// (GetTableColumns, GetTableForeignKeys) run on the main goroutine.
 	go m.App.Application.QueueUpdateDraw(func() {
 		if err := tab.HandleTableSelection(ctx, schema, table); err != nil {
 			modal.ShowError(m.App.Pages, "Failed to load table data", err)

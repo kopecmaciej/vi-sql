@@ -231,18 +231,8 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, _, table string) (int64,
 	return count, false, nil
 }
 
-func (d *Dao) ListRows(ctx context.Context, state *database.TableState, where, orderBy string,
-	columns []string) (string, []database.Row, error) {
-	colExpr := "*"
-	if len(columns) > 0 {
-		quoted := make([]string, len(columns))
-		for i, c := range columns {
-			quoted[i] = quoteSQLiteIdent(c)
-		}
-		colExpr = strings.Join(quoted, ", ")
-	}
-
-	query := fmt.Sprintf("SELECT %s FROM %s", colExpr, quoteSQLiteIdent(state.Table))
+func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
+	query := fmt.Sprintf("SELECT * FROM %s", quoteSQLiteIdent(state.Table))
 	args := []any{}
 
 	if where != "" {
@@ -568,7 +558,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	return nil
 }
 
-func (d *Dao) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
+func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
 	bypassSubquery := database.IsExplainQuery(rawSQL) || database.IsReturningDML(rawSQL)
 
 	var displayQuery, paramQuery string

@@ -19,8 +19,7 @@ type Driver interface {
 	GetIncomingForeignKeys(ctx context.Context, schema, table string) ([]IncomingForeignKeyInfo, error)
 	// GetEstimatedRowCount runs estimate count if available, if not normal count is executed
 	GetEstimatedRowCount(ctx context.Context, schema, table string) (count int64, isEstimate bool, err error)
-	ListRows(ctx context.Context, state *TableState, where, orderBy string,
-		columns []string) (string, []Row, error)
+	FetchTableRows(ctx context.Context, state *TableState, where, orderBy string) (string, []Row, error)
 	GetRow(ctx context.Context, schema, table string, pk PrimaryKey) (Row, error)
 	InsertRow(ctx context.Context, schema, table string, row Row) (PrimaryKey, error)
 	UpdateRow(ctx context.Context, schema, table string, pk PrimaryKey, original, updated Row) error
@@ -39,9 +38,9 @@ type Driver interface {
 	CreateIndex(ctx context.Context, schema, table string, def IndexDefinition) error
 	DropIndex(ctx context.Context, schema, indexName string) error
 	// Raw SQL
-	// ListQueryRows wraps rawSQL in a subquery and applies LIMIT/OFFSET for
-	// pagination, mirroring the behaviour of ListRows for regular tables.
-	ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (query string, rows []Row, cols []ColumnInfo, err error)
+	// FetchQueryRows wraps rawSQL in a subquery and applies LIMIT/OFFSET for
+	// pagination, mirroring the behaviour of FetchTableRows for regular tables.
+	FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (query string, rows []Row, cols []ColumnInfo, err error)
 	ExecuteQuery(ctx context.Context, query string) ([]Row, []ColumnInfo, error)
 	ExecuteStatement(ctx context.Context, stmt string) (int64, error)
 	ExplainPlan(ctx context.Context, sql string) (string, error)

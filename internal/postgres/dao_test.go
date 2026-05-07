@@ -148,7 +148,7 @@ func TestListRows_BasicPagination(t *testing.T) {
 	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
 	state.BatchSize = 3
 
-	_, rows, err := testDao.ListRows(ctx, state, "", "", nil)
+	_, rows, err := testDao.FetchTableRows(ctx, state, "", "")
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), 3)
 }
@@ -267,7 +267,7 @@ func TestTruncateTable(t *testing.T) {
 
 	state := database.NewTableState("public", "trunc_pg_test")
 	state.BatchSize = 100
-	_, rows, err := testDao.ListRows(ctx, state, "", "", nil)
+	_, rows, err := testDao.FetchTableRows(ctx, state, "", "")
 	require.NoError(t, err)
 	assert.Empty(t, rows)
 }
@@ -356,7 +356,7 @@ func TestInsertRow_GetRow_UpdateRow_DeleteRow(t *testing.T) {
 	assert.Error(t, err, "row should not exist after delete")
 }
 
-// --- ListRows with filtering ---
+// --- FetchTableRows with filtering ---
 
 func TestListRows_WithWhere(t *testing.T) {
 	ctx := context.Background()
@@ -376,7 +376,7 @@ func TestListRows_WithWhere(t *testing.T) {
 	state := database.NewTableState("public", "filter_pg_test")
 	state.BatchSize = 100
 
-	_, rows, err := testDao.ListRows(ctx, state, "status = 'active'", "", nil)
+	_, rows, err := testDao.FetchTableRows(ctx, state, "status = 'active'", "")
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	for _, r := range rows {
@@ -402,7 +402,7 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	state := database.NewTableState("public", "order_pg_test")
 	state.BatchSize = 100
 
-	_, rows, err := testDao.ListRows(ctx, state, "", "label ASC", nil)
+	_, rows, err := testDao.FetchTableRows(ctx, state, "", "label ASC")
 	require.NoError(t, err)
 	require.NotEmpty(t, rows)
 	for i := 1; i < len(rows); i++ {
@@ -469,7 +469,7 @@ func TestRenameColumn(t *testing.T) {
 	assert.NotContains(t, names, "old_name")
 }
 
-// --- ListQueryRows ---
+// --- FetchQueryRows ---
 
 func TestListQueryRows_WithPagination(t *testing.T) {
 	ctx := context.Background()
@@ -481,7 +481,7 @@ func TestListQueryRows_WithPagination(t *testing.T) {
 	schema := schemas[0].Schema
 	table := schemas[0].Tables[0]
 
-	_, rows, cols, err := testDao.ListQueryRows(ctx,
+	_, rows, cols, err := testDao.FetchQueryRows(ctx,
 		`SELECT * FROM "`+schema+`"."`+table+`"`, 2, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, cols)
@@ -492,13 +492,13 @@ func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
 	ctx := context.Background()
 
 	const batch = 3
-	_, rows, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0)
+	_, rows, _, err := testDao.FetchQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
 	assert.NotEmpty(t, rows)
 
 	// auth.users has 1001 rows, so page 2 must also be full.
-	_, rows2, _, err := testDao.ListQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch)
+	_, rows2, _, err := testDao.FetchQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, rows2, batch, "second page should also have a full batch")
 }
@@ -509,18 +509,18 @@ func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
 	const userLimit = 5
 	const batch = 2
 
-	_, page1, _, err := testDao.ListQueryRows(ctx,
+	_, page1, _, err := testDao.FetchQueryRows(ctx,
 		`SELECT * FROM "auth"."users" LIMIT 5`, batch, 0)
 	require.NoError(t, err)
 	assert.Len(t, page1, batch, "first page should return batch rows")
 
-	_, page2, _, err := testDao.ListQueryRows(ctx,
+	_, page2, _, err := testDao.FetchQueryRows(ctx,
 		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, page2, batch, "second page should return batch rows")
 
 	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
-	_, page3, _, err := testDao.ListQueryRows(ctx,
+	_, page3, _, err := testDao.FetchQueryRows(ctx,
 		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch*2)
 	require.NoError(t, err)
 	assert.Len(t, page3, 1, "last page should have the remainder row")
