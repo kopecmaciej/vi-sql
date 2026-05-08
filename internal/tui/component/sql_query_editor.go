@@ -140,6 +140,10 @@ func (e *SQLQueryEditor) setStyle() {
 		Foreground(styles.Global.BorderColor.Color()).
 		Background(styles.Global.BackgroundColor.Color()))
 
+	e.TextArea.SetSelectedStyle(tcell.StyleDefault.
+		Background(styles.Global.TextColor.Color()).
+		Foreground(styles.Global.BackgroundColor.Color()))
+
 	a := styles.InputBar.Autocomplete
 	acBackground := a.BackgroundColor.Color()
 	acMain := tcell.StyleDefault.

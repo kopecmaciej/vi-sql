@@ -214,15 +214,17 @@ func (f *Footer) handleEvents() {
 }
 
 func (f *Footer) keyCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text)
-	cell.SetTextColor(f.App.GetStyles().Global.SecondaryTextColor.Color())
-	return cell
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text).SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.SecondaryTextColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 }
 
 func (f *Footer) valueCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text + " ")
-	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color())
-	return cell
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text + " ").SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.TitleColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 }
 
 // sequencePendingCell renders the pending sequence prefix (e.g. "g")
@@ -231,9 +233,11 @@ func (f *Footer) sequencePendingCell(prefix rune) *tview.TableCell {
 	if prefix == 0 {
 		text = " "
 	}
-	cell := tview.NewTableCell(text)
-	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color()).SetAttributes(tcell.AttrBold)
-	return cell
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text).SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.TitleColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()).
+		Attributes(tcell.AttrBold))
 }
 
 // SetKeys sets static keybinding hints, bypassing the focus-based lookup.

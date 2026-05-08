@@ -332,12 +332,14 @@ func (c *Connection) renderTable() {
 	c.table.SetFixed(1, 0)
 	c.table.SetSelectable(true, false)
 
+	bg := styles.Global.BackgroundColor.Color()
+	headerStyle := tcell.StyleDefault.Foreground(headerFg).Background(contrastBg)
+
 	headers := []string{"#", "Name", "Host:Port", "Database", "Driver", "Last Used"}
 	for i, h := range headers {
 		c.table.SetCell(0, i, tview.NewTableCell(" "+h+" ").
 			SetSelectable(false).
-			SetTextColor(headerFg).
-			SetBackgroundColor(contrastBg).
+			SetStyle(headerStyle).
 			SetAlign(tview.AlignCenter))
 	}
 
@@ -357,26 +359,26 @@ func (c *Connection) renderTable() {
 
 		row := i + 1
 		c.table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf(" %d ", i+1)).
-			SetTextColor(dimColor).
+			SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg)).
 			SetAlign(tview.AlignRight))
 		c.table.SetCell(row, 1, tview.NewTableCell(" "+conn.Name+" ").
 			SetReference(conn.Name).
-			SetTextColor(textColor))
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)))
 		c.table.SetCell(row, 2, tview.NewTableCell(" "+hostPort+" ").
-			SetTextColor(secondaryColor).
+			SetStyle(tcell.StyleDefault.Foreground(secondaryColor).Background(bg)).
 			SetMaxWidth(32))
 		c.table.SetCell(row, 3, tview.NewTableCell(" "+database+" ").
-			SetTextColor(secondaryColor))
+			SetStyle(tcell.StyleDefault.Foreground(secondaryColor).Background(bg)))
 		c.table.SetCell(row, 4, tview.NewTableCell(" "+conn.GetDriver()+" ").
-			SetTextColor(textColor))
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)))
 		c.table.SetCell(row, 5, tview.NewTableCell(" "+lastUsed+" ").
-			SetTextColor(dimColor))
+			SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg)))
 	}
 
 	newRow := len(c.App.GetConfig().Connections) + 1
 	c.table.SetCell(newRow, 0, tview.NewTableCell(""))
 	c.table.SetCell(newRow, 1, tview.NewTableCell(" > Add").
-		SetTextColor(c.style.ListTextColor.Color()))
+		SetStyle(tcell.StyleDefault.Foreground(c.style.ListTextColor.Color()).Background(bg)))
 	for col := 2; col < len(headers); col++ {
 		c.table.SetCell(newRow, col, tview.NewTableCell(""))
 	}
@@ -484,11 +486,14 @@ func (c *Connection) updatePreview(row int) {
 		username = "—"
 	}
 
+	bg := styles.Global.BackgroundColor.Color()
 	label := func(s string) *tview.TableCell {
-		return tview.NewTableCell(" " + s + " ").SetTextColor(dimColor)
+		return tview.NewTableCell(" " + s + " ").SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg))
 	}
 	value := func(s string) *tview.TableCell {
-		return tview.NewTableCell(s + " ").SetTextColor(textColor).SetExpansion(1)
+		return tview.NewTableCell(s + " ").
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)).
+			SetExpansion(1)
 	}
 
 	dsn := conn.GetSafeDSN()
@@ -510,7 +515,8 @@ func (c *Connection) updatePreview(row int) {
 
 	switch {
 	case conn.Password != "" && !util.IsEncrypted(conn.Password):
-		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorRed))
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
+			SetStyle(tcell.StyleDefault.Foreground(tcell.ColorRed).Background(bg)))
 		c.preview.SetCell(4, 1, tview.NewTableCell("[red]password stored unencrypted[-]").SetExpansion(1))
 	case !conn.IsPasswordReadable():
 		storedMethod := util.ParseMethodTag(conn.Password)
@@ -521,7 +527,8 @@ func (c *Connection) updatePreview(row int) {
 		} else {
 			msg = "[yellow]password unreadable — key mismatch, re-enter[-]"
 		}
-		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").SetTextColor(tcell.ColorYellow))
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
+			SetStyle(tcell.StyleDefault.Foreground(tcell.ColorYellow).Background(bg)))
 		c.preview.SetCell(4, 1, tview.NewTableCell(msg).SetExpansion(1))
 	}
 }

@@ -273,9 +273,13 @@ func (h *History) renderTable() {
 		}
 		preview := buildPreview(e.Query)
 
-		h.table.SetCell(i+1, 0, tview.NewTableCell(num).SetTextColor(styles.Global.TextColor.Color()))
-		h.table.SetCell(i+1, 1, tview.NewTableCell(date).SetTextColor(styles.Global.DimColor.Color()))
-		h.table.SetCell(i+1, 2, tview.NewTableCell(preview).SetTextColor(styles.Global.TextColor.Color()))
+		bg := styles.Global.BackgroundColor.Color()
+		h.table.SetCell(i+1, 0, tview.NewTableCell(num).SetStyle(tcell.StyleDefault.
+			Foreground(styles.Global.TextColor.Color()).Background(bg)))
+		h.table.SetCell(i+1, 1, tview.NewTableCell(date).SetStyle(tcell.StyleDefault.
+			Foreground(styles.Global.DimColor.Color()).Background(bg)))
+		h.table.SetCell(i+1, 2, tview.NewTableCell(preview).SetStyle(tcell.StyleDefault.
+			Foreground(styles.Global.TextColor.Color()).Background(bg)))
 	}
 
 	if len(h.filtered) > 0 {

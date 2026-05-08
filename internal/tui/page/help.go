@@ -434,8 +434,11 @@ func (h *Help) saveEdit() {
 			break
 		}
 	}
+	s := h.App.GetStyles()
 	h.keysTable.SetCell(visualRow, 0,
-		tview.NewTableCell(formatHelpKeyString(newKey)).SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color()))
+		tview.NewTableCell(formatHelpKeyString(newKey)).SetStyle(tcell.StyleDefault.
+			Foreground(s.Global.SecondaryTextColor.Color()).
+			Background(s.Global.BackgroundColor.Color())))
 	h.keysTable.Select(visualRow, 0)
 }
 
@@ -658,18 +661,19 @@ func (h *Help) renderKeysForSection(listIdx int) {
 		return
 	}
 
+	bg := styles.Global.BackgroundColor.Color()
+	keyStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+	descStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color()).Background(bg)
+
 	if section.Element == VimMotionsSectionName {
 		h.keysTable.SetTitle(" Vim Motions (read-only) ")
 		h.keysTable.SetCell(0, 0, tview.NewTableCell("").SetSelectable(false))
 		h.keysTable.SetCell(0, 1, tview.NewTableCell("Active in SQL editor: query tab, row add / edit / duplicate").
-			SetSelectable(false).
-			SetTextColor(styles.Global.SecondaryTextColor.Color()))
+			SetSelectable(false).SetStyle(keyStyle))
 		for row, key := range section.Keys {
 			keyString := formatHelpKeyString(key)
-			h.keysTable.SetCell(row+1, 0,
-				tview.NewTableCell(keyString).SetTextColor(styles.Global.SecondaryTextColor.Color()))
-			h.keysTable.SetCell(row+1, 1,
-				tview.NewTableCell(key.Description).SetTextColor(styles.Global.TextColor.Color()))
+			h.keysTable.SetCell(row+1, 0, tview.NewTableCell(keyString).SetStyle(keyStyle))
+			h.keysTable.SetCell(row+1, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
 		}
 		h.keysTable.ScrollToBeginning()
 		if h.keysTable.GetRowCount() > 1 {
@@ -681,10 +685,8 @@ func (h *Help) renderKeysForSection(listIdx int) {
 	h.keysTable.SetTitle(" Keys ")
 	for row, key := range section.Keys {
 		keyString := formatHelpKeyString(key)
-		h.keysTable.SetCell(row, 0,
-			tview.NewTableCell(keyString).SetTextColor(styles.Global.SecondaryTextColor.Color()))
-		h.keysTable.SetCell(row, 1,
-			tview.NewTableCell(key.Description).SetTextColor(styles.Global.TextColor.Color()))
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(keyString).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
 	}
 	h.keysTable.ScrollToBeginning()
 	if h.keysTable.GetRowCount() > 0 {
@@ -695,6 +697,9 @@ func (h *Help) renderKeysForSection(listIdx int) {
 func (h *Help) renderDataSection(section config.OrderedKeys) {
 	h.keysTable.SetTitle(" Keys ")
 	styles := h.App.GetStyles()
+	bg := styles.Global.BackgroundColor.Color()
+	keyStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+	descStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color()).Background(bg)
 
 	// Build a description→struct-index map so we can translate back to section.Keys.
 	descToIdx := make(map[string]int, len(section.Keys))
@@ -707,22 +712,22 @@ func (h *Help) renderDataSection(section config.OrderedKeys) {
 	for _, key := range queryKeys {
 		idx := descToIdx[key.Description]
 		h.dataRowMap = append(h.dataRowMap, idx)
-		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetTextColor(styles.Global.SecondaryTextColor.Color()))
-		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetTextColor(styles.Global.TextColor.Color()))
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
 		row++
 	}
 
 	h.dataRowMap = append(h.dataRowMap, -1)
 	h.keysTable.SetCell(row, 0, tview.NewTableCell("").SetSelectable(false))
 	h.keysTable.SetCell(row, 1, tview.NewTableCell("─── Table only ───────────────").
-		SetSelectable(false).SetTextColor(styles.Global.SecondaryTextColor.Color()))
+		SetSelectable(false).SetStyle(keyStyle))
 	row++
 
 	for _, key := range tableKeys {
 		idx := descToIdx[key.Description]
 		h.dataRowMap = append(h.dataRowMap, idx)
-		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetTextColor(styles.Global.SecondaryTextColor.Color()))
-		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetTextColor(styles.Global.TextColor.Color()))
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
 		row++
 	}
 

@@ -234,23 +234,26 @@ func (t *TabBar) Render() {
 	styles := t.styles
 	t.Clear()
 
+	bg := styles.Global.BackgroundColor.Color()
+	navStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+
 	_, _, width, _ := t.GetInnerRect()
 	if width <= 0 {
 		for i, tab := range t.tabs {
 			cell := tview.NewTableCell(t.tabLabel(tab))
 			if i == t.active {
-				cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
-				cell.SetAttributes(tcell.AttrBold)
-				cell.SetBackgroundColor(styles.Global.MoreContrastBackgroundColor.Color())
+				cell.SetStyle(tcell.StyleDefault.
+					Foreground(styles.TabBar.ActiveTextColor.Color()).
+					Background(styles.Global.MoreContrastBackgroundColor.Color()).
+					Attributes(tcell.AttrBold))
 			} else {
-				cell.SetTextColor(styles.Global.TextColor.Color())
+				cell.SetStyle(tcell.StyleDefault.
+					Foreground(styles.Global.TextColor.Color()).
+					Background(bg))
 			}
 			t.SetCell(0, i, cell)
 		}
-		plusCell := tview.NewTableCell(" + ").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, len(t.tabs), plusCell)
+		t.SetCell(0, len(t.tabs), tview.NewTableCell(" + ").SetStyle(navStyle).SetSelectable(false))
 		return
 	}
 
@@ -259,10 +262,7 @@ func (t *TabBar) Render() {
 	col := 0
 
 	if t.offset > 0 {
-		leftCell := tview.NewTableCell("< ").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, col, leftCell)
+		t.SetCell(0, col, tview.NewTableCell("< ").SetStyle(navStyle).SetSelectable(false))
 		col++
 	}
 
@@ -272,28 +272,25 @@ func (t *TabBar) Render() {
 		tab := t.tabs[i]
 		cell := tview.NewTableCell(t.tabLabel(tab))
 		if i == t.active {
-			cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
-			cell.SetAttributes(tcell.AttrBold)
-			cell.SetBackgroundColor(styles.Global.MoreContrastBackgroundColor.Color())
+			cell.SetStyle(tcell.StyleDefault.
+				Foreground(styles.TabBar.ActiveTextColor.Color()).
+				Background(styles.Global.MoreContrastBackgroundColor.Color()).
+				Attributes(tcell.AttrBold))
 		} else {
-			cell.SetTextColor(styles.Global.TextColor.Color())
+			cell.SetStyle(tcell.StyleDefault.
+				Foreground(styles.Global.TextColor.Color()).
+				Background(bg))
 		}
 		t.SetCell(0, col, cell)
 		col++
 	}
 
 	if visibleEnd < len(t.tabs) {
-		rightCell := tview.NewTableCell(" >").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, col, rightCell)
+		t.SetCell(0, col, tview.NewTableCell(" >").SetStyle(navStyle).SetSelectable(false))
 		col++
 	}
 
-	plusCell := tview.NewTableCell(" + ").
-		SetTextColor(styles.Global.SecondaryTextColor.Color()).
-		SetSelectable(false)
-	t.SetCell(0, col, plusCell)
+	t.SetCell(0, col, tview.NewTableCell(" + ").SetStyle(navStyle).SetSelectable(false))
 }
 
 func (t *TabBar) GetActiveComponent() TabBarPrimitive {
