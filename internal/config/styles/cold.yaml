@@ -1,6 +1,6 @@
 global:
   backgroundColor: "#0F172A"
-  contrastBackgroundColor: "#1E293B"
+  contrastBackgroundColor: "#2c384d"
   moreContrastBackgroundColor: "#2563EB"
   textColor: "#E2E8F0"
   secondaryTextColor: "#93C5FD"

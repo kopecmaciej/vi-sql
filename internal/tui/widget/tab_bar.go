@@ -236,7 +236,7 @@ func (t *TabBar) Render() {
 
 	activeStyle := tcell.StyleDefault.
 		Foreground(styles.Global.SecondaryTextColor.Color()).
-		Background(styles.Global.MoreContrastBackgroundColor.Color()).
+		Background(styles.Global.ContrastBackgroundColor.Color()).
 		Attributes(tcell.AttrBold)
 	inactiveStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color())
 	navStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color())
