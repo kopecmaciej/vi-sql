@@ -234,20 +234,19 @@ func (t *TabBar) Render() {
 	styles := t.styles
 	t.Clear()
 
-	bg := styles.Global.BackgroundColor.Color()
 	activeStyle := tcell.StyleDefault.
 		Foreground(styles.Global.SecondaryTextColor.Color()).
-		Background(bg).
+		Background(styles.Global.MoreContrastBackgroundColor.Color()).
 		Attributes(tcell.AttrBold)
-	inactiveStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color()).Background(bg)
-	navStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+	inactiveStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color())
+	navStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color())
 
 	_, _, width, _ := t.GetInnerRect()
 	if width <= 0 {
 		for i, tab := range t.tabs {
 			cell := tview.NewTableCell(t.tabLabel(tab))
 			if i == t.active {
-				cell.SetStyle(activeStyle)
+				cell.SetStyle(activeStyle).SetTransparency(false)
 			} else {
 				cell.SetStyle(inactiveStyle)
 			}
@@ -272,7 +271,7 @@ func (t *TabBar) Render() {
 		tab := t.tabs[i]
 		cell := tview.NewTableCell(t.tabLabel(tab))
 		if i == t.active {
-			cell.SetStyle(activeStyle)
+			cell.SetStyle(activeStyle).SetTransparency(false)
 		} else {
 			cell.SetStyle(inactiveStyle)
 		}
