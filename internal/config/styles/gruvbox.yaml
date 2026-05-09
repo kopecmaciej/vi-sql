@@ -28,9 +28,6 @@ inputBar:
     activeTextColor: "#282828"
     secondaryTextColor: "#FABD2F"
     borderColor: "#83A598"
-help:
-  scrollBarTrackColor: "#504945"
-  selectedBackgroundColor: "#D79921"
 others:
   leafIconColor: "#83A598"
   separatorColor: "#504945"

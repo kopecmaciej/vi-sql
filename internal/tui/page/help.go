@@ -71,7 +71,6 @@ type Help struct {
 	*core.BaseElement
 	*core.Flex
 
-	style     *config.HelpStyle
 	leftFlex  *core.Flex
 	rightFlex *core.Flex
 
@@ -187,7 +186,6 @@ func (h *Help) setLayout() {
 }
 
 func (h *Help) setStyle() {
-	h.style = &h.App.GetStyles().Help
 	s := h.App.GetStyles()
 	h.SetStyle(s)
 	h.leftFlex.SetStyle(s)
@@ -200,7 +198,7 @@ func (h *Help) setStyle() {
 	h.hints.SetStyle(s)
 
 	selectedFg := s.Global.BackgroundColor.Color()
-	selectedBg := h.style.SelectedBackgroundColor.Color()
+	selectedBg := s.Global.FocusColor.Color()
 
 	h.sectionList.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(selectedFg).
@@ -212,7 +210,7 @@ func (h *Help) setStyle() {
 
 	h.keysTable.SetScrollBarStyle(
 		tcell.StyleDefault.Foreground(s.Global.SecondaryTextColor.Color()),
-		tcell.StyleDefault.Foreground(h.style.ScrollBarTrackColor.Color()),
+		tcell.StyleDefault.Foreground(s.Global.DimColor.Color()),
 	)
 }
 

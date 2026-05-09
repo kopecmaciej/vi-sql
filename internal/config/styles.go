@@ -25,7 +25,6 @@ type (
 		Data       DataStyle       `yaml:"data"`
 		TabBar     TabBarStyle     `yaml:"tabBar"`
 		InputBar   InputBarStyle   `yaml:"inputBar"`
-		Help       HelpStyle       `yaml:"help"`
 		Others     OthersStyle     `yaml:"others"`
 		SQLEditor  SQLEditorStyle  `yaml:"sqlEditor"`
 	}
@@ -73,11 +72,6 @@ type (
 		ActiveTextColor       Style `yaml:"activeTextColor"`
 		SecondaryTextColor    Style `yaml:"secondaryTextColor"`
 		BorderColor           Style `yaml:"borderColor"`
-	}
-
-	HelpStyle struct {
-		ScrollBarTrackColor     Style `yaml:"scrollBarTrackColor"`
-		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
 	}
 
 	OthersStyle struct {
@@ -141,11 +135,6 @@ func (s *Styles) loadDefaults() {
 			SecondaryTextColor:    "#FDE68A",
 			BorderColor:           "#60A5FA",
 		},
-	}
-
-	s.Help = HelpStyle{
-		ScrollBarTrackColor:     "#4A5568",
-		SelectedBackgroundColor: "#FDE68A",
 	}
 
 	s.Others = OthersStyle{
