@@ -1,4 +1,4 @@
-package database
+package sql
 
 // DMLKeywords are the top-level statement-opening keywords.
 var DMLKeywords = []string{
@@ -36,11 +36,33 @@ var ClauseKeywords = []string{
 }
 
 // ExpressionKeywords are expression-level and query-structure keywords.
+// This is the union used by the lexer for highlighting; the autocomplete
+// engine uses the more granular slices below.
 var ExpressionKeywords = []string{
 	"AS", "DISTINCT",
 	"CASE", "WHEN", "THEN", "ELSE", "END",
 	"NULL", "TRUE", "FALSE", "DEFAULT",
 	"FETCH", "NEXT", "ROWS", "ONLY", "FOR",
+}
+
+// ExpressionStarters can begin a fresh expression (after a clause keyword,
+// comma, open paren, or binary operator). They cannot follow a value.
+var ExpressionStarters = []string{
+	"CASE", "NULL", "TRUE", "FALSE",
+}
+
+// BinaryOperators only make sense after a value (identifier, literal, ")")
+// — they take a left operand. AND/OR/IS NULL/IN/BETWEEN/LIKE/etc.
+var BinaryOperators = []string{
+	"AND", "OR",
+	"IN", "NOT IN", "BETWEEN", "NOT BETWEEN",
+	"LIKE", "NOT LIKE", "ILIKE", "NOT ILIKE",
+	"IS NULL", "IS NOT NULL",
+}
+
+// UnaryOperators are prefix operators that start an expression.
+var UnaryOperators = []string{
+	"NOT", "EXISTS", "NOT EXISTS",
 }
 
 // FunctionKeywords are built-in SQL functions.

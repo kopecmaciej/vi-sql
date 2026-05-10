@@ -1,4 +1,4 @@
-package database
+package sql
 
 import "strings"
 
@@ -11,6 +11,7 @@ const (
 	CtxAfterFrom                         // table / schema reference
 	CtxAfterJoin                         // table after a JOIN keyword
 	CtxAfterWhere                        // predicate expression
+	CtxAfterHaving                       // HAVING clause (aggregate predicates)
 	CtxAfterOn                           // JOIN … ON condition
 	CtxAfterOrderBy                      // column reference in ORDER BY
 	CtxAfterGroupBy                      // column reference in GROUP BY
@@ -19,9 +20,13 @@ const (
 	CtxAfterValues                       // value list after VALUES
 	CtxAfterDot                          // schema.‹table› or table.‹column›
 	CtxAfterDDLVerb                      // after CREATE / DROP / ALTER / TRUNCATE / RENAME
-	CtxAfterDDLObject                    // after TABLE / VIEW / INDEX / FUNCTION / … (following a DDL verb)
+	CtxCreateObject                      // after CREATE TABLE/VIEW/… (new name, suppress existing-table list)
+	CtxExistingObject                    // after DROP/ALTER/TRUNCATE TABLE/VIEW/… (pick existing name)
 	CtxGeneral                           // fallback — no useful clause found
 )
+
+// CtxAfterDDLObject is an alias for CtxExistingObject kept for compatibility.
+const CtxAfterDDLObject = CtxExistingObject
 
 // CompletionContext carries everything the autocomplete engine needs to rank
 // and filter candidates at a given cursor position.
@@ -41,6 +46,11 @@ type CompletionContext struct {
 	// "SELECT col |" (TokenIdentifier → next is a clause keyword) from
 	// "SELECT col, |" (TokenPunctuation → next is another column).
 	PrecedingTokenType TokenType
+
+	// PrecedingTokenValue is the raw text of that token. Needed because type
+	// alone can't distinguish AS vs SELECT (both keyword) or "," vs "(" vs ")"
+	// (all punctuation) — these matter for expression-position-aware filtering.
+	PrecedingTokenValue string
 }
 
 // DetectContext returns the completion context for cursorBytePos inside sql.
@@ -64,23 +74,32 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 		return CompletionContext{Type: CtxStatementStart, PartialWord: partial}
 	}
 
-	// Capture the type of the last non-whitespace token before the cursor.
+	// Capture the type and value of the last non-whitespace token before the cursor.
 	precedingType := tokens[lookFrom].Type
+	precedingValue := tokens[lookFrom].Value
+
+	// SELECT * | vs SELECT a * | — resolve whether * is a wildcard or operator.
+	// A * preceded by an identifier/number/string/")": multiplication (not a value).
+	// A * preceded by anything else (keyword, comma, "("): SELECT wildcard — treat as identifier.
+	if precedingType == TokenStar {
+		precedingType, precedingValue = resolveStarPrecedingType(tokens, lookFrom)
+	}
 
 	// ── dot-qualified context ─────────────────────────────────────────────────
 	// e.g.  users.‹cursor›  or  public.users.‹cursor›
 	if tokens[lookFrom].Type == TokenDot {
 		qualifier := qualifierBeforeDot(tokens, lookFrom)
 		return CompletionContext{
-			Type:               CtxAfterDot,
-			TableName:          qualifier,
-			PartialWord:        partial,
-			PrecedingTokenType: precedingType,
+			Type:                CtxAfterDot,
+			TableName:           qualifier,
+			PartialWord:         partial,
+			PrecedingTokenType:  precedingType,
+			PrecedingTokenValue: precedingValue,
 		}
 	}
 
 	// ── walk backwards for nearest clause keyword ─────────────────────────────
-	return walkForContext(tokens, lookFrom, partial, precedingType)
+	return walkForContext(tokens, lookFrom, partial, precedingType, precedingValue)
 }
 
 // extractPartialAndLookFrom returns the partial word being typed at the cursor
@@ -140,7 +159,7 @@ func qualifierBeforeDot(tokens []Token, dotIdx int) string {
 // skipped so they don't leak context outward. When an unmatched "(" is
 // encountered (depth < 0) the cursor is inside a paren group; contextInsideParen
 // is called to decide the appropriate context.
-func walkForContext(tokens []Token, startIdx int, partial string, precedingType TokenType) CompletionContext {
+func walkForContext(tokens []Token, startIdx int, partial string, precedingType TokenType, precedingValue string) CompletionContext {
 	depth := 0
 	for i := startIdx; i >= 0; i-- {
 		tok := tokens[i]
@@ -152,7 +171,7 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 			case "(":
 				depth--
 				if depth < 0 {
-					return contextInsideParen(tokens, i, partial, precedingType)
+					return contextInsideParen(tokens, i, partial, precedingType, precedingValue)
 				}
 			}
 			continue
@@ -165,19 +184,22 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 
 		switch strings.ToUpper(tok.Value) {
 		case "SELECT":
-			return CompletionContext{Type: CtxAfterSelect, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterSelect, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "FROM":
-			return CompletionContext{Type: CtxAfterFrom, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterFrom, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "JOIN":
-			return CompletionContext{Type: CtxAfterJoin, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterJoin, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "ON":
-			return CompletionContext{Type: CtxAfterOn, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterOn, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
-		case "WHERE", "HAVING":
-			return CompletionContext{Type: CtxAfterWhere, PartialWord: partial, PrecedingTokenType: precedingType}
+		case "WHERE":
+			return CompletionContext{Type: CtxAfterWhere, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
+
+		case "HAVING":
+			return CompletionContext{Type: CtxAfterHaving, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "BY":
 			// Distinguish ORDER BY vs GROUP BY by looking at the preceding keyword.
@@ -188,45 +210,83 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 				if tokens[j].Type == TokenKeyword {
 					switch strings.ToUpper(tokens[j].Value) {
 					case "ORDER":
-						return CompletionContext{Type: CtxAfterOrderBy, PartialWord: partial, PrecedingTokenType: precedingType}
+						return CompletionContext{Type: CtxAfterOrderBy, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 					case "GROUP":
-						return CompletionContext{Type: CtxAfterGroupBy, PartialWord: partial, PrecedingTokenType: precedingType}
+						return CompletionContext{Type: CtxAfterGroupBy, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 					}
 				}
 				break
 			}
 
 		case "SET":
-			return CompletionContext{Type: CtxAfterSet, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterSet, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "INTO":
-			return CompletionContext{Type: CtxAfterInto, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterInto, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "VALUES":
-			return CompletionContext{Type: CtxAfterValues, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterValues, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "LIMIT", "OFFSET":
-			return CompletionContext{Type: CtxGeneral, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxGeneral, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "RETURNING":
-			return CompletionContext{Type: CtxAfterSelect, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterSelect, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "UNION", "INTERSECT", "EXCEPT":
-			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "INSERT", "UPDATE", "DELETE", "WITH":
-			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "TABLE", "VIEW", "INDEX", "SCHEMA", "DATABASE",
 			"SEQUENCE", "FUNCTION", "PROCEDURE", "TRIGGER", "TYPE":
-			return CompletionContext{Type: CtxAfterDDLObject, PartialWord: partial, PrecedingTokenType: precedingType}
+			// Look back for the DDL verb to distinguish CREATE from DROP/ALTER/TRUNCATE/RENAME.
+			for j := i - 1; j >= 0; j-- {
+				if tokens[j].Type == TokenWhitespace {
+					continue
+				}
+				if tokens[j].Type == TokenKeyword {
+					switch strings.ToUpper(tokens[j].Value) {
+					case "CREATE":
+						return CompletionContext{Type: CtxCreateObject, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
+					case "DROP", "ALTER", "TRUNCATE", "RENAME":
+						return CompletionContext{Type: CtxExistingObject, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
+					}
+				}
+				break
+			}
+			return CompletionContext{Type: CtxExistingObject, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "CREATE", "DROP", "ALTER", "TRUNCATE", "RENAME":
-			return CompletionContext{Type: CtxAfterDDLVerb, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterDDLVerb, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 		}
 	}
 
-	return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType}
+	return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
+}
+
+// resolveStarPrecedingType returns the effective TokenType/Value for a `*` token
+// at starIdx. If `*` is preceded by a value (identifier, literal, ")") it is a
+// multiplication operator and stays TokenStar. Otherwise it is a SELECT wildcard
+// and is treated as TokenIdentifier so isAtValuePosition fires correctly.
+func resolveStarPrecedingType(tokens []Token, starIdx int) (TokenType, string) {
+	i := starIdx - 1
+	for i >= 0 && tokens[i].Type == TokenWhitespace {
+		i--
+	}
+	if i < 0 {
+		return TokenIdentifier, "*"
+	}
+	switch tokens[i].Type {
+	case TokenIdentifier, TokenQuotedIdentifier, TokenNumber, TokenString:
+		return TokenStar, "*" // multiplication
+	case TokenPunctuation:
+		if tokens[i].Value == ")" {
+			return TokenStar, "*" // (expr) * …
+		}
+	}
+	return TokenIdentifier, "*" // wildcard
 }
 
 // contextInsideParen decides the completion context when the cursor is inside
@@ -237,7 +297,7 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 //   - IN / ANY / ALL / SOME / EXISTS before "("  → subquery or value list (CtxStatementStart)
 //   - VALUES before "("  → value list (CtxAfterValues)
 //   - anything else  → CtxGeneral (no schema/table suggestions)
-func contextInsideParen(tokens []Token, parenIdx int, partial string, precedingType TokenType) CompletionContext {
+func contextInsideParen(tokens []Token, parenIdx int, partial string, precedingType TokenType, precedingValue string) CompletionContext {
 	i := parenIdx - 1
 	for i >= 0 && tokens[i].Type == TokenWhitespace {
 		i--
@@ -245,10 +305,10 @@ func contextInsideParen(tokens []Token, parenIdx int, partial string, precedingT
 	if i >= 0 && tokens[i].Type == TokenKeyword {
 		switch strings.ToUpper(tokens[i].Value) {
 		case "IN", "ANY", "ALL", "SOME", "EXISTS":
-			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxStatementStart, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 		case "VALUES":
-			return CompletionContext{Type: CtxAfterValues, PartialWord: partial, PrecedingTokenType: precedingType}
+			return CompletionContext{Type: CtxAfterValues, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 		}
 	}
-	return CompletionContext{Type: CtxGeneral, PartialWord: partial, PrecedingTokenType: precedingType}
+	return CompletionContext{Type: CtxGeneral, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 }

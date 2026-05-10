@@ -1,4 +1,4 @@
-package database
+package sql
 
 import (
 	"testing"
@@ -60,6 +60,23 @@ func TestTokenize_QuotedIdentifier(t *testing.T) {
 	}
 	if tokens[0].Value != `"My Table"` {
 		t.Errorf("value=%q", tokens[0].Value)
+	}
+}
+
+// TestTokenize_QuotedIdentifier_EscapedQuote verifies the "" escape inside a
+// double-quoted identifier is handled correctly.
+func TestTokenize_QuotedIdentifier_EscapedQuote(t *testing.T) {
+	// "foo""bar" should be a single TokenQuotedIdentifier
+	sql := `"foo""bar"`
+	tokens := Tokenize(sql)
+	if len(tokens) != 1 {
+		t.Fatalf("sql=%q: got %d tokens, want 1: %v", sql, len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenQuotedIdentifier {
+		t.Errorf("type=%d, want TokenQuotedIdentifier", tokens[0].Type)
+	}
+	if tokens[0].Value != sql {
+		t.Errorf("value=%q, want %q", tokens[0].Value, sql)
 	}
 }
 
@@ -146,6 +163,24 @@ func TestTokenize_Number(t *testing.T) {
 		if len(tokens) != 1 || tokens[0].Type != TokenNumber {
 			t.Errorf("sql=%q: got %v", sql, tokens)
 		}
+	}
+}
+
+// TestTokenize_NumberArithmetic verifies that 1-2 tokenizes as three tokens,
+// not one. This was broken when isNumContinue accepted '+' and '-'.
+func TestTokenize_NumberArithmetic(t *testing.T) {
+	tokens := Tokenize("1-2")
+	if len(tokens) != 3 {
+		t.Fatalf("sql=%q: got %d tokens, want 3: %v", "1-2", len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenNumber || tokens[0].Value != "1" {
+		t.Errorf("token[0]=%v, want Number '1'", tokens[0])
+	}
+	if tokens[1].Type != TokenOperator || tokens[1].Value != "-" {
+		t.Errorf("token[1]=%v, want Operator '-'", tokens[1])
+	}
+	if tokens[2].Type != TokenNumber || tokens[2].Value != "2" {
+		t.Errorf("token[2]=%v, want Number '2'", tokens[2])
 	}
 }
 

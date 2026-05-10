@@ -1,4 +1,4 @@
-package database
+package sql
 
 import "encoding/json"
 

@@ -8,6 +8,8 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/sql/completion"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
@@ -16,22 +18,24 @@ type InputBar struct {
 	*core.BaseElement
 	*core.InputField
 
-	style          *config.InputBarStyle
-	enabled        bool
-	autocompleteOn bool
-	columnKeys     []string
-	schemas        []database.Schema
-	defaultText    string
-	acceptFunc     func(string)
-	rejectFunc     func()
+	style            *config.InputBarStyle
+	enabled          bool
+	autocompleteOn   bool
+	columnKeys       []string
+	schemas          []database.Schema
+	defaultText      string
+	acceptFunc       func(string)
+	rejectFunc       func()
+	completionEngine *completion.Engine
 }
 
 func NewInputBar(barId tview.Identifier, label string) *InputBar {
 	i := &InputBar{
-		BaseElement:    core.NewBaseElement(),
-		InputField:     core.NewInputField(),
-		enabled:        false,
-		autocompleteOn: false,
+		BaseElement:      core.NewBaseElement(),
+		InputField:       core.NewInputField(),
+		enabled:          false,
+		autocompleteOn:   false,
+		completionEngine: completion.NewDefaultEngine(),
 	}
 
 	i.InputField.SetLabel(" " + label + ": ")
@@ -132,10 +136,15 @@ func (i *InputBar) DoneFuncHandler(accept func(string), reject func()) {
 func (i *InputBar) EnableAutocomplete() {
 	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
 		cursorBytePos := len(i.GetTextBeforeCursor())
-		entries := database.BuildSQLAutocomplete(currentText, cursorBytePos, i.schemas, i.columnKeys, nil)
-		items := make([]tview.AutocompleteItem, len(entries))
-		for j, e := range entries {
-			items[j] = tview.AutocompleteItem{Main: e.Main, Secondary: e.Secondary}
+		symbols := i.completionEngine.Suggest(currentText, cursorBytePos, completion.Context{
+			Schemas: i.schemas,
+			ColumnFetcher: func(_, _ string) ([]string, error) {
+				return i.columnKeys, nil
+			},
+		})
+		items := make([]tview.AutocompleteItem, len(symbols))
+		for j, sym := range symbols {
+			items[j] = tview.AutocompleteItem{Main: sym.Name, Secondary: symbolKindLabel(sym.Kind)}
 		}
 		return items
 	})
@@ -146,7 +155,7 @@ func (i *InputBar) EnableAutocomplete() {
 		}
 		before := i.GetTextBeforeCursor()
 		after := i.GetText()[len(before):]
-		ctx := database.DetectContext(database.Tokenize(i.GetText()), len(before))
+		ctx := sqlpkg.DetectContext(sqlpkg.Tokenize(i.GetText()), len(before))
 		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
 		i.SetText(trimmed + text + after)
 		i.SetCursorPosition(len(trimmed + text))
@@ -191,7 +200,7 @@ func (i *InputBar) EnableColumnAutocomplete(keywords []string) {
 func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
 	type cache struct {
 		text   string
-		tokens []database.Token
+		tokens []sqlpkg.Token
 	}
 	var c cache
 
@@ -199,7 +208,7 @@ func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
 		text := i.GetText()
 		if c.text != text {
 			c.text = text
-			c.tokens = database.Tokenize(text)
+			c.tokens = sqlpkg.Tokenize(text)
 		}
 		return core.SQLTokenStyle(c.tokens, byteOffset, style)
 	})

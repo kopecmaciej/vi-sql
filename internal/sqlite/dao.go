@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
 	"github.com/rs/zerolog/log"
 )
 
@@ -559,7 +560,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 }
 
 func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
-	bypassSubquery := database.IsExplainQuery(rawSQL) || database.IsReturningDML(rawSQL)
+	bypassSubquery := sqlpkg.IsExplainQuery(rawSQL) || sqlpkg.IsReturningDML(rawSQL)
 
 	var displayQuery, paramQuery string
 	if bypassSubquery {

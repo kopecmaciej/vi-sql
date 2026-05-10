@@ -10,6 +10,7 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
 )
 
 const maxBroadcastRows = 100
@@ -323,5 +324,5 @@ func isSelectQuery(sql string) bool {
 		strings.HasPrefix(upper, "WITH") ||
 		strings.HasPrefix(upper, "EXPLAIN") ||
 		strings.HasPrefix(upper, "TABLE") ||
-		database.IsReturningDML(sql)
+		sqlpkg.IsReturningDML(sql)
 }

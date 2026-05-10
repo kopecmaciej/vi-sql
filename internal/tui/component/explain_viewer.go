@@ -7,8 +7,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
-	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/rs/zerolog/log"
 )
@@ -133,7 +133,7 @@ func (e *ExplainViewer) Render(result string) {
 
 	trimmed := strings.TrimSpace(result)
 	if strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "{") {
-		plan, err := database.ParsePostgresPlan(trimmed)
+		plan, err := sqlpkg.ParsePostgresPlan(trimmed)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to parse EXPLAIN JSON plan")
 			root.SetText("Parse error: " + err.Error())
@@ -154,7 +154,7 @@ func (e *ExplainViewer) Render(result string) {
 	e.tree.SetCurrentNode(root)
 }
 
-func buildTreeNode(parent *tview.TreeNode, node *database.PlanNode, analyze bool) {
+func buildTreeNode(parent *tview.TreeNode, node *sqlpkg.PlanNode, analyze bool) {
 	label := node.NodeType
 	if node.RelationName != "" {
 		label += " on " + node.RelationName

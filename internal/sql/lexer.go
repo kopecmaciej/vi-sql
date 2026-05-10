@@ -1,4 +1,4 @@
-package database
+package sql
 
 import "strings"
 
@@ -95,14 +95,19 @@ func Tokenize(sql string) []Token {
 			continue
 		}
 
-		// ── double-quoted identifier  "…" ─────────────────────────────────────
+		// ── double-quoted identifier  "…" (with "" escape) ────────────────────
 		if ch == '"' {
 			i++
-			for i < n && sql[i] != '"' {
+			for i < n {
+				if sql[i] == '"' {
+					i++
+					if i < n && sql[i] == '"' { // escaped double quote
+						i++
+						continue
+					}
+					break
+				}
 				i++
-			}
-			if i < n {
-				i++ // consume closing "
 			}
 			tokens = append(tokens, Token{TokenQuotedIdentifier, sql[start:i], start, i})
 			continue
@@ -202,9 +207,11 @@ func isIdentContinue(ch byte) bool {
 	return isIdentStart(ch) || (ch >= '0' && ch <= '9') || ch == '$'
 }
 
+// isNumContinue returns true for characters that can appear inside a numeric
+// literal. + and - are intentionally excluded: they are operators, not part of
+// number tokens (e.g. 1-2 must tokenize as three tokens, not one).
 func isNumContinue(ch byte) bool {
-	return (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' ||
-		ch == 'e' || ch == 'E' || ch == '+' || ch == '-'
+	return (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == 'e' || ch == 'E'
 }
 
 // sqlKeywordSet is the full set of SQL reserved words recognised by the lexer.
