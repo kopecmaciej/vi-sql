@@ -132,6 +132,11 @@ func keywordPool(ctx sql.CompletionContext, atValue bool, pre string) []string {
 		if atValue {
 			return sql.BinaryOperators
 		}
+		// After any operator (=, <, >, !=, +, …) the RHS is a scalar expression —
+		// NOT/EXISTS are predicate prefixes, not values.
+		if ctx.PrecedingTokenType == sql.TokenOperator {
+			return concat(sql.ExpressionStarters, sql.FunctionKeywords)
+		}
 		return concat(sql.UnaryOperators, sql.ExpressionStarters, sql.FunctionKeywords)
 
 	case sql.CtxAfterOrderBy:
