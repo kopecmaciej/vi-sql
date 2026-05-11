@@ -670,36 +670,40 @@ func TestEngine_DDL_ExistingObject(t *testing.T) {
 
 // ── BuildScope tests ──────────────────────────────────────────────────────────
 
+func buildScopeFromText(s string) *QueryScope {
+	return BuildScope(isql.Tokenize(s))
+}
+
 func TestBuildScope_SimpleFrom(t *testing.T) {
-	scope := BuildScope("SELECT * FROM users")
+	scope := buildScopeFromText("SELECT * FROM users")
 	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Table != "users" {
 		t.Errorf("got %+v", scope.TableRefs)
 	}
 }
 
 func TestBuildScope_SchemaQualified(t *testing.T) {
-	scope := BuildScope("SELECT * FROM public.users")
+	scope := buildScopeFromText("SELECT * FROM public.users")
 	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Schema != "public" || scope.TableRefs[0].Table != "users" {
 		t.Errorf("got %+v", scope.TableRefs)
 	}
 }
 
 func TestBuildScope_AliasAS(t *testing.T) {
-	scope := BuildScope("SELECT * FROM users AS u")
+	scope := buildScopeFromText("SELECT * FROM users AS u")
 	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Alias != "u" {
 		t.Errorf("got %+v", scope.TableRefs)
 	}
 }
 
 func TestBuildScope_ImplicitAlias(t *testing.T) {
-	scope := BuildScope("SELECT * FROM users u")
+	scope := buildScopeFromText("SELECT * FROM users u")
 	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Alias != "u" {
 		t.Errorf("got %+v", scope.TableRefs)
 	}
 }
 
 func TestBuildScope_JoinClause(t *testing.T) {
-	scope := BuildScope("SELECT * FROM users u JOIN orders o ON u.id = o.user_id")
+	scope := buildScopeFromText("SELECT * FROM users u JOIN orders o ON u.id = o.user_id")
 	if len(scope.TableRefs) != 2 {
 		t.Fatalf("got %d refs, want 2: %+v", len(scope.TableRefs), scope.TableRefs)
 	}
@@ -712,14 +716,14 @@ func TestBuildScope_JoinClause(t *testing.T) {
 }
 
 func TestBuildScope_CTENames(t *testing.T) {
-	scope := BuildScope("WITH cte AS (SELECT 1) SELECT * FROM cte")
+	scope := buildScopeFromText("WITH cte AS (SELECT 1) SELECT * FROM cte")
 	if len(scope.CTENames) != 1 || scope.CTENames[0] != "cte" {
 		t.Errorf("got CTENames=%v", scope.CTENames)
 	}
 }
 
 func TestBuildScope_MultiCTE(t *testing.T) {
-	scope := BuildScope("WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a JOIN b ON true")
+	scope := buildScopeFromText("WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a JOIN b ON true")
 	if len(scope.CTENames) != 2 || scope.CTENames[0] != "a" || scope.CTENames[1] != "b" {
 		t.Errorf("got CTENames=%v", scope.CTENames)
 	}
@@ -727,7 +731,7 @@ func TestBuildScope_MultiCTE(t *testing.T) {
 
 func TestBuildScope_WithRecursive(t *testing.T) {
 	sql := "WITH RECURSIVE tree AS (SELECT id FROM nodes WHERE parent IS NULL UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent = t.id) SELECT * FROM tree"
-	scope := BuildScope(sql)
+	scope := buildScopeFromText(sql)
 	if len(scope.CTENames) != 1 || scope.CTENames[0] != "tree" {
 		t.Errorf("WITH RECURSIVE: got CTENames=%v", scope.CTENames)
 	}
@@ -735,7 +739,7 @@ func TestBuildScope_WithRecursive(t *testing.T) {
 
 func TestBuildScope_MultiStatement_StopsAtSemicolon(t *testing.T) {
 	// stopAtSemicolon returns the last statement — 'a' from the first must not appear.
-	scope := BuildScope("SELECT * FROM a; SELECT * FROM b")
+	scope := buildScopeFromText("SELECT * FROM a; SELECT * FROM b")
 	for _, ref := range scope.TableRefs {
 		if ref.Table == "a" {
 			t.Errorf("first statement table 'a' leaked into scope from second statement: %+v", scope.TableRefs)
@@ -745,7 +749,7 @@ func TestBuildScope_MultiStatement_StopsAtSemicolon(t *testing.T) {
 
 func TestBuildScope_SubqueryInFrom(t *testing.T) {
 	// A subquery in FROM must not promote its inner tables to the outer scope.
-	scope := BuildScope("SELECT * FROM (SELECT id FROM inner_table) sub")
+	scope := buildScopeFromText("SELECT * FROM (SELECT id FROM inner_table) sub")
 	for _, ref := range scope.TableRefs {
 		if ref.Table == "inner_table" {
 			t.Errorf("inner_table from subquery leaked into outer scope: %+v", scope.TableRefs)

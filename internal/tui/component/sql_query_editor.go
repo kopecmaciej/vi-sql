@@ -130,6 +130,10 @@ func (e *SQLQueryEditor) IsInsertMode() bool {
 	return e.vim == nil || e.vim.mode == vimInsert
 }
 
+func (e *SQLQueryEditor) IsVisualMode() bool {
+	return e.vim != nil && (e.vim.mode == vimVisual || e.vim.mode == vimVisualLine)
+}
+
 func (e *SQLQueryEditor) setStyle() {
 	styles := e.App.GetStyles()
 	e.TextArea.SetStyle(styles)
@@ -228,11 +232,8 @@ func (e *SQLQueryEditor) setAutocomplete() {
 		if index < 0 || index >= len(lastSymbols) {
 			return false
 		}
-		name := lastSymbols[index].Name
-		before := e.GetTextBeforeCursor()
-		ctx := sqlpkg.DetectContext(sqlpkg.Tokenize(e.GetText()), len(before))
-		startPos := len(before) - len(ctx.PartialWord)
-		e.Replace(startPos, len(before), name)
+		sym := lastSymbols[index]
+		e.Replace(sym.Replace.Start, sym.Replace.End, sym.Name)
 		return true
 	})
 }

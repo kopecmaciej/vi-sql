@@ -30,11 +30,10 @@ var tableTerminators = map[string]bool{
 	"WITH": true, "FETCH": true, "FOR": true,
 }
 
-// BuildScope tokenizes sqlText and extracts all in-scope table references, CTE
-// names, and aliases. It stops at `;` to avoid leaking context from a
-// preceding statement.
-func BuildScope(sqlText string) *QueryScope {
-	tokens := sql.Tokenize(sqlText)
+// BuildScope extracts all in-scope table references, CTE names, and aliases
+// from a pre-tokenized SQL statement. It stops at `;` to avoid leaking context
+// from a preceding statement.
+func BuildScope(tokens []sql.Token) *QueryScope {
 	tokens = stopAtSemicolon(tokens)
 
 	scope := &QueryScope{

@@ -49,16 +49,26 @@ func (e *Engine) Suggest(text string, cursorPos int, cfg Context) []Symbol {
 		cfg.ColumnCache = make(map[string][]Column)
 	}
 
+	if sql.SuppressRaw(text, cursorPos) {
+		return nil
+	}
+
 	tokens := sql.Tokenize(text)
-	ctx := sql.DetectContext(tokens, cursorPos)
-	scope := BuildScope(text)
-	partial := strings.ToLower(ctx.PartialWord)
+	sqlCtx := sql.DetectContext(tokens, cursorPos)
+	scope := BuildScope(tokens)
+	partial := strings.ToLower(sqlCtx.PartialWord)
 
 	var candidates []Symbol
 	for _, p := range e.providers {
-		if p.Applicable(ctx.Type, scope) {
-			candidates = append(candidates, p.Suggest(ctx, scope, partial, cfg)...)
+		if p.Applicable(sqlCtx.Type, scope) {
+			candidates = append(candidates, p.Suggest(sqlCtx, scope, partial, cfg)...)
 		}
 	}
-	return Rank(candidates, partial, scope)
+	ranked := Rank(candidates, partial, scope)
+	replaceStart := cursorPos - len(sqlCtx.PartialWord)
+	for i := range ranked {
+		ranked[i].Replace.Start = replaceStart
+		ranked[i].Replace.End = cursorPos
+	}
+	return ranked
 }

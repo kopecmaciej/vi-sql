@@ -158,13 +158,11 @@ func (i *InputBar) EnableAutocomplete() {
 		if index < 0 || index >= len(lastSymbols) {
 			return false
 		}
-		name := lastSymbols[index].Name
-		before := i.GetTextBeforeCursor()
-		after := i.GetText()[len(before):]
-		ctx := sqlpkg.DetectContext(sqlpkg.Tokenize(i.GetText()), len(before))
-		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
-		i.SetText(trimmed + name + after)
-		i.SetCursorPosition(len(trimmed + name))
+		sym := lastSymbols[index]
+		full := i.GetText()
+		newText := full[:sym.Replace.Start] + sym.Name + full[sym.Replace.End:]
+		i.SetText(newText)
+		i.SetCursorPosition(sym.Replace.Start + len(sym.Name))
 		return true
 	})
 }
