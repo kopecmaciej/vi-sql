@@ -188,10 +188,9 @@ func (a *App) openHelp() {
 	a.Pages.AddPage(page.HelpPageId, a.help, true, true)
 }
 
-// isTextInputFocused reports whether the currently focused primitive is
-// accepting raw text input. When true, single-rune events must pass through
-// untouched — both the global key switch and sequence-prefix absorption are
-// bypassed so the user can type freely.
+// isTextInputFocused check whether currently focused primitives is
+// raw text input or input/visual vim mode, if yes, single-rune
+// events must be pass through untouched.
 func (a *App) isTextInputFocused() bool {
 	focus := a.GetFocus()
 	if focus == nil {
@@ -202,7 +201,7 @@ func (a *App) isTextInputFocused() bool {
 	case *tview.InputField, *core.InputField, *primitives.InputModal:
 		return true
 	case *component.SQLQueryEditor:
-		return f.IsInsertMode()
+		return f.IsInsertMode() || f.IsVisualMode()
 	}
 	if _, ok := focus.(tview.FormItem); ok {
 		return true

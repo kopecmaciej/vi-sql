@@ -282,3 +282,46 @@ func TestDetectContext_HavingClause(t *testing.T) {
 		t.Errorf("got %d, want CtxAfterHaving", c.Type)
 	}
 }
+
+func TestShouldSuppressCompletion(t *testing.T) {
+	cases := []struct {
+		sql  string
+		want bool
+	}{
+		// number cases
+		{"SELECT * FROM t WHERE id = 1", true},   // cursor right after number
+		{"SELECT * FROM t WHERE id = 1 ", false}, // space after number
+		{"SELECT * FROM t WHERE id = 123", true}, // multi-digit number
+		{"SELECT * FROM t WHERE id = 1a", true},  // letter after number (partial word, preceded by number)
+
+		// string literal cases
+		{"WHERE name = 'hell", true},     // inside unclosed string
+		{"WHERE name = '", true},         // cursor right after opening quote
+		{"WHERE name = 'hello' ", false}, // after closed string + space
+
+		// ! prefix case
+		{"WHERE id !", true},  // after bare !
+		{"WHERE id !x", true}, // typing after !
+
+		// operator cases: suppress directly after operator, not after operator+space
+		{"WHERE id =", true},    // cursor right after =
+		{"WHERE id >=", true},   // cursor right after >=
+		{"WHERE id !=", true},   // cursor right after !=
+		{"WHERE id <>", true},   // cursor right after <>
+		{"WHERE id = ", false},  // = then space
+		{"WHERE id >= ", false}, // >= then space
+		{"WHERE id != ", false}, // != then space
+
+		// normal cases that should NOT suppress
+		{"SELECT * FROM ", false},
+		{"SELECT * FROM t WHERE ", false},
+		{"SELECT col", false}, // partial identifier
+		{"", false},
+	}
+	for _, tc := range cases {
+		got := SuppressRaw(tc.sql, len(tc.sql))
+		if got != tc.want {
+			t.Errorf("suppress(%q) = %v, want %v", tc.sql, got, tc.want)
+		}
+	}
+}

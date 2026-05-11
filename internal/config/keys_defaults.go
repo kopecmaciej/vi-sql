@@ -6,10 +6,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Keys:        []string{"Esc"},
 			Description: "Close",
 		},
-		Delete: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete",
-		},
 		Add: Key{
 			Runes:       []string{"a"},
 			Description: "Add",
@@ -25,10 +21,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		Select: Key{
 			Keys:        []string{"Enter", "Space"},
 			Description: "Select",
-		},
-		Copy: Key{
-			Runes:       []string{"c"},
-			Description: "Copy",
 		},
 		Confirm: Key{
 			Keys:        []string{"Ctrl+s"},
@@ -49,6 +41,10 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 	}
 
 	if vimMode {
+		k.Common.Confirm = Key{Sequences: []string{"Ctrl+s"}, Description: "Confirm"}
+		k.Common.Delete = Key{Sequences: []string{"dd"}, Description: "Delete"}
+		k.Common.Copy = Key{Sequences: []string{"yy"}, Description: "Copy"}
+
 		k.Navigation.MoveUp = Key{Runes: []string{"k"}, Keys: []string{"Up"}, Description: "Move up"}
 		k.Navigation.MoveDown = Key{Runes: []string{"j"}, Keys: []string{"Down"}, Description: "Move down"}
 		k.Navigation.MoveLeft = Key{Runes: []string{"h"}, Keys: []string{"Left"}, Description: "Move left"}
@@ -56,6 +52,10 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Navigation.GoTop = Key{Sequences: []string{"gg"}, Description: "Go to first item"}
 		k.Navigation.GoBottom = Key{Runes: []string{"G"}, Description: "Go to last item"}
 	} else {
+		k.Common.Confirm = Key{Sequences: []string{"Ctrl+Enter"}, Description: "Confirm"}
+		k.Common.Delete = Key{Sequences: []string{"Ctrl+d"}, Description: "Delete"}
+		k.Common.Copy = Key{Sequences: []string{"c"}, Description: "Copy"}
+
 		k.Navigation.MoveUp = Key{Keys: []string{"Up"}, Description: "Move up"}
 		k.Navigation.MoveDown = Key{Keys: []string{"Down"}, Description: "Move down"}
 		k.Navigation.MoveLeft = Key{Keys: []string{"Left"}, Description: "Move left"}
@@ -159,8 +159,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 
 	if vimMode {
 		k.Main.FocusSchemaTree = Key{Sequences: []string{"ge"}, Description: "Focus schemas"}
-		k.Common.Delete = Key{Sequences: []string{"dd"}, Description: "Delete"}
-		k.Common.Copy = Key{Sequences: []string{"yy"}, Description: "Copy"}
 	} else {
 		k.Main.FocusSchemaTree = Key{Keys: []string{"Ctrl+/"}, Description: "Focus schemas"}
 	}

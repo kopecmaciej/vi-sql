@@ -53,6 +53,44 @@ type CompletionContext struct {
 	PrecedingTokenValue string
 }
 
+// SuppressRaw reports whether autocompletion should be suppressed at cursorPos
+// using only the raw text, without tokenizing. It covers:
+//   - partial word starting with a digit (inside a number literal, e.g. "123|", "col = 1|")
+//   - char immediately before the partial is a digit or operator (e.g. "1a|", ">=x|")
+//   - char immediately before the partial is a quote (e.g. "'|", "'hello'x|")
+//   - cursor inside a string literal detected via odd single-quote count (e.g. "'hello world|")
+func SuppressRaw(text string, cursorPos int) bool {
+	if cursorPos == 0 {
+		return false
+	}
+	pos := cursorPos
+	for pos > 0 && isIdentContinue(text[pos-1]) {
+		pos--
+	}
+	// Partial word starts with a digit → number literal.
+	if pos < cursorPos && text[pos] >= '0' && text[pos] <= '9' {
+		return true
+	}
+	if pos == 0 {
+		return false
+	}
+	ch := text[pos-1]
+	if (ch >= '0' && ch <= '9') ||
+		ch == '=' || ch == '<' || ch == '>' || ch == '!' ||
+		ch == '+' || ch == '-' || ch == '/' || ch == '%' ||
+		ch == '\'' {
+		return true
+	}
+	// Odd single-quote count → inside a string literal (handles spaces inside strings).
+	quotes := 0
+	for i := 0; i < pos; i++ {
+		if text[i] == '\'' {
+			quotes++
+		}
+	}
+	return quotes%2 == 1
+}
+
 // DetectContext returns the completion context for cursorBytePos inside sql.
 //
 // It tokenizes the input, locates the cursor, extracts any partial word, and

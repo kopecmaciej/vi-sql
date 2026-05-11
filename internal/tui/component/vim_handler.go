@@ -47,6 +47,7 @@ func (v *vimHandler) transitionTo(m vimMode) {
 	if m == vimInsert {
 		v.editor.App.SetCursorStyle(tcell.CursorStyleSteadyBar)
 	} else {
+		v.editor.TextArea.HideAutocomplete()
 		v.editor.App.SetCursorStyle(tcell.CursorStyleSteadyBlock)
 	}
 	v.editor.refreshTitle()
