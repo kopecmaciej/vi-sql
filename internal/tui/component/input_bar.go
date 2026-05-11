@@ -26,9 +26,7 @@ type InputBar struct {
 	acceptFunc       func(string)
 	rejectFunc       func()
 	completionEngine *completion.Engine
-
-	// tokenCache is shared between syntax highlighting and autocomplete so the
-	// same text is tokenized only once per keystroke.
+	// tokenCache is shared between syntax highlighting and autocomplete
 	tokenCache struct {
 		text   string
 		tokens []sqlpkg.Token

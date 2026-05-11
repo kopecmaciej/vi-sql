@@ -39,15 +39,12 @@ type SQLQueryEditor struct {
 	onOpenInEditor   func()
 	onCancel         func()
 	onModeChange     func(indicator string)
-
 	// Yank highlight: active byte range [yankHLStart, yankHLEnd) and a generation
 	// counter so the clearing goroutine doesn't overwrite a newer highlight.
 	yankHLStart int
 	yankHLEnd   int
 	yankHLGen   uint64
-
-	// tokenCache is shared between syntax highlighting and autocomplete so the
-	// same text is tokenized only once per keystroke.
+	// tokenCache is shared between syntax highlighting and autocomplete
 	tokenCache struct {
 		text   string
 		tokens []sqlpkg.Token
