@@ -48,6 +48,12 @@ type IconStyle struct {
 	TabQuery      Style `yaml:"tabQuery"`
 	TabStructure  Style `yaml:"tabStructure"`
 	TabIndex      Style `yaml:"tabIndex"`
+
+	PrimaryKey         Style `yaml:"primaryKey"`
+	CompletionKeyword  Style `yaml:"completionKeyword"`
+	CompletionCTE      Style `yaml:"completionCTE"`
+	CompletionAlias    Style `yaml:"completionAlias"`
+	CompletionFunction Style `yaml:"completionFunction"`
 }
 
 // TypeSymbol returns the icon for a given SQL data type.

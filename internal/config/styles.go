@@ -19,14 +19,14 @@ type (
 	Style string
 
 	Styles struct {
-		Global     GlobalStyles    `yaml:"global"`
-		Icons      IconStyle       `yaml:"-"` // loaded from icons.yaml, not from theme YAML
-		Connection ConnectionStyle `yaml:"connection"`
-		Data       DataStyle       `yaml:"data"`
-		TabBar     TabBarStyle     `yaml:"tabBar"`
-		InputBar   InputBarStyle   `yaml:"inputBar"`
-		Others     OthersStyle     `yaml:"others"`
-		SQLEditor  SQLEditorStyle  `yaml:"sqlEditor"`
+		Global       GlobalStyles      `yaml:"global"`
+		Icons        IconStyle         `yaml:"-"` // loaded from icons.yaml, not from theme YAML
+		Connection   ConnectionStyle   `yaml:"connection"`
+		Data         DataStyle         `yaml:"data"`
+		TabBar       TabBarStyle       `yaml:"tabBar"`
+		Autocomplete AutocompleteStyle `yaml:"autocomplete"`
+		Others       OthersStyle       `yaml:"others"`
+		SQLEditor    SQLEditorStyle    `yaml:"sqlEditor"`
 	}
 
 	GlobalStyles struct {
@@ -59,10 +59,6 @@ type (
 
 	TabBarStyle struct {
 		ActiveTextColor Style `yaml:"activeTextColor"`
-	}
-
-	InputBarStyle struct {
-		Autocomplete AutocompleteStyle `yaml:"autocomplete"`
 	}
 
 	AutocompleteStyle struct {
@@ -126,15 +122,13 @@ func (s *Styles) loadDefaults() {
 		ActiveTextColor: "#FDE68A",
 	}
 
-	s.InputBar = InputBarStyle{
-		Autocomplete: AutocompleteStyle{
-			BackgroundColor:       "#1E293B",
-			TextColor:             "#E2E8F0",
-			ActiveBackgroundColor: "#2563EB",
-			ActiveTextColor:       "#0F172A",
-			SecondaryTextColor:    "#FDE68A",
-			BorderColor:           "#60A5FA",
-		},
+	s.Autocomplete = AutocompleteStyle{
+		BackgroundColor:       "#1E293B",
+		TextColor:             "#E2E8F0",
+		ActiveBackgroundColor: "#60A5FA",
+		ActiveTextColor:       "#0F172A",
+		SecondaryTextColor:    "#FDE68A",
+		BorderColor:           "#60A5FA",
 	}
 
 	s.Others = OthersStyle{

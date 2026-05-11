@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/sql/completion"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
@@ -149,8 +150,16 @@ func (c *Data) init() error {
 	if err := c.sqlQueryEditor.Init(c.App); err != nil {
 		return err
 	}
-	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]string, error) {
-		return c.Driver.GetTableColumnNames(ctx, schema, table)
+	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]completion.Column, error) {
+		infos, err := c.Driver.GetTableColumns(ctx, schema, table)
+		if err != nil {
+			return nil, err
+		}
+		cols := make([]completion.Column, len(infos))
+		for i, info := range infos {
+			cols[i] = completion.Column{Name: info.Name, TypeHint: info.DataType}
+		}
+		return cols, nil
 	})
 	c.sqlQueryEditor.SetOnFullscreen(func() {
 		c.toggleFullscreen()
@@ -585,15 +594,17 @@ func (c *Data) Render() {
 }
 
 func (c *Data) loadAutocompleteKeys(ctx context.Context) {
-	cols, err := c.Driver.GetTableColumnNames(ctx, c.state.Schema, c.state.Table)
-	if err != nil {
-		return
+	colNames := make([]string, len(c.columns))
+	completionCols := make([]completion.Column, len(c.columns))
+	for i, col := range c.columns {
+		colNames[i] = col.Name
+		completionCols[i] = completion.Column{Name: col.Name, TypeHint: col.DataType, IsPK: col.IsPK}
 	}
-	c.filterBar.LoadAutocompleteKeys(cols)
-	c.sortBar.LoadAutocompleteKeys(cols)
-	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, cols)
+	c.filterBar.LoadAutocompleteKeys(colNames)
+	c.sortBar.LoadAutocompleteKeys(colNames)
+	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, completionCols)
 
-	msg := manager.NewUpdateAutocompleteKeysMsg(cols)
+	msg := manager.NewUpdateAutocompleteKeysMsg(colNames)
 	msg.Sender = c.GetIdentifier()
 	c.App.GetManager().Broadcast(msg)
 

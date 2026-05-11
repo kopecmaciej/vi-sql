@@ -24,6 +24,11 @@ nerd:
   tabQuery: "" # nf-fa-terminal
   tabStructure: "" # nf-fa-sitemap
   tabIndex: "" # nf-fa-list-ol
+  primaryKey: "" # nf-fa-key
+  completionKeyword: "󰘦" # nf-md-tag
+  completionCTE: "󰆍" # nf-md-source_branch
+  completionAlias: "" # nf-fa-arrow_right
+  completionFunction: "󰊕" # nf-md-function
 ascii:
   openNode: "▾"
   closedNode: "▸"
@@ -47,3 +52,8 @@ ascii:
   tabQuery: "Q"
   tabStructure: "S"
   tabIndex: "I"
+  primaryKey: "*"
+  completionKeyword: "kw"
+  completionCTE: "ct"
+  completionAlias: "al"
+  completionFunction: "fn"

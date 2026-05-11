@@ -20,14 +20,13 @@ data:
   multiSelectedRowColor: "#2E6B4A"
 tabBar:
   activeTextColor: "#FDE68A"
-inputBar:
-  autocomplete:
-    backgroundColor: "#1E293B"
-    textColor: "#E2E8F0"
-    activeBackgroundColor: "#387D44"
-    activeTextColor: "#0F172A"
-    secondaryTextColor: "#FDE68A"
-    borderColor: "#449650"
+autocomplete:
+  backgroundColor: "#1B2B23"
+  textColor: "#E2E8F0"
+  activeBackgroundColor: "#1B6B35"
+  activeTextColor: "#E2E8F0"
+  secondaryTextColor: "#FDE68A"
+  borderColor: "#449650"
 others:
   leafIconColor: "#387D44"
   separatorColor: "#334155"

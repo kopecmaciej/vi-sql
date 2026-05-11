@@ -18,7 +18,6 @@ type InputBar struct {
 	*core.BaseElement
 	*core.InputField
 
-	style            *config.InputBarStyle
 	enabled          bool
 	autocompleteOn   bool
 	columnKeys       []string
@@ -65,11 +64,10 @@ func (i *InputBar) setLayout() {
 func (i *InputBar) setStyle() {
 	styles := i.App.GetStyles()
 	i.SetStyle(styles)
-	i.style = &styles.InputBar
 	i.SetLabelColor(styles.Global.SecondaryTextColor.Color())
 	i.SetFieldTextColor(styles.Global.TextColor.Color())
 
-	a := i.style.Autocomplete
+	a := styles.Autocomplete
 	background := a.BackgroundColor.Color()
 	main := tcell.StyleDefault.
 		Background(a.BackgroundColor.Color()).
@@ -83,7 +81,8 @@ func (i *InputBar) setStyle() {
 		Italic(true)
 
 	i.SetAutocompleteStyles(background, main, selected, second, false)
-	i.SetAutocompleteBorderColor(i.style.Autocomplete.BorderColor.Color())
+	i.SetAutocompleteBorderColor(a.BorderColor.Color())
+	i.InputField.SetAutocompleteMaxHeight(autocompleteMaxItems)
 }
 
 func (i *InputBar) setKeybindings() {
@@ -134,31 +133,38 @@ func (i *InputBar) DoneFuncHandler(accept func(string), reject func()) {
 }
 
 func (i *InputBar) EnableAutocomplete() {
+	var lastSymbols []completion.Symbol
+
 	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
 		cursorBytePos := len(i.GetTextBeforeCursor())
 		symbols := i.completionEngine.Suggest(currentText, cursorBytePos, completion.Context{
 			Schemas: i.schemas,
-			ColumnFetcher: func(_, _ string) ([]string, error) {
-				return i.columnKeys, nil
+			ColumnFetcher: func(_, _ string) ([]completion.Column, error) {
+				cols := make([]completion.Column, len(i.columnKeys))
+				for k, name := range i.columnKeys {
+					cols[k] = completion.Column{Name: name}
+				}
+				return cols, nil
 			},
 		})
-		items := make([]tview.AutocompleteItem, len(symbols))
-		for j, sym := range symbols {
-			items[j] = tview.AutocompleteItem{Main: sym.Name, Secondary: symbolKindLabel(sym.Kind)}
-		}
-		return items
+		lastSymbols = symbols
+		return buildAutocompleteItems(symbols, i.App.GetStyles())
 	})
 
 	i.SetAutocompletedFunc(func(text string, index, source int) bool {
 		if source == 0 {
 			return false
 		}
+		if index < 0 || index >= len(lastSymbols) {
+			return false
+		}
+		name := lastSymbols[index].Name
 		before := i.GetTextBeforeCursor()
 		after := i.GetText()[len(before):]
 		ctx := sqlpkg.DetectContext(sqlpkg.Tokenize(i.GetText()), len(before))
 		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
-		i.SetText(trimmed + text + after)
-		i.SetCursorPosition(len(trimmed + text))
+		i.SetText(trimmed + name + after)
+		i.SetCursorPosition(len(trimmed + name))
 		return true
 	})
 }

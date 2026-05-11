@@ -15,12 +15,12 @@ var testSchemas = []database.Schema{
 	{Schema: "orders", Tables: []string{"orders", "payments"}},
 }
 
-var testColumns = map[string][]string{
-	"users":      {"id", "name", "email", "status", "created_at"},
-	"orders":     {"id", "user_id", "method", "amount", "status", "created_at"},
-	"products":   {"id", "category_id", "name", "price", "stock"},
-	"categories": {"id", "name", "description"},
-	"payments":   {"id", "order_id", "amount", "method"},
+var testColumns = map[string][]Column{
+	"users":      {{Name: "id"}, {Name: "name"}, {Name: "email"}, {Name: "status"}, {Name: "created_at"}},
+	"orders":     {{Name: "id"}, {Name: "user_id"}, {Name: "method"}, {Name: "amount"}, {Name: "status"}, {Name: "created_at"}},
+	"products":   {{Name: "id"}, {Name: "category_id"}, {Name: "name"}, {Name: "price"}, {Name: "stock"}},
+	"categories": {{Name: "id"}, {Name: "name"}, {Name: "description"}},
+	"payments":   {{Name: "id"}, {Name: "order_id"}, {Name: "amount"}, {Name: "method"}},
 }
 
 func symbolNames(syms []Symbol) []string {
@@ -45,13 +45,13 @@ func cfg() Context { return Context{Schemas: testSchemas} }
 func cfgWithCols() Context {
 	return Context{
 		Schemas: testSchemas,
-		ColumnFetcher: func(_, table string) ([]string, error) {
+		ColumnFetcher: func(_, table string) ([]Column, error) {
 			if cols, ok := testColumns[table]; ok {
 				return cols, nil
 			}
 			return nil, nil
 		},
-		ColumnCache: make(map[string][]string),
+		ColumnCache: make(map[string][]Column),
 	}
 }
 

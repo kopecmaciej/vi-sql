@@ -7,11 +7,18 @@ import (
 	sql "github.com/kopecmaciej/vi-sql/internal/sql"
 )
 
+// Column is a minimal column descriptor used by the completion engine.
+type Column struct {
+	Name     string
+	TypeHint string // e.g. "integer", "text", "timestamp"
+	IsPK     bool
+}
+
 // Context carries the runtime data the engine needs to produce suggestions.
 type Context struct {
 	Schemas       []database.Schema
-	ColumnFetcher func(schema, table string) ([]string, error)
-	ColumnCache   map[string][]string // caller-owned; engine reads and writes it
+	ColumnFetcher func(schema, table string) ([]Column, error)
+	ColumnCache   map[string][]Column // caller-owned; engine reads and writes it
 }
 
 // Engine orchestrates providers and the ranker to produce autocomplete symbols.
@@ -39,7 +46,7 @@ func NewDefaultEngine() *Engine {
 // Suggest returns ranked autocomplete symbols for the cursor position in text.
 func (e *Engine) Suggest(text string, cursorPos int, cfg Context) []Symbol {
 	if cfg.ColumnCache == nil {
-		cfg.ColumnCache = make(map[string][]string)
+		cfg.ColumnCache = make(map[string][]Column)
 	}
 
 	tokens := sql.Tokenize(text)

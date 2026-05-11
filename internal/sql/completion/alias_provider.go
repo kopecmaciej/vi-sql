@@ -59,10 +59,12 @@ func (AliasProvider) Suggest(ctx sql.CompletionContext, scope *QueryScope, parti
 	cols := fetchColumns(schema, realTable, cfg)
 	var out []Symbol
 	for _, col := range cols {
-		if partial == "" || strings.HasPrefix(strings.ToLower(col), partial) {
+		if partial == "" || strings.HasPrefix(strings.ToLower(col.Name), partial) {
 			out = append(out, Symbol{
 				Kind:      KindColumn,
-				Name:      col,
+				Name:      col.Name,
+				TypeHint:  col.TypeHint,
+				IsPK:      col.IsPK,
 				Qualifier: realTable,
 				Priority:  60,
 			})

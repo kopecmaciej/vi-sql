@@ -29,9 +29,8 @@ type SQLQueryEditor struct {
 	vim              *vimHandler
 	style            *config.SQLEditorStyle
 	schemas          []database.Schema
-	columns          []string
-	columnCache      map[string][]string // key: "schema.table" or "table"
-	columnFetcher    func(schema, table string) ([]string, error)
+	columnCache      map[string][]completion.Column // key: "schema.table" or "table"
+	columnFetcher    func(schema, table string) ([]completion.Column, error)
 	completionEngine *completion.Engine
 	history          *modal.History
 	onExecute        func(sql string)
@@ -52,7 +51,7 @@ func NewSQLQueryEditor(ownerID string) *SQLQueryEditor {
 	e := &SQLQueryEditor{
 		BaseElement:      core.NewBaseElement(),
 		TextArea:         core.NewTextArea(),
-		columnCache:      make(map[string][]string),
+		columnCache:      make(map[string][]completion.Column),
 		completionEngine: completion.NewDefaultEngine(),
 	}
 	e.SetIdentifier(tview.Identifier(ownerID + EditorSuffix))
@@ -147,7 +146,7 @@ func (e *SQLQueryEditor) setStyle() {
 		Background(styles.Global.TextColor.Color()).
 		Foreground(styles.Global.BackgroundColor.Color()))
 
-	a := styles.InputBar.Autocomplete
+	a := styles.Autocomplete
 	acBackground := a.BackgroundColor.Color()
 	acMain := tcell.StyleDefault.
 		Background(acBackground).
@@ -157,6 +156,7 @@ func (e *SQLQueryEditor) setStyle() {
 		Foreground(a.ActiveTextColor.Color())
 	e.TextArea.SetAutocompleteStyles(acBackground, acMain, acSelected)
 	e.TextArea.SetAutocompleteBorderColor(a.BorderColor.Color())
+	e.TextArea.SetAutocompleteMaxHeight(autocompleteMaxItems)
 }
 
 func (e *SQLQueryEditor) setHighlighting() {
@@ -206,50 +206,119 @@ func (e *SQLQueryEditor) BeginYankHighlight(start, end int) {
 }
 
 func (e *SQLQueryEditor) setAutocomplete() {
+	var lastSymbols []completion.Symbol
+
 	e.TextArea.SetAutocompleteFunc(func(text string, cursorBytePos int) []tview.AutocompleteItem {
 		if cursorBytePos > 0 && strings.HasSuffix(strings.TrimSpace(text[:cursorBytePos]), ";") {
 			return nil
 		}
-
 		symbols := e.completionEngine.Suggest(text, cursorBytePos, completion.Context{
 			Schemas:       e.schemas,
 			ColumnFetcher: e.columnFetcher,
 			ColumnCache:   e.columnCache,
 		})
-		items := make([]tview.AutocompleteItem, len(symbols))
-		for i, sym := range symbols {
-			items[i] = tview.AutocompleteItem{Main: sym.Name, Secondary: symbolKindLabel(sym.Kind)}
-		}
-		return items
+		lastSymbols = symbols
+		return buildAutocompleteItems(symbols, e.App.GetStyles())
 	})
 
 	e.TextArea.SetAutocompletedFunc(func(text string, index int, source int) bool {
 		if source == tview.AutocompletedNavigate {
 			return false
 		}
+		if index < 0 || index >= len(lastSymbols) {
+			return false
+		}
+		name := lastSymbols[index].Name
 		before := e.GetTextBeforeCursor()
 		ctx := sqlpkg.DetectContext(sqlpkg.Tokenize(e.GetText()), len(before))
 		startPos := len(before) - len(ctx.PartialWord)
-		e.Replace(startPos, len(before), text)
+		e.Replace(startPos, len(before), name)
 		return true
 	})
 }
 
-func symbolKindLabel(k completion.SymbolKind) string {
-	switch k {
-	case completion.KindTable:
-		return "table"
-	case completion.KindColumn:
-		return "column"
-	case completion.KindCTE:
-		return "cte"
-	case completion.KindSchema:
-		return "schema"
-	case completion.KindFunction:
-		return "function"
-	default:
-		return ""
+// autocompleteMaxItems is the max visible rows in the autocomplete dropdown.
+const autocompleteMaxItems = 8
+
+// buildAutocompleteItems converts symbols into display items: icon prefix, padded
+// name, and (for columns) a right-aligned type label.
+func buildAutocompleteItems(symbols []completion.Symbol, styles *config.Styles) []tview.AutocompleteItem {
+	maxLen := 0
+	for _, sym := range symbols {
+		if n := len(sym.Name); n > maxLen {
+			maxLen = n
+		}
 	}
+	items := make([]tview.AutocompleteItem, len(symbols))
+	for i, sym := range symbols {
+		items[i] = tview.AutocompleteItem{Main: buildAutocompleteDisplay(sym, maxLen, styles)}
+	}
+	return items
+}
+
+// buildAutocompleteDisplay formats one item: colored icon, name padded to
+// maxNameLen, then the column type label (columns only) in the autocomplete
+// secondary color.
+func buildAutocompleteDisplay(sym completion.Symbol, maxNameLen int, styles *config.Styles) string {
+	icons := &styles.Icons
+	var iconColor config.Style
+	if sym.IsPK {
+		iconColor = styles.Global.ContrastBackgroundColor
+	} else {
+		switch sym.Kind {
+		case completion.KindColumn:
+			iconColor = styles.Others.LeafIconColor
+		case completion.KindTable:
+			iconColor = styles.Others.LeafIconColor
+		case completion.KindSchema:
+			iconColor = styles.Global.SecondaryTextColor
+		case completion.KindKeyword, completion.KindDDLObject:
+			iconColor = styles.SQLEditor.KeywordColor
+		case completion.KindFunction:
+			iconColor = styles.SQLEditor.StringColor
+		case completion.KindCTE, completion.KindAlias:
+			iconColor = styles.Global.DimColor
+		default:
+			iconColor = styles.Global.DimColor
+		}
+	}
+
+	var glyph config.Style
+	if sym.IsPK {
+		glyph = icons.PrimaryKey
+	} else {
+		switch sym.Kind {
+		case completion.KindColumn:
+			glyph = config.Style(icons.TypeSymbol(sym.TypeHint))
+		case completion.KindTable:
+			glyph = icons.Leaf
+		case completion.KindSchema:
+			glyph = icons.ClosedNode
+		case completion.KindCTE:
+			glyph = icons.CompletionCTE
+		case completion.KindAlias:
+			glyph = icons.CompletionAlias
+		case completion.KindFunction:
+			glyph = icons.CompletionFunction
+		case completion.KindKeyword, completion.KindDDLObject:
+			glyph = icons.CompletionKeyword
+		default:
+			glyph = icons.TypeDefault
+		}
+	}
+
+	icon := icons.IconWithColor(glyph, iconColor)
+
+	label := ""
+	if sym.Kind == completion.KindColumn && sym.TypeHint != "" {
+		label = sym.TypeHint
+	}
+	if label == "" {
+		return icon + sym.Name
+	}
+	labelColor := styles.Autocomplete.SecondaryTextColor.String()
+	pad := maxNameLen - len(sym.Name) + 2
+	return icon + sym.Name + strings.Repeat(" ", pad) + "[" + labelColor + "]" + label + "[-]"
 }
 
 func (e *SQLQueryEditor) handleEvents() {
@@ -281,22 +350,17 @@ func (e *SQLQueryEditor) SetSchemas(schemas []database.Schema) {
 	e.schemas = schemas
 }
 
-func (e *SQLQueryEditor) SetColumns(columns []string) {
-	e.columns = columns
-}
-
-// SetColumnsForTable caches columns for a specific schema.table and sets them
-// as the fallback column list.
-func (e *SQLQueryEditor) SetColumnsForTable(schema, table string, columns []string) {
+// SetColumnsForTable pre-populates the column cache for a specific table so
+// that autocomplete works without a network round-trip for that table.
+func (e *SQLQueryEditor) SetColumnsForTable(schema, table string, columns []completion.Column) {
 	key := schema + "." + table
 	e.columnCache[key] = columns
 	e.columnCache[table] = columns
-	e.columns = columns
 }
 
 // SetColumnFetcher provides a function to fetch columns on demand for tables
 // referenced in the SQL editor that haven't been cached yet.
-func (e *SQLQueryEditor) SetColumnFetcher(fn func(schema, table string) ([]string, error)) {
+func (e *SQLQueryEditor) SetColumnFetcher(fn func(schema, table string) ([]completion.Column, error)) {
 	e.columnFetcher = fn
 }
 

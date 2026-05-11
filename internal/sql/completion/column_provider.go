@@ -28,26 +28,26 @@ func (ColumnProvider) Suggest(_ sql.CompletionContext, scope *QueryScope, partia
 
 	var out []Symbol
 	for _, col := range cols {
-		if partial == "" || strings.HasPrefix(strings.ToLower(col), partial) {
-			out = append(out, Symbol{Kind: KindColumn, Name: col, Priority: 50})
+		if partial == "" || strings.HasPrefix(strings.ToLower(col.Name), partial) {
+			out = append(out, Symbol{Kind: KindColumn, Name: col.Name, TypeHint: col.TypeHint, IsPK: col.IsPK, Priority: 50})
 		}
 	}
 	return out
 }
 
 // resolveColumns fetches and merges columns from all in-scope tables.
-func resolveColumns(scope *QueryScope, cfg Context) []string {
+func resolveColumns(scope *QueryScope, cfg Context) []Column {
 	if scope == nil || len(scope.TableRefs) == 0 {
 		return nil
 	}
 
 	seen := make(map[string]bool)
-	var cols []string
+	var cols []Column
 
 	for _, ref := range scope.TableRefs {
 		for _, c := range fetchColumns(ref.Schema, ref.Table, cfg) {
-			if !seen[c] {
-				seen[c] = true
+			if !seen[c.Name] {
+				seen[c.Name] = true
 				cols = append(cols, c)
 			}
 		}
@@ -56,7 +56,7 @@ func resolveColumns(scope *QueryScope, cfg Context) []string {
 }
 
 // fetchColumns returns columns for schema.table, using the cache when available.
-func fetchColumns(schema, table string, cfg Context) []string {
+func fetchColumns(schema, table string, cfg Context) []Column {
 	qualifiedKey := schema + "." + table
 	if cols, ok := cfg.ColumnCache[qualifiedKey]; ok {
 		return cols

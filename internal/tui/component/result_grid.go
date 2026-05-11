@@ -236,11 +236,7 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 		if t, ok := typeMap[name]; ok {
 			pkPrefix := ""
 			if pkCols[name] {
-				if styles.Icons.NerdFont {
-					pkPrefix = fmt.Sprintf("[%s] ", styles.Global.SecondaryTextColor.String())
-				} else {
-					pkPrefix = fmt.Sprintf("[%s]* ", styles.Global.SecondaryTextColor.String())
-				}
+				pkPrefix = styles.Icons.IconWithColor(styles.Icons.PrimaryKey, styles.Global.SecondaryTextColor)
 			}
 			headerText = fmt.Sprintf("%s[%s]%s [%s]%s ",
 				pkPrefix,
