@@ -26,6 +26,13 @@ type InputBar struct {
 	acceptFunc       func(string)
 	rejectFunc       func()
 	completionEngine *completion.Engine
+
+	// tokenCache is shared between syntax highlighting and autocomplete so the
+	// same text is tokenized only once per keystroke.
+	tokenCache struct {
+		text   string
+		tokens []sqlpkg.Token
+	}
 }
 
 func NewInputBar(barId tview.Identifier, label string) *InputBar {
@@ -137,7 +144,11 @@ func (i *InputBar) EnableAutocomplete() {
 
 	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
 		cursorBytePos := len(i.GetTextBeforeCursor())
-		symbols := i.completionEngine.Suggest(currentText, cursorBytePos, completion.Context{
+		if i.tokenCache.text != currentText {
+			i.tokenCache.text = currentText
+			i.tokenCache.tokens = sqlpkg.Tokenize(currentText)
+		}
+		symbols := i.completionEngine.SuggestTokens(i.tokenCache.tokens, currentText, cursorBytePos, completion.Context{
 			Schemas: i.schemas,
 			ColumnFetcher: func(_, _ string) ([]completion.Column, error) {
 				cols := make([]completion.Column, len(i.columnKeys))
@@ -202,19 +213,13 @@ func (i *InputBar) EnableColumnAutocomplete(keywords []string) {
 // EnableHighlighting attaches a syntax-highlighting styleFunc to the underlying
 // TextArea. Call again (e.g. on StyleChanged) to update colors.
 func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
-	type cache struct {
-		text   string
-		tokens []sqlpkg.Token
-	}
-	var c cache
-
 	i.SetStyleFunc(func(byteOffset int) tcell.Style {
 		text := i.GetText()
-		if c.text != text {
-			c.text = text
-			c.tokens = sqlpkg.Tokenize(text)
+		if i.tokenCache.text != text {
+			i.tokenCache.text = text
+			i.tokenCache.tokens = sqlpkg.Tokenize(text)
 		}
-		return core.SQLTokenStyle(c.tokens, byteOffset, style)
+		return core.SQLTokenStyle(i.tokenCache.tokens, byteOffset, style)
 	})
 }
 

@@ -107,10 +107,6 @@ func keywordPool(ctx sql.CompletionContext, atValue bool, pre string) []string {
 
 	case sql.CtxAfterFrom, sql.CtxAfterJoin:
 		// After a table name: offer JOIN family, WHERE, ORDER BY, etc.
-		// Otherwise tables lead.
-		if atValue {
-			return sql.ClauseKeywords
-		}
 		return sql.ClauseKeywords
 
 	case sql.CtxAfterInto:

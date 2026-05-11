@@ -45,15 +45,23 @@ func NewDefaultEngine() *Engine {
 
 // Suggest returns ranked autocomplete symbols for the cursor position in text.
 func (e *Engine) Suggest(text string, cursorPos int, cfg Context) []Symbol {
+	if sql.SuppressRaw(text, cursorPos) {
+		return nil
+	}
+	return e.SuggestTokens(sql.Tokenize(text), text, cursorPos, cfg)
+}
+
+// SuggestTokens is like Suggest but accepts pre-tokenized input.
+// Use it when the caller already holds a token slice for the same text (e.g.
+// syntax highlighting) to avoid a redundant tokenization on every keystroke.
+func (e *Engine) SuggestTokens(tokens []sql.Token, text string, cursorPos int, cfg Context) []Symbol {
+	if sql.SuppressRaw(text, cursorPos) {
+		return nil
+	}
 	if cfg.ColumnCache == nil {
 		cfg.ColumnCache = make(map[string][]Column)
 	}
 
-	if sql.SuppressRaw(text, cursorPos) {
-		return nil
-	}
-
-	tokens := sql.Tokenize(text)
 	sqlCtx := sql.DetectContext(tokens, cursorPos)
 	scope := BuildScope(tokens)
 	partial := strings.ToLower(sqlCtx.PartialWord)

@@ -45,6 +45,13 @@ type SQLQueryEditor struct {
 	yankHLStart int
 	yankHLEnd   int
 	yankHLGen   uint64
+
+	// tokenCache is shared between syntax highlighting and autocomplete so the
+	// same text is tokenized only once per keystroke.
+	tokenCache struct {
+		text   string
+		tokens []sqlpkg.Token
+	}
 }
 
 func NewSQLQueryEditor(ownerID string) *SQLQueryEditor {
@@ -164,19 +171,13 @@ func (e *SQLQueryEditor) setStyle() {
 }
 
 func (e *SQLQueryEditor) setHighlighting() {
-	type cache struct {
-		text   string
-		tokens []sqlpkg.Token
-	}
-	var c cache
-
 	e.SetStyleFunc(func(byteOffset int) tcell.Style {
 		text := e.GetText()
-		if c.text != text {
-			c.text = text
-			c.tokens = sqlpkg.Tokenize(text)
+		if e.tokenCache.text != text {
+			e.tokenCache.text = text
+			e.tokenCache.tokens = sqlpkg.Tokenize(text)
 		}
-		base := core.SQLTokenStyle(c.tokens, byteOffset, e.style)
+		base := core.SQLTokenStyle(e.tokenCache.tokens, byteOffset, e.style)
 		hStyle := e.App.GetStyles().Global.MoreContrastBackgroundColor.Color()
 		return yankOverlayStyle(base, hStyle, e.yankHLStart, e.yankHLEnd, byteOffset)
 	})
@@ -216,7 +217,11 @@ func (e *SQLQueryEditor) setAutocomplete() {
 		if cursorBytePos > 0 && strings.HasSuffix(strings.TrimSpace(text[:cursorBytePos]), ";") {
 			return nil
 		}
-		symbols := e.completionEngine.Suggest(text, cursorBytePos, completion.Context{
+		if e.tokenCache.text != text {
+			e.tokenCache.text = text
+			e.tokenCache.tokens = sqlpkg.Tokenize(text)
+		}
+		symbols := e.completionEngine.SuggestTokens(e.tokenCache.tokens, text, cursorBytePos, completion.Context{
 			Schemas:       e.schemas,
 			ColumnFetcher: e.columnFetcher,
 			ColumnCache:   e.columnCache,
