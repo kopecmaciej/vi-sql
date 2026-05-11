@@ -995,7 +995,7 @@ func (c *Data) handleFollowForeignKey(row, col int) *tcell.EventKey {
 		if val == nil {
 			return nil
 		}
-		whereParts = append(whereParts, fmt.Sprintf(`"%s" = %s`, fk.ReferencedCols[i], lit(val)))
+		whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, fk.ReferencedCols[i], lit(val)))
 	}
 
 	c.App.GetManager().Broadcast(manager.NewOpenTableTabMsg(manager.TableTabRequest{
@@ -1055,7 +1055,7 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 		for i, refCol := range fk.ReferencedCols {
 			if refCol == colName {
 				fkCol := fk.Columns[i]
-				whereParts = append(whereParts, fmt.Sprintf(`"%s" = %s`, fkCol, lit(cellValue)))
+				whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, fkCol, lit(cellValue)))
 				if focusCol == "" {
 					focusCol = fkCol
 				}

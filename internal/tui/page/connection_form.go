@@ -2,6 +2,7 @@ package page
 
 import (
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -125,7 +126,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.form.Clear(true)
 
 	// --- Driver selector (add mode only; locked in edit mode) ---
-	drivers := []string{"postgres", "sqlite"}
+	drivers := []string{"postgres", "mysql", "sqlite"}
 	driverIdx := 0
 	for i, d := range drivers {
 		if d == driver {
@@ -163,6 +164,49 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		cf.form.AddInputField("Path / URI", fileVal, 0, nil, nil)
 		cf.form.GetFormItemByLabel("Path / URI").(*tview.InputField).SetClipboard(util.GetClipboard())
 		cf.form.AddTextView("Example", "~/db.sqlite, file:/path/db?mode=ro or :memory:", 0, 1, true, false)
+
+	case "mysql":
+		dsnVal := ""
+		if cf.editConn != nil && cf.editConn.DSN != "" {
+			dsnVal = cf.editConn.DSN
+		}
+		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
+		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
+		cf.form.AddTextView("Example", "user:pass@tcp(host:3306)/db or $ENV_VAR", 0, 1, true, false)
+		cf.form.AddTextView(" ", "----------------------------------------------", 0, 1, true, false)
+
+		hostVal, portVal, userVal, passVal, dbVal := "", "3306", "", "", ""
+		sslIdx := 0
+		if cf.editConn != nil {
+			hostVal = cf.editConn.Host
+			if cf.editConn.Port > 0 {
+				portVal = fmt.Sprintf("%d", cf.editConn.Port)
+			}
+			userVal = cf.editConn.Username
+			if !util.IsEncrypted(cf.editConn.Password) {
+				passVal = cf.editConn.Password
+			}
+			dbVal = cf.editConn.Database
+			if cf.editConn.SSLMode != "" && cf.editConn.SSLMode != "disable" {
+				sslIdx = 1
+			}
+		}
+
+		cf.form.AddInputField("Host", hostVal, 0, nil, nil)
+		cf.form.AddInputField("Port", portVal, 0, nil, nil)
+		cf.form.AddInputField("Username", userVal, 0, nil, nil)
+		cf.form.AddPasswordField("Password", passVal, 0, '*', nil)
+		if cf.App.GetConfig().Security.Method == config.SecurityMethodOff {
+			cf.form.AddTextView("", "[red]⚠ password will be stored unencrypted[-]", 0, 1, true, false)
+		}
+		cf.form.AddInputField("Database", dbVal, 0, nil, nil)
+		cf.form.AddDropDown("SSL", []string{"disable", "enable"}, sslIdx, nil)
+
+		cf.form.GetFormItemByLabel("Host").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.GetFormItemByLabel("Port").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.GetFormItemByLabel("Username").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.GetFormItemByLabel("Password").(*tview.InputField).SetClipboard(util.GetClipboard())
+		cf.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
 
 	default: // postgres
 		dsnVal := "postgresql://"
@@ -215,8 +259,8 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		cf.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
 	}
 
-	// --- Timeout (postgres only) ---
-	if driver == "postgres" {
+	// --- Timeout ---
+	if driver == "postgres" || driver == "mysql" {
 		timeoutVal := "5"
 		if cf.editConn != nil && cf.editConn.Timeout > 0 {
 			timeoutVal = fmt.Sprintf("%d", cf.editConn.Timeout)
@@ -298,6 +342,100 @@ func (cf *ConnectionForm) save() {
 			Name:    name,
 			DSN:     filePath,
 			Options: opts,
+		}
+
+	case "mysql":
+		timeout := 5
+		if t := cf.form.GetFormItemByLabel("Timeout").(*tview.InputField).GetText(); t != "" {
+			parsed, err := strconv.Atoi(t)
+			if err != nil {
+				modal.ShowError(cf.App.Pages, "Timeout must be a number", err)
+				return
+			}
+			timeout = parsed
+		}
+
+		dsn := cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).GetText()
+		trimmedDSN := strings.TrimSpace(dsn)
+		dsnUnchanged := cf.editConn != nil && trimmedDSN == cf.editConn.DSN
+
+		if !dsnUnchanged && trimmedDSN != "" {
+			if strings.HasPrefix(trimmedDSN, "$") {
+				// env var reference — store as-is
+				if name == "" {
+					name = trimmedDSN
+				}
+				sqlCfg = &config.SQLConfig{
+					Driver:  "mysql",
+					Name:    name,
+					DSN:     trimmedDSN,
+					Timeout: timeout,
+					Options: opts,
+				}
+			} else {
+				// Parse mysql:// URL → individual fields so the config matches postgres style.
+				u, err := url.Parse(trimmedDSN)
+				if err != nil || u.Host == "" {
+					modal.ShowError(cf.App.Pages, "Invalid DSN", fmt.Errorf("could not parse host from DSN — expected mysql://user:pass@host:3306/db"))
+					return
+				}
+				portStr := u.Port()
+				if portStr == "" {
+					portStr = "3306"
+				}
+				intPort, _ := strconv.Atoi(portStr)
+				username := u.User.Username()
+				password, _ := u.User.Password()
+				database := strings.TrimPrefix(u.Path, "/")
+				if name == "" {
+					name = u.Hostname() + ":" + portStr
+				}
+				sqlCfg = &config.SQLConfig{
+					Driver:   "mysql",
+					Name:     name,
+					Host:     u.Hostname(),
+					Port:     intPort,
+					Username: username,
+					Password: password,
+					Database: database,
+					Timeout:  timeout,
+					Options:  opts,
+				}
+			}
+		} else {
+			host := cf.form.GetFormItemByLabel("Host").(*tview.InputField).GetText()
+			port := cf.form.GetFormItemByLabel("Port").(*tview.InputField).GetText()
+			intPort, err := strconv.Atoi(port)
+			if err != nil {
+				modal.ShowError(cf.App.Pages, "Port must be a number", err)
+				return
+			}
+			username := cf.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
+			password := cf.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
+			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && cf.editConn.IsPasswordReadable() {
+				password = cf.editConn.Password
+			}
+			database := cf.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()
+			_, ssl := cf.form.GetFormItemByLabel("SSL").(*tview.DropDown).GetCurrentOption()
+			sslMode := "disable"
+			if ssl == "enable" {
+				sslMode = "skip-verify"
+			}
+			if name == "" {
+				name = host + ":" + port
+			}
+			sqlCfg = &config.SQLConfig{
+				Driver:   "mysql",
+				Name:     name,
+				Host:     host,
+				Port:     intPort,
+				Username: username,
+				Password: password,
+				Database: database,
+				SSLMode:  sslMode,
+				Timeout:  timeout,
+				Options:  opts,
+			}
 		}
 
 	default: // postgres

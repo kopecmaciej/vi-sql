@@ -10,8 +10,9 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/build"
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	_ "github.com/kopecmaciej/vi-sql/internal/postgres"
-	_ "github.com/kopecmaciej/vi-sql/internal/sqlite"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlite"
 	"github.com/kopecmaciej/vi-sql/internal/tui"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog"
