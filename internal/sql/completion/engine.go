@@ -43,6 +43,17 @@ func NewDefaultEngine() *Engine {
 	)
 }
 
+// scopeRequired reports whether BuildScope needs to run for the given context.
+// For contexts where no provider reads scope fields, we skip the scope build.
+func scopeRequired(t sql.ContextType) bool {
+	switch t {
+	case sql.CtxStatementStart, sql.CtxAfterDDLVerb,
+		sql.CtxAfterValues, sql.CtxGeneral, sql.CtxCreateObject:
+		return false
+	}
+	return true
+}
+
 // Suggest returns ranked autocomplete symbols for the cursor position in text.
 func (e *Engine) Suggest(text string, cursorPos int, cfg Context) []Symbol {
 	if sql.SuppressRaw(text, cursorPos) {
@@ -63,7 +74,10 @@ func (e *Engine) SuggestTokens(tokens []sql.Token, text string, cursorPos int, c
 	}
 
 	sqlCtx := sql.DetectContext(tokens, cursorPos)
-	scope := BuildScope(tokens)
+	var scope *QueryScope
+	if scopeRequired(sqlCtx.Type) {
+		scope = BuildScope(tokens)
+	}
 	partial := strings.ToLower(sqlCtx.PartialWord)
 
 	var candidates []Symbol

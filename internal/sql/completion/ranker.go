@@ -16,11 +16,15 @@ func Rank(symbols []Symbol, partial string, scope *QueryScope) []Symbol {
 		effective int
 	}
 
-	seen := make(map[string]bool, len(symbols))
+	type dedupKey struct {
+		kind SymbolKind
+		name string
+	}
+	seen := make(map[dedupKey]bool, len(symbols))
 	out := make([]ranked, 0, len(symbols))
 
 	for _, s := range symbols {
-		key := s.Name
+		key := dedupKey{s.Kind, s.Name}
 		if seen[key] {
 			continue
 		}
