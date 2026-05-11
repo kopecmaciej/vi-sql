@@ -21,9 +21,9 @@ data:
 tabBar:
   activeTextColor: "#FDE68A"
 autocomplete:
-  backgroundColor: "#1B2B23"
+  backgroundColor: "#141f38"
   textColor: "#E2E8F0"
-  activeBackgroundColor: "#1B6B35"
+  activeBackgroundColor: "#263a69"
   activeTextColor: "#E2E8F0"
   secondaryTextColor: "#FDE68A"
   borderColor: "#449650"

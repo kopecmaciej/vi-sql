@@ -23,7 +23,7 @@ tabBar:
 autocomplete:
   backgroundColor: "#192638"
   textColor: "#E2E8F0"
-  activeBackgroundColor: "#1D4ED8"
+  activeBackgroundColor: "#293E5B"
   activeTextColor: "#BFDBFE"
   secondaryTextColor: "#93C5FD"
   borderColor: "#60A5FA"
