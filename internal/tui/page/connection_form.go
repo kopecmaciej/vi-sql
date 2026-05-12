@@ -2,13 +2,12 @@ package page
 
 import (
 	"fmt"
-	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
@@ -125,8 +124,8 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.currentDriver = driver
 	cf.form.Clear(true)
 
-	// --- Driver selector (add mode only; locked in edit mode) ---
-	drivers := []string{"postgres", "mysql", "sqlite"}
+	// Driver selector (locked to read-only text in edit mode).
+	drivers := database.ListConnectors()
 	driverIdx := 0
 	for i, d := range drivers {
 		if d == driver {
@@ -135,8 +134,6 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		}
 	}
 	if cf.editConn != nil {
-		// Show driver as read-only text in edit mode — changing driver on an
-		// existing connection would invalidate all saved fields.
 		cf.form.AddTextView("Driver", driver, 0, 1, true, false)
 	} else {
 		cf.form.AddDropDown("Driver", drivers, driverIdx, func(option string, _ int) {
@@ -147,128 +144,67 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		})
 	}
 
-	// --- Name ---
+	// Name is common to all drivers.
 	nameVal := ""
 	if cf.editConn != nil {
 		nameVal = cf.editConn.Name
 	}
 	cf.form.AddInputField("Name", nameVal, 0, nil, nil)
 
-	// --- Driver-specific connection fields ---
-	switch driver {
-	case "sqlite":
-		fileVal := ""
-		if cf.editConn != nil {
-			fileVal = cf.editConn.DSN
+	// Driver-specific fields from the connector spec.
+	def, ok := database.GetConnector(driver)
+	if !ok {
+		return
+	}
+
+	var fillValues map[string]string
+	if cf.editConn != nil {
+		fillValues = def.PreFill(cf.editConn)
+	}
+
+	for _, spec := range def.FormSpec {
+		value := spec.Default
+		if fv, exists := fillValues[spec.Label]; exists && fv != "" {
+			value = fv
 		}
-		cf.form.AddInputField("Path / URI", fileVal, 0, nil, nil)
-		cf.form.GetFormItemByLabel("Path / URI").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.AddTextView("Example", "~/db.sqlite, file:/path/db?mode=ro or :memory:", 0, 1, true, false)
-
-	case "mysql":
-		dsnVal := ""
-		if cf.editConn != nil && cf.editConn.DSN != "" {
-			dsnVal = cf.editConn.DSN
-		}
-		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
-		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
-		cf.form.AddTextView("Example", "user:pass@tcp(host:3306)/db or $ENV_VAR", 0, 1, true, false)
-		cf.form.AddTextView(" ", "----------------------------------------------", 0, 1, true, false)
-
-		hostVal, portVal, userVal, passVal, dbVal := "", "3306", "", "", ""
-		sslIdx := 0
-		if cf.editConn != nil {
-			hostVal = cf.editConn.Host
-			if cf.editConn.Port > 0 {
-				portVal = fmt.Sprintf("%d", cf.editConn.Port)
+		switch spec.Kind {
+		case database.FieldInput:
+			cf.form.AddInputField(spec.Label, value, 0, nil, nil)
+			if spec.Clipboard {
+				cf.form.GetFormItemByLabel(spec.Label).(*tview.InputField).SetClipboard(util.GetClipboard())
 			}
-			userVal = cf.editConn.Username
-			if !util.IsEncrypted(cf.editConn.Password) {
-				passVal = cf.editConn.Password
+		case database.FieldPassword:
+			cf.form.AddPasswordField(spec.Label, value, 0, '*', nil)
+			if spec.Clipboard {
+				cf.form.GetFormItemByLabel(spec.Label).(*tview.InputField).SetClipboard(util.GetClipboard())
 			}
-			dbVal = cf.editConn.Database
-			if cf.editConn.SSLMode != "" && cf.editConn.SSLMode != "disable" {
-				sslIdx = 1
+			if cf.App.GetConfig().Security.Method == config.SecurityMethodOff {
+				cf.form.AddTextView("", "[red]⚠ password will be stored unencrypted[-]", 0, 1, true, false)
 			}
-		}
-
-		cf.form.AddInputField("Host", hostVal, 0, nil, nil)
-		cf.form.AddInputField("Port", portVal, 0, nil, nil)
-		cf.form.AddInputField("Username", userVal, 0, nil, nil)
-		cf.form.AddPasswordField("Password", passVal, 0, '*', nil)
-		if cf.App.GetConfig().Security.Method == config.SecurityMethodOff {
-			cf.form.AddTextView("", "[red]⚠ password will be stored unencrypted[-]", 0, 1, true, false)
-		}
-		cf.form.AddInputField("Database", dbVal, 0, nil, nil)
-		cf.form.AddDropDown("SSL", []string{"disable", "enable"}, sslIdx, nil)
-
-		cf.form.GetFormItemByLabel("Host").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Port").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Username").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Password").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
-
-	default: // postgres
-		dsnVal := "postgresql://"
-		if cf.editConn != nil && cf.editConn.DSN != "" {
-			dsnVal = cf.editConn.DSN
-		}
-		cf.form.AddTextArea("DSN", dsnVal, 0, 3, 0, nil)
-		cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).SetClipboard(util.GetClipboard())
-		cf.form.AddTextView("Example", "postgresql://user:password@host:port/db?options", 0, 1, true, false)
-		pasteKey := cf.App.GetKeys().Common.Paste.String()
-		cf.form.AddTextView("Info", fmt.Sprintf("Type/paste (%s): DSN, $DSN_ENV or use form", pasteKey), 0, 1, true, false)
-		cf.form.AddTextView(" ", "----------------------------------------------", 0, 1, true, false)
-
-		hostVal, portVal, userVal, passVal, dbVal := "", "5432", "", "", ""
-		sslIdx := 0
-		if cf.editConn != nil {
-			hostVal = cf.editConn.Host
-			if cf.editConn.Port > 0 {
-				portVal = fmt.Sprintf("%d", cf.editConn.Port)
+		case database.FieldTextArea:
+			rows := spec.Rows
+			if rows == 0 {
+				rows = 3
 			}
-			userVal = cf.editConn.Username
-			// Don't populate ciphertext into the password field — leave blank to keep existing.
-			if !util.IsEncrypted(cf.editConn.Password) {
-				passVal = cf.editConn.Password
+			cf.form.AddTextArea(spec.Label, value, 0, rows, 0, nil)
+			if spec.Clipboard {
+				cf.form.GetFormItemByLabel(spec.Label).(*tview.TextArea).SetClipboard(util.GetClipboard())
 			}
-			dbVal = cf.editConn.Database
-			sslModes := []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}
-			for i, m := range sslModes {
-				if m == cf.editConn.SSLMode {
-					sslIdx = i
+		case database.FieldDropDown:
+			idx := 0
+			for i, opt := range spec.Options {
+				if opt == value {
+					idx = i
 					break
 				}
 			}
+			cf.form.AddDropDown(spec.Label, spec.Options, idx, nil)
+		case database.FieldLabel:
+			cf.form.AddTextView(spec.Label, value, 0, 1, true, false)
 		}
-
-		cf.form.AddInputField("Host", hostVal, 0, nil, nil)
-		cf.form.AddInputField("Port", portVal, 0, nil, nil)
-		cf.form.AddInputField("Username", userVal, 0, nil, nil)
-		cf.form.AddPasswordField("Password", passVal, 0, '*', nil)
-		if cf.App.GetConfig().Security.Method == config.SecurityMethodOff {
-			cf.form.AddTextView("", "[red]⚠ password will be stored unencrypted[-]", 0, 1, true, false)
-		}
-		cf.form.AddInputField("Database", dbVal, 0, nil, nil)
-		cf.form.AddDropDown("SSL Mode", []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}, sslIdx, nil)
-
-		cf.form.GetFormItemByLabel("Host").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Port").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Username").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Password").(*tview.InputField).SetClipboard(util.GetClipboard())
-		cf.form.GetFormItemByLabel("Database").(*tview.InputField).SetClipboard(util.GetClipboard())
 	}
 
-	// --- Timeout ---
-	if driver == "postgres" || driver == "mysql" {
-		timeoutVal := "5"
-		if cf.editConn != nil && cf.editConn.Timeout > 0 {
-			timeoutVal = fmt.Sprintf("%d", cf.editConn.Timeout)
-		}
-		cf.form.AddInputField("Timeout", timeoutVal, 0, nil, nil)
-	}
-
-	// --- Options (always shown) ---
+	// Options section is common to all drivers.
 	rowLimit := ""
 	confirmActionsIdx := 0
 	if cf.editConn != nil {
@@ -283,7 +219,6 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.form.AddInputField("Row limit", rowLimit, 0, nil, nil)
 	cf.form.AddDropDown("Confirm actions", []string{"yes", "no"}, confirmActionsIdx, nil)
 
-	// --- Buttons ---
 	saveLabel := "Save"
 	if cf.editConn != nil {
 		saveLabel = "Update"
@@ -291,7 +226,6 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.form.AddButton(saveLabel, cf.save)
 	cf.form.AddButton("Cancel", cf.cancel)
 
-	// --- Keybindings ---
 	k := cf.App.GetKeys()
 	cf.form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
@@ -315,8 +249,11 @@ func (cf *ConnectionForm) buildForm(driver string) {
 }
 
 func (cf *ConnectionForm) save() {
-	driver := cf.currentDriver
-	name := cf.form.GetFormItemByLabel("Name").(*tview.InputField).GetText()
+	def, ok := database.GetConnector(cf.currentDriver)
+	if !ok {
+		modal.ShowError(cf.App.Pages, "Unknown driver", fmt.Errorf("driver %q not registered", cf.currentDriver))
+		return
+	}
 
 	opts, err := cf.collectOptions()
 	if err != nil {
@@ -324,218 +261,17 @@ func (cf *ConnectionForm) save() {
 		return
 	}
 
-	var sqlCfg *config.SQLConfig
-	var saveErr error
+	fields := cf.collectFields(def.FormSpec)
+	fields["Name"] = cf.form.GetFormItemByLabel("Name").(*tview.InputField).GetText()
 
-	switch driver {
-	case "sqlite":
-		filePath := cf.form.GetFormItemByLabel("Path / URI").(*tview.InputField).GetText()
-		if filePath == "" {
-			modal.ShowError(cf.App.Pages, "Path / URI is required", fmt.Errorf("please enter a SQLite database path, URI or :memory:"))
-			return
-		}
-		if name == "" {
-			name = filePath
-		}
-		sqlCfg = &config.SQLConfig{
-			Driver:  "sqlite",
-			Name:    name,
-			DSN:     filePath,
-			Options: opts,
-		}
-
-	case "mysql":
-		timeout := 5
-		if t := cf.form.GetFormItemByLabel("Timeout").(*tview.InputField).GetText(); t != "" {
-			parsed, err := strconv.Atoi(t)
-			if err != nil {
-				modal.ShowError(cf.App.Pages, "Timeout must be a number", err)
-				return
-			}
-			timeout = parsed
-		}
-
-		dsn := cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).GetText()
-		trimmedDSN := strings.TrimSpace(dsn)
-		dsnUnchanged := cf.editConn != nil && trimmedDSN == cf.editConn.DSN
-
-		if !dsnUnchanged && trimmedDSN != "" {
-			if strings.HasPrefix(trimmedDSN, "$") {
-				// env var reference — store as-is
-				if name == "" {
-					name = trimmedDSN
-				}
-				sqlCfg = &config.SQLConfig{
-					Driver:  "mysql",
-					Name:    name,
-					DSN:     trimmedDSN,
-					Timeout: timeout,
-					Options: opts,
-				}
-			} else {
-				// Parse mysql:// URL → individual fields so the config matches postgres style.
-				u, err := url.Parse(trimmedDSN)
-				if err != nil || u.Host == "" {
-					modal.ShowError(cf.App.Pages, "Invalid DSN", fmt.Errorf("could not parse host from DSN — expected mysql://user:pass@host:3306/db"))
-					return
-				}
-				portStr := u.Port()
-				if portStr == "" {
-					portStr = "3306"
-				}
-				intPort, _ := strconv.Atoi(portStr)
-				username := u.User.Username()
-				password, _ := u.User.Password()
-				database := strings.TrimPrefix(u.Path, "/")
-				if name == "" {
-					name = u.Hostname() + ":" + portStr
-				}
-				sqlCfg = &config.SQLConfig{
-					Driver:   "mysql",
-					Name:     name,
-					Host:     u.Hostname(),
-					Port:     intPort,
-					Username: username,
-					Password: password,
-					Database: database,
-					Timeout:  timeout,
-					Options:  opts,
-				}
-			}
-		} else {
-			host := cf.form.GetFormItemByLabel("Host").(*tview.InputField).GetText()
-			port := cf.form.GetFormItemByLabel("Port").(*tview.InputField).GetText()
-			intPort, err := strconv.Atoi(port)
-			if err != nil {
-				modal.ShowError(cf.App.Pages, "Port must be a number", err)
-				return
-			}
-			username := cf.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
-			password := cf.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
-			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && cf.editConn.IsPasswordReadable() {
-				password = cf.editConn.Password
-			}
-			database := cf.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()
-			_, ssl := cf.form.GetFormItemByLabel("SSL").(*tview.DropDown).GetCurrentOption()
-			sslMode := "disable"
-			if ssl == "enable" {
-				sslMode = "skip-verify"
-			}
-			if name == "" {
-				name = host + ":" + port
-			}
-			sqlCfg = &config.SQLConfig{
-				Driver:   "mysql",
-				Name:     name,
-				Host:     host,
-				Port:     intPort,
-				Username: username,
-				Password: password,
-				Database: database,
-				SSLMode:  sslMode,
-				Timeout:  timeout,
-				Options:  opts,
-			}
-		}
-
-	default: // postgres
-		timeout := 5
-		if t := cf.form.GetFormItemByLabel("Timeout").(*tview.InputField).GetText(); t != "" {
-			parsed, err := strconv.Atoi(t)
-			if err != nil {
-				modal.ShowError(cf.App.Pages, "Timeout must be a number", err)
-				return
-			}
-			timeout = parsed
-		}
-
-		dsn := cf.form.GetFormItemByLabel("DSN").(*tview.TextArea).GetText()
-		trimmedDSN := strings.TrimSpace(dsn)
-
-		// In edit mode the DSN field is pre-filled with the stored (password-masked)
-		// DSN. If the user didn't touch it, we must not re-parse — that would set the
-		// password to the literal "****" and drop fields the parser doesn't fill.
-		// Treat unchanged DSN the same as an empty one and fall through to form fields.
-		dsnUnchanged := cf.editConn != nil && trimmedDSN == cf.editConn.DSN
-
-		if !dsnUnchanged && trimmedDSN != "postgresql://" && trimmedDSN != "postgres://" && trimmedDSN != "" {
-			if name == "" {
-				name = trimmedDSN
-			}
-			sqlCfg = &config.SQLConfig{
-				Driver:  "postgres",
-				Name:    name,
-				DSN:     trimmedDSN,
-				Timeout: timeout,
-				Options: opts,
-			}
-			if strings.HasPrefix(trimmedDSN, "$") {
-				// env var reference — store as-is
-			} else {
-				if !strings.HasPrefix(trimmedDSN, "postgres://") && !strings.HasPrefix(trimmedDSN, "postgresql://") {
-					modal.ShowError(cf.App.Pages, "Invalid DSN", fmt.Errorf("DSN must start with postgres:// or postgresql://"))
-					return
-				}
-				parsed, err := util.ParsePostgresDSN(trimmedDSN)
-				if err != nil || parsed.Host == "" {
-					modal.ShowError(cf.App.Pages, "Invalid DSN", fmt.Errorf("could not parse host from DSN — check format: postgresql://user:pass@host:5432/db"))
-					return
-				}
-				// Use DSN-based save
-				if cf.editConn != nil {
-					saveErr = cf.App.GetConfig().UpdateConnectionFromDSN(cf.editOrigName, sqlCfg)
-				} else {
-					saveErr = cf.App.GetConfig().AddConnectionFromDSN(sqlCfg)
-				}
-				if saveErr != nil {
-					cf.showSaveError(saveErr)
-					return
-				}
-				if cf.onSave != nil {
-					cf.onSave()
-				}
-				return
-			}
-		} else {
-			// Use form fields
-			host := cf.form.GetFormItemByLabel("Host").(*tview.InputField).GetText()
-			port := cf.form.GetFormItemByLabel("Port").(*tview.InputField).GetText()
-			intPort, err := strconv.Atoi(port)
-			if err != nil {
-				modal.ShowError(cf.App.Pages, "Port must be a number", err)
-				return
-			}
-			username := cf.form.GetFormItemByLabel("Username").(*tview.InputField).GetText()
-			password := cf.form.GetFormItemByLabel("Password").(*tview.InputField).GetText()
-			// In edit mode the password field is blank when the stored value is
-			// encrypted. Preserve the original ciphertext — but only if it can still
-			// be decrypted with the current key. Orphan ciphertext (sealed under a
-			// previous encryption method) is dropped so the user is forced to
-			// re-enter rather than persist an unreadable blob.
-			if password == "" && cf.editConn != nil && util.IsEncrypted(cf.editConn.Password) && cf.editConn.IsPasswordReadable() {
-				password = cf.editConn.Password
-			}
-			database := cf.form.GetFormItemByLabel("Database").(*tview.InputField).GetText()
-			_, sslMode := cf.form.GetFormItemByLabel("SSL Mode").(*tview.DropDown).GetCurrentOption()
-
-			if name == "" {
-				name = host + ":" + port
-			}
-			sqlCfg = &config.SQLConfig{
-				Driver:   "postgres",
-				Name:     name,
-				Host:     host,
-				Port:     intPort,
-				Username: username,
-				Password: password,
-				Database: database,
-				SSLMode:  sslMode,
-				Timeout:  timeout,
-				Options:  opts,
-			}
-		}
+	sqlCfg, err := def.BuildConfig(fields, cf.editConn)
+	if err != nil {
+		modal.ShowError(cf.App.Pages, "Invalid connection", err)
+		return
 	}
+	sqlCfg.Options = opts
 
+	var saveErr error
 	if cf.editConn != nil {
 		saveErr = cf.App.GetConfig().UpdateConnection(cf.editOrigName, sqlCfg)
 	} else {
@@ -550,6 +286,27 @@ func (cf *ConnectionForm) save() {
 	if cf.onSave != nil {
 		cf.onSave()
 	}
+}
+
+// collectFields reads the current value of every interactive field in the spec.
+func (cf *ConnectionForm) collectFields(spec []database.FieldSpec) map[string]string {
+	fields := make(map[string]string, len(spec))
+	for _, s := range spec {
+		item := cf.form.GetFormItemByLabel(s.Label)
+		if item == nil {
+			continue
+		}
+		switch s.Kind {
+		case database.FieldInput, database.FieldPassword:
+			fields[s.Label] = item.(*tview.InputField).GetText()
+		case database.FieldTextArea:
+			fields[s.Label] = item.(*tview.TextArea).GetText()
+		case database.FieldDropDown:
+			_, val := item.(*tview.DropDown).GetCurrentOption()
+			fields[s.Label] = val
+		}
+	}
+	return fields
 }
 
 func (cf *ConnectionForm) collectOptions() (config.SQLOptions, error) {
