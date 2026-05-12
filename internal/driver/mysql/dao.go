@@ -12,6 +12,9 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func quoteIdent(name string) string { return database.QuoteIdent(name, '`') }
+func quoteTable(s, t string) string { return database.QuoteQualified(s, t, '`') }
+
 // Dao implements database.Driver for MySQL.
 type Dao struct {
 	client *Client
@@ -265,7 +268,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 }
 
 func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
-	query := fmt.Sprintf("SELECT * FROM %s", quoteMySQLTable(state.Schema, state.Table))
+	query := fmt.Sprintf("SELECT * FROM %s", quoteTable(state.Schema, state.Table))
 	args := []any{}
 
 	if where != "" {
@@ -295,27 +298,6 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 	return displayQuery, result, nil
 }
 
-func (d *Dao) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {
-	whereParts, args := buildPKWhere(pk)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s",
-		quoteMySQLTable(schema, table), strings.Join(whereParts, " AND "))
-
-	rows, err := d.client.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get row: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	result, err := scanRows(rows)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("row not found")
-	}
-	return result[0], nil
-}
-
 func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
 	log.Info().Str("schema", schema).Str("table", table).Msg("Inserting row")
 	cols := make([]string, 0, len(row))
@@ -323,13 +305,13 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	args := make([]any, 0, len(row))
 
 	for col, val := range row {
-		cols = append(cols, quoteMySQLIdent(col))
+		cols = append(cols, quoteIdent(col))
 		placeholders = append(placeholders, "?")
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		quoteMySQLTable(schema, table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+		quoteTable(schema, table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -367,7 +349,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 		}
 		oldVal, exists := original[col]
 		if !exists || fmt.Sprint(oldVal) != fmt.Sprint(newVal) {
-			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quoteMySQLIdent(col)))
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quoteIdent(col)))
 			args = append(args, newVal)
 		}
 	}
@@ -378,12 +360,12 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 
 	whereParts := []string{}
 	for col, val := range pk.Columns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quoteMySQLIdent(col)))
+		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quoteIdent(col)))
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
-		quoteMySQLTable(schema, table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
+		quoteTable(schema, table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -398,9 +380,9 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []database.PrimaryKey) error {
 	log.Info().Str("schema", schema).Str("table", table).Int("count", len(pks)).Msg("Deleting rows")
 	for _, pk := range pks {
-		whereParts, args := buildPKWhere(pk)
+		whereParts, args := database.BuildPKWhere(pk, quoteIdent)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s",
-			quoteMySQLTable(schema, table), strings.Join(whereParts, " AND "))
+			quoteTable(schema, table), strings.Join(whereParts, " AND "))
 
 		result, err := d.client.DB.ExecContext(ctx, query, args...)
 		if err != nil {
@@ -438,13 +420,13 @@ func (d *Dao) CommonDataTypes() []string {
 
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 	return fmt.Sprintf("CREATE TABLE %s (id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))",
-		quoteMySQLTable(schema, tableName))
+		quoteTable(schema, tableName))
 }
 
 func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
 	var tableName, ddl string
 	err := d.client.DB.QueryRowContext(ctx,
-		fmt.Sprintf("SHOW CREATE TABLE %s", quoteMySQLTable(schema, table))).
+		fmt.Sprintf("SHOW CREATE TABLE %s", quoteTable(schema, table))).
 		Scan(&tableName, &ddl)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table DDL: %w", err)
@@ -462,7 +444,7 @@ func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
 
 func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteMySQLTable(schema, table)))
+		fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteTable(schema, table)))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -472,7 +454,7 @@ func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 
 func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) error {
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("RENAME TABLE %s TO %s",
-		quoteMySQLTable(schema, old), quoteMySQLTable(schema, newName)))
+		quoteTable(schema, old), quoteTable(schema, newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename table: %w", err)
 	}
@@ -483,7 +465,7 @@ func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) erro
 func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName string) error {
 	// RENAME COLUMN is available in MySQL 8.0+.
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-		quoteMySQLTable(schema, table), quoteMySQLIdent(old), quoteMySQLIdent(newName)))
+		quoteTable(schema, table), quoteIdent(old), quoteIdent(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
@@ -493,7 +475,7 @@ func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName stri
 
 func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("TRUNCATE TABLE %s", quoteMySQLTable(schema, table)))
+		fmt.Sprintf("TRUNCATE TABLE %s", quoteTable(schema, table)))
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
 	}
@@ -541,14 +523,14 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 	quotedCols := make([]string, len(def.Columns))
 	for i, c := range def.Columns {
 		parts := strings.Fields(c)
-		quotedCols[i] = quoteMySQLIdent(parts[0])
+		quotedCols[i] = quoteIdent(parts[0])
 		if len(parts) > 1 {
 			quotedCols[i] += " " + parts[1]
 		}
 	}
 
 	query := fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)",
-		uniqueStr, quoteMySQLIdent(def.Name), quoteMySQLTable(schema, table),
+		uniqueStr, quoteIdent(def.Name), quoteTable(schema, table),
 		strings.Join(quotedCols, ", "))
 
 	if _, err := d.client.DB.ExecContext(ctx, query); err != nil {
@@ -568,7 +550,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 		return fmt.Errorf("failed to locate index %q: %w", indexName, err)
 	}
 	_, err = d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP INDEX %s ON %s", quoteMySQLIdent(indexName), quoteMySQLTable(schema, tableName)))
+		fmt.Sprintf("DROP INDEX %s ON %s", quoteIdent(indexName), quoteTable(schema, tableName)))
 	if err != nil {
 		return fmt.Errorf("failed to drop index: %w", err)
 	}

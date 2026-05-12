@@ -20,7 +20,7 @@ func init() {
 			if err := client.Ping(); err != nil {
 				return nil, nil, err
 			}
-			return NewDao(client), &Formatter{}, nil
+			return NewDao(client), database.DefaultFormatter{}, nil
 		},
 		FormSpec: []database.FieldSpec{
 			{Kind: database.FieldTextArea, Label: "DSN", Default: "postgresql://", Clipboard: true, Rows: 3},
@@ -60,13 +60,9 @@ func init() {
 func buildPostgresConfig(fields map[string]string, editConn *config.SQLConfig) (*config.SQLConfig, error) {
 	name := fields["Name"]
 
-	timeout := 5
-	if t := fields["Timeout"]; t != "" {
-		parsed, err := strconv.Atoi(t)
-		if err != nil {
-			return nil, fmt.Errorf("timeout must be a number")
-		}
-		timeout = parsed
+	timeout, err := database.ParseTimeoutField(fields["Timeout"], 5)
+	if err != nil {
+		return nil, err
 	}
 
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
@@ -105,14 +101,11 @@ func buildPostgresConfig(fields map[string]string, editConn *config.SQLConfig) (
 
 	host := fields["Host"]
 	portStr := fields["Port"]
-	intPort, err := strconv.Atoi(portStr)
+	port, err := database.ParsePortField(portStr)
 	if err != nil {
-		return nil, fmt.Errorf("port must be a number")
+		return nil, err
 	}
-	password := fields["Password"]
-	if password == "" && editConn != nil && util.IsEncrypted(editConn.Password) && editConn.IsPasswordReadable() {
-		password = editConn.Password
-	}
+	password := database.PreserveEncryptedPassword(fields["Password"], editConn)
 	if name == "" {
 		name = host + ":" + portStr
 	}
@@ -120,7 +113,7 @@ func buildPostgresConfig(fields map[string]string, editConn *config.SQLConfig) (
 		Driver:   "postgres",
 		Name:     name,
 		Host:     host,
-		Port:     intPort,
+		Port:     port,
 		Username: fields["Username"],
 		Password: password,
 		Database: fields["Database"],

@@ -3,10 +3,9 @@ package mysql
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"strconv"
 	"strings"
 
+	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/util"
@@ -19,7 +18,7 @@ func init() {
 			if err := client.Connect(context.Background()); err != nil {
 				return nil, nil, err
 			}
-			return NewDao(client), &Formatter{}, nil
+			return NewDao(client), database.DefaultFormatter{}, nil
 		},
 		FormSpec: []database.FieldSpec{
 			{Kind: database.FieldTextArea, Label: "DSN", Clipboard: true, Rows: 3},
@@ -30,7 +29,8 @@ func init() {
 			{Kind: database.FieldInput, Label: "Username", Clipboard: true},
 			{Kind: database.FieldPassword, Label: "Password", Clipboard: true},
 			{Kind: database.FieldInput, Label: "Database", Clipboard: true},
-			{Kind: database.FieldDropDown, Label: "SSL", Default: "disable", Options: []string{"disable", "enable"}},
+			// TLS values map to go-sql-driver/mysql tls config tokens.
+			{Kind: database.FieldDropDown, Label: "TLS", Default: "false", Options: []string{"false", "skip-verify", "preferred", "true"}},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
 		},
 		PreFill: func(conn *config.SQLConfig) map[string]string {
@@ -49,11 +49,8 @@ func init() {
 			if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
-			// Map sslMode back to the dropdown value.
-			if conn.SSLMode != "" && conn.SSLMode != "disable" {
-				m["SSL"] = "enable"
-			} else {
-				m["SSL"] = "disable"
+			if conn.SSLMode != "" {
+				m["TLS"] = conn.SSLMode
 			}
 			return m
 		},
@@ -64,13 +61,9 @@ func init() {
 func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*config.SQLConfig, error) {
 	name := fields["Name"]
 
-	timeout := 5
-	if t := fields["Timeout"]; t != "" {
-		parsed, err := strconv.Atoi(t)
-		if err != nil {
-			return nil, fmt.Errorf("timeout must be a number")
-		}
-		timeout = parsed
+	timeout, err := database.ParseTimeoutField(fields["Timeout"], 5)
+	if err != nil {
+		return nil, err
 	}
 
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
@@ -88,46 +81,38 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 				Timeout: timeout,
 			}, nil
 		}
-		// Parse as URL to extract individual fields.
-		u, err := url.Parse(trimmedDSN)
-		if err != nil || u.Host == "" {
-			return nil, fmt.Errorf("could not parse host from DSN — expected mysql://user:pass@host:3306/db")
+		parsed, err := mysqldrv.ParseDSN(trimmedDSN)
+		if err != nil {
+			return nil, fmt.Errorf("could not parse DSN — expected user:pass@tcp(host:3306)/db: %w", err)
 		}
-		portStr := u.Port()
+		host, portStr, _ := strings.Cut(parsed.Addr, ":")
 		if portStr == "" {
 			portStr = "3306"
 		}
-		intPort, _ := strconv.Atoi(portStr)
-		password, _ := u.User.Password()
+		port, _ := database.ParsePortField(portStr)
 		if name == "" {
-			name = u.Hostname() + ":" + portStr
+			name = parsed.Addr
 		}
 		return &config.SQLConfig{
 			Driver:   "mysql",
 			Name:     name,
-			Host:     u.Hostname(),
-			Port:     intPort,
-			Username: u.User.Username(),
-			Password: password,
-			Database: strings.TrimPrefix(u.Path, "/"),
+			Host:     host,
+			Port:     port,
+			Username: parsed.User,
+			Password: parsed.Passwd,
+			Database: parsed.DBName,
+			SSLMode:  parsed.TLSConfig,
 			Timeout:  timeout,
 		}, nil
 	}
 
 	host := fields["Host"]
 	portStr := fields["Port"]
-	intPort, err := strconv.Atoi(portStr)
+	port, err := database.ParsePortField(portStr)
 	if err != nil {
-		return nil, fmt.Errorf("port must be a number")
+		return nil, err
 	}
-	password := fields["Password"]
-	if password == "" && editConn != nil && util.IsEncrypted(editConn.Password) && editConn.IsPasswordReadable() {
-		password = editConn.Password
-	}
-	sslMode := "disable"
-	if fields["SSL"] == "enable" {
-		sslMode = "skip-verify"
-	}
+	password := database.PreserveEncryptedPassword(fields["Password"], editConn)
 	if name == "" {
 		name = host + ":" + portStr
 	}
@@ -135,11 +120,11 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 		Driver:   "mysql",
 		Name:     name,
 		Host:     host,
-		Port:     intPort,
+		Port:     port,
 		Username: fields["Username"],
 		Password: password,
 		Database: fields["Database"],
-		SSLMode:  sslMode,
+		SSLMode:  fields["TLS"],
 		Timeout:  timeout,
 	}, nil
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+func quoteIdent(name string) string { return database.QuoteIdent(name, '"') }
+
 // Dao implements database.Driver for SQLite.
 type Dao struct {
 	client *Client
@@ -81,7 +83,7 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA table_info(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table columns: %w", err)
 	}
@@ -109,7 +111,7 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 
 func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]database.ConstraintInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA table_info(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table constraints: %w", err)
 	}
@@ -143,7 +145,7 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 
 func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA foreign_key_list(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA foreign_key_list(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get foreign keys: %w", err)
 	}
@@ -225,7 +227,7 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 // fast enough for typical local files.
 func (d *Dao) GetEstimatedRowCount(ctx context.Context, _, table string) (int64, bool, error) {
 	var count int64
-	q := fmt.Sprintf("SELECT count(*) FROM %s", quoteSQLiteIdent(table))
+	q := fmt.Sprintf("SELECT count(*) FROM %s", quoteIdent(table))
 	if err := d.client.DB.QueryRowContext(ctx, q).Scan(&count); err != nil {
 		return 0, false, err
 	}
@@ -233,7 +235,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, _, table string) (int64,
 }
 
 func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
-	query := fmt.Sprintf("SELECT * FROM %s", quoteSQLiteIdent(state.Table))
+	query := fmt.Sprintf("SELECT * FROM %s", quoteIdent(state.Table))
 	args := []any{}
 
 	if where != "" {
@@ -264,27 +266,6 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 	return displayQuery, result, nil
 }
 
-func (d *Dao) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {
-	whereParts, args := buildPKWhere(pk)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s",
-		quoteSQLiteIdent(table), strings.Join(whereParts, " AND "))
-
-	rows, err := d.client.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get row: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	result, err := scanRows(rows)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("row not found")
-	}
-	return result[0], nil
-}
-
 func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
 	log.Info().Str("table", table).Msg("Inserting row")
 	cols := make([]string, 0, len(row))
@@ -292,13 +273,13 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	args := make([]any, 0, len(row))
 
 	for col, val := range row {
-		cols = append(cols, quoteSQLiteIdent(col))
+		cols = append(cols, quoteIdent(col))
 		placeholders = append(placeholders, "?")
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		quoteSQLiteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+		quoteIdent(table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -336,7 +317,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 		}
 		oldVal, exists := original[col]
 		if !exists || fmt.Sprint(oldVal) != fmt.Sprint(newVal) {
-			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quoteSQLiteIdent(col)))
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quoteIdent(col)))
 			args = append(args, newVal)
 		}
 	}
@@ -347,12 +328,12 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 
 	whereParts := []string{}
 	for col, val := range pk.Columns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quoteSQLiteIdent(col)))
+		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quoteIdent(col)))
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
-		quoteSQLiteIdent(table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
+		quoteIdent(table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -367,9 +348,9 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []database.PrimaryKey) error {
 	log.Info().Str("table", table).Int("count", len(pks)).Msg("Deleting rows")
 	for _, pk := range pks {
-		whereParts, args := buildPKWhere(pk)
+		whereParts, args := database.BuildPKWhere(pk, quoteIdent)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s",
-			quoteSQLiteIdent(table), strings.Join(whereParts, " AND "))
+			quoteIdent(table), strings.Join(whereParts, " AND "))
 
 		result, err := d.client.DB.ExecContext(ctx, query, args...)
 		if err != nil {
@@ -399,7 +380,7 @@ func (d *Dao) CommonDataTypes() []string {
 }
 
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
-	return fmt.Sprintf("CREATE TABLE %s (id INTEGER PRIMARY KEY AUTOINCREMENT)", quoteSQLiteIdent(tableName))
+	return fmt.Sprintf("CREATE TABLE %s (id INTEGER PRIMARY KEY AUTOINCREMENT)", quoteIdent(tableName))
 }
 
 func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
@@ -423,7 +404,7 @@ func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
 
 func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteSQLiteIdent(table)))
+		fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteIdent(table)))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -433,7 +414,7 @@ func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 
 func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("ALTER TABLE %s RENAME TO %s", quoteSQLiteIdent(old), quoteSQLiteIdent(newName)))
+		fmt.Sprintf("ALTER TABLE %s RENAME TO %s", quoteIdent(old), quoteIdent(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename table: %w", err)
 	}
@@ -444,7 +425,7 @@ func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) erro
 func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName string) error {
 	_, err := d.client.DB.ExecContext(ctx,
 		fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-			quoteSQLiteIdent(table), quoteSQLiteIdent(old), quoteSQLiteIdent(newName)))
+			quoteIdent(table), quoteIdent(old), quoteIdent(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
@@ -454,7 +435,7 @@ func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName stri
 
 func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DELETE FROM %s", quoteSQLiteIdent(table)))
+		fmt.Sprintf("DELETE FROM %s", quoteIdent(table)))
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
 	}
@@ -464,7 +445,7 @@ func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
 
 func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.IndexInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA index_list(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA index_list(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get index list: %w", err)
 	}
@@ -493,7 +474,7 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 	var indexes []database.IndexInfo
 	for _, r := range idxRows {
 		colRows, err := d.client.DB.QueryContext(ctx,
-			fmt.Sprintf("PRAGMA index_info(%s)", quoteSQLiteIdent(r.name)))
+			fmt.Sprintf("PRAGMA index_info(%s)", quoteIdent(r.name)))
 		if err != nil {
 			return nil, err
 		}
@@ -532,14 +513,14 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 	quotedCols := make([]string, len(def.Columns))
 	for i, c := range def.Columns {
 		parts := strings.Fields(c)
-		quotedCols[i] = quoteSQLiteIdent(parts[0])
+		quotedCols[i] = quoteIdent(parts[0])
 		if len(parts) > 1 {
 			quotedCols[i] += " " + parts[1]
 		}
 	}
 
 	query := fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)",
-		uniqueStr, quoteSQLiteIdent(def.Name), quoteSQLiteIdent(table), strings.Join(quotedCols, ", "))
+		uniqueStr, quoteIdent(def.Name), quoteIdent(table), strings.Join(quotedCols, ", "))
 
 	_, err := d.client.DB.ExecContext(ctx, query)
 	if err != nil {
@@ -551,7 +532,7 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 
 func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP INDEX %s", quoteSQLiteIdent(indexName)))
+		fmt.Sprintf("DROP INDEX %s", quoteIdent(indexName)))
 	if err != nil {
 		return fmt.Errorf("failed to drop index: %w", err)
 	}
@@ -667,7 +648,7 @@ func (d *Dao) ExplainPlan(ctx context.Context, sql string) (string, error) {
 
 func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]string, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA table_info(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get column names: %w", err)
 	}
@@ -689,7 +670,7 @@ func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]
 // getPrimaryKeyColumns returns the PK column names for a table, sorted by pk index.
 func (d *Dao) getPrimaryKeyColumns(ctx context.Context, table string) ([]string, error) {
 	rows, err := d.client.DB.QueryContext(ctx,
-		fmt.Sprintf("PRAGMA table_info(%s)", quoteSQLiteIdent(table)))
+		fmt.Sprintf("PRAGMA table_info(%s)", quoteIdent(table)))
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 
@@ -182,7 +183,7 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	}
 }
 
-func TestInsertRow_GetRow_DeleteRow(t *testing.T) {
+func TestInsertRow_DeleteRow(t *testing.T) {
 	dao := newTestDao(t) // not parallel — modifies shared-nothing DB
 	ctx := context.Background()
 
@@ -199,17 +200,19 @@ func TestInsertRow_GetRow_DeleteRow(t *testing.T) {
 	require.NoError(t, err)
 
 	// SQLite's InsertRow returns lastInsertId (rowid), not the text PK.
-	// Use the known PK value to retrieve the row.
+	// Verify via a direct query using the known PK value.
 	pk := database.PrimaryKey{Columns: map[string]any{"id": insertedID}}
-	row, err := dao.GetRow(ctx, "main", "users", pk)
+	rows, _, err := dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT email FROM "main"."users" WHERE id = '%s'`, insertedID))
 	require.NoError(t, err)
-	assert.Equal(t, "test@example.com", row["email"])
+	require.Len(t, rows, 1)
+	assert.Equal(t, "test@example.com", rows[0]["email"])
 
 	err = dao.DeleteRows(ctx, "main", "users", []database.PrimaryKey{pk})
 	require.NoError(t, err)
 
-	_, err = dao.GetRow(ctx, "main", "users", pk)
-	assert.Error(t, err, "row should not exist after delete")
+	rows, _, err = dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT id FROM "main"."users" WHERE id = '%s'`, insertedID))
+	require.NoError(t, err)
+	assert.Empty(t, rows, "row should not exist after delete")
 }
 
 func TestUpdateRow_ChangedField(t *testing.T) {
@@ -235,9 +238,10 @@ func TestUpdateRow_ChangedField(t *testing.T) {
 	err = dao.UpdateRow(ctx, "main", "users", pk, original, updated)
 	require.NoError(t, err)
 
-	row, err := dao.GetRow(ctx, "main", "users", pk)
+	rows, _, err = dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT full_name FROM "main"."users" WHERE id = '%s'`, original["id"]))
 	require.NoError(t, err)
-	assert.Equal(t, "Updated Name", row["full_name"])
+	require.Len(t, rows, 1)
+	assert.Equal(t, "Updated Name", rows[0]["full_name"])
 }
 
 func TestDeleteRows_NonExistentPK(t *testing.T) {

@@ -1,6 +1,6 @@
 //go:build integration
 
-package postgres
+package mysql
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
-	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcmysql "github.com/testcontainers/testcontainers-go/modules/mysql"
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/kopecmaciej/vi-sql/internal/config"
@@ -25,36 +25,35 @@ var testDao *Dao
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := tcpostgres.Run(ctx,
-		"postgres:16-alpine",
-		tcpostgres.WithDatabase("visql_test"),
-		tcpostgres.WithUsername("test"),
-		tcpostgres.WithPassword("test"),
-		tcpostgres.WithInitScripts(testutil.SamplePostgresPath()),
+	mysqlContainer, err := tcmysql.Run(ctx,
+		"mysql:8.0.36",
+		tcmysql.WithUsername("root"),
+		tcmysql.WithPassword("test"),
+		tcmysql.WithDatabase("auth"),
+		tcmysql.WithScripts(testutil.SampleMySQLPath()),
 		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready to accept connections").
-				WithOccurrence(2).
-				WithStartupTimeout(60*time.Second),
+			wait.ForLog("port: 3306  MySQL Community Server").
+				WithStartupTimeout(120*time.Second),
 		),
 	)
 	if err != nil {
-		panic("failed to start postgres container: " + err.Error())
+		panic("failed to start mysql container: " + err.Error())
 	}
-	defer pgContainer.Terminate(ctx) //nolint:errcheck
+	defer mysqlContainer.Terminate(ctx) //nolint:errcheck
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+	connStr, err := mysqlContainer.ConnectionString(ctx)
 	if err != nil {
 		panic("failed to get connection string: " + err.Error())
 	}
 
 	cfg := &config.SQLConfig{
-		Driver:  "postgres",
+		Driver:  "mysql",
 		DSN:     connStr,
-		Timeout: 10,
+		Timeout: 30,
 	}
 	client := NewClient(cfg)
-	if err := client.Connect(); err != nil {
-		panic("failed to connect to postgres: " + err.Error())
+	if err := client.Connect(ctx); err != nil {
+		panic("failed to connect to mysql: " + err.Error())
 	}
 	defer client.Close()
 
@@ -75,32 +74,27 @@ func TestListSchemas_MultipleSchemas(t *testing.T) {
 	for i, s := range schemas {
 		schemaNames[i] = s.Schema
 	}
-	assert.NotEmpty(t, schemaNames)
+	assert.Contains(t, schemaNames, "auth")
+	assert.Contains(t, schemaNames, "catalog")
 }
 
 func TestListSchemas_WithFilter(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "pub")
+	schemas, err := testDao.ListSchemas(ctx, "auth")
 	require.NoError(t, err)
+	require.NotEmpty(t, schemas)
 	for _, s := range schemas {
-		assert.Contains(t, s.Schema, "pub")
+		assert.Contains(t, s.Schema, "auth")
 	}
 }
 
 // --- Table structure ---
 
-func TestGetTableColumns_WithPGTypes(t *testing.T) {
+func TestGetTableColumns_WithMySQLTypes(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-	require.NotEmpty(t, schemas[0].Tables)
-	schema := schemas[0].Schema
-	table := schemas[0].Tables[0]
-
-	cols, err := testDao.GetTableColumns(ctx, schema, table)
+	cols, err := testDao.GetTableColumns(ctx, "auth", "users")
 	require.NoError(t, err)
 	require.NotEmpty(t, cols)
 
@@ -113,28 +107,19 @@ func TestGetTableColumns_WithPGTypes(t *testing.T) {
 func TestGetTableConstraints(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
+	// auth.users has PRIMARY KEY and UNIQUE constraints
+	constraints, err := testDao.GetTableConstraints(ctx, "auth", "users")
 	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	schema := schemas[0].Schema
-	table := schemas[0].Tables[0]
-
-	_, err = testDao.GetTableConstraints(ctx, schema, table)
-	require.NoError(t, err)
+	require.NotEmpty(t, constraints)
 }
 
 func TestGetTableForeignKeys(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
+	// auth.user_roles has FKs to users and roles
+	fks, err := testDao.GetTableForeignKeys(ctx, "auth", "user_roles")
 	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	_, err = testDao.GetTableForeignKeys(ctx, schemas[0].Schema, schemas[0].Tables[0])
-	require.NoError(t, err)
+	require.NotEmpty(t, fks)
 }
 
 // --- Row CRUD ---
@@ -142,11 +127,7 @@ func TestGetTableForeignKeys(t *testing.T) {
 func TestListRows_BasicPagination(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	state := database.NewTableState(schemas[0].Schema, schemas[0].Tables[0])
+	state := database.NewTableState("auth", "users")
 	state.BatchSize = 3
 
 	_, rows, err := testDao.FetchTableRows(ctx, state, "", "")
@@ -157,15 +138,8 @@ func TestListRows_BasicPagination(t *testing.T) {
 func TestExecuteQuery_Select(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	schema := schemas[0].Schema
-	table := schemas[0].Tables[0]
-
 	rows, cols, err := testDao.ExecuteQuery(ctx,
-		"SELECT * FROM \""+schema+"\".\""+table+"\" LIMIT 2")
+		"SELECT * FROM `auth`.`users` LIMIT 2")
 	require.NoError(t, err)
 	assert.NotEmpty(t, cols)
 	_ = rows
@@ -175,11 +149,11 @@ func TestExecuteStatement_CreateDrop(t *testing.T) {
 	ctx := context.Background()
 
 	affected, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.pg_test_stmt (id SERIAL PRIMARY KEY)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`my_stmt_test` (id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))")
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, affected, int64(0))
 
-	_, err = testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.pg_test_stmt`)
+	_, err = testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`my_stmt_test`")
 	require.NoError(t, err)
 }
 
@@ -197,30 +171,30 @@ func TestCreateIndex_GetIndexes_DropIndex(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.idx_test (id SERIAL PRIMARY KEY, name TEXT)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`idx_my_test` (id INT NOT NULL AUTO_INCREMENT, name VARCHAR(255), PRIMARY KEY (id))")
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.idx_test`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`idx_my_test`") //nolint:errcheck
 
 	def := database.IndexDefinition{
-		Name:     "idx_test_name",
+		Name:     "idx_my_test_name",
 		Columns:  []string{"name"},
 		IsUnique: false,
 	}
-	err = testDao.CreateIndex(ctx, "public", "idx_test", def)
+	err = testDao.CreateIndex(ctx, "auth", "idx_my_test", def)
 	require.NoError(t, err)
 
-	indexes, err := testDao.GetIndexes(ctx, "public", "idx_test")
+	indexes, err := testDao.GetIndexes(ctx, "auth", "idx_my_test")
 	require.NoError(t, err)
 
 	var found bool
 	for _, idx := range indexes {
-		if idx.Name == "idx_test_name" {
+		if idx.Name == "idx_my_test_name" {
 			found = true
 		}
 	}
 	assert.True(t, found, "created index should appear in GetIndexes")
 
-	err = testDao.DropIndex(ctx, "public", "idx_test_name")
+	err = testDao.DropIndex(ctx, "auth", "idx_my_test_name")
 	require.NoError(t, err)
 }
 
@@ -229,17 +203,17 @@ func TestCreateIndex_GetIndexes_DropIndex(t *testing.T) {
 func TestCreateTable_And_DropTable(t *testing.T) {
 	ctx := context.Background()
 
-	ddl := `CREATE TABLE public.pg_ddl_test (id SERIAL PRIMARY KEY, label TEXT NOT NULL)`
-	err := testDao.CreateTable(ctx, "public", ddl)
+	ddl := "CREATE TABLE `auth`.`my_ddl_test` (id INT NOT NULL AUTO_INCREMENT, label VARCHAR(255) NOT NULL, PRIMARY KEY (id))"
+	err := testDao.CreateTable(ctx, "auth", ddl)
 	require.NoError(t, err)
 
-	schemas, err := testDao.ListSchemas(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "auth")
 	require.NoError(t, err)
 	var found bool
 	for _, s := range schemas {
-		if s.Schema == "public" {
+		if s.Schema == "auth" {
 			for _, tbl := range s.Tables {
-				if tbl == "pg_ddl_test" {
+				if tbl == "my_ddl_test" {
 					found = true
 				}
 			}
@@ -247,7 +221,7 @@ func TestCreateTable_And_DropTable(t *testing.T) {
 	}
 	assert.True(t, found, "created table should appear in schema listing")
 
-	err = testDao.DropTable(ctx, "public", "pg_ddl_test")
+	err = testDao.DropTable(ctx, "auth", "my_ddl_test")
 	require.NoError(t, err)
 }
 
@@ -255,18 +229,18 @@ func TestTruncateTable(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.trunc_pg_test (id SERIAL PRIMARY KEY)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`trunc_my_test` (id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))")
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.trunc_pg_test`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`trunc_my_test`") //nolint:errcheck
 
 	_, err = testDao.ExecuteStatement(ctx,
-		`INSERT INTO public.trunc_pg_test DEFAULT VALUES`)
+		"INSERT INTO `auth`.`trunc_my_test` (id) VALUES (NULL)")
 	require.NoError(t, err)
 
-	err = testDao.TruncateTable(ctx, "public", "trunc_pg_test")
+	err = testDao.TruncateTable(ctx, "auth", "trunc_my_test")
 	require.NoError(t, err)
 
-	state := database.NewTableState("public", "trunc_pg_test")
+	state := database.NewTableState("auth", "trunc_my_test")
 	state.BatchSize = 100
 	_, rows, err := testDao.FetchTableRows(ctx, state, "", "")
 	require.NoError(t, err)
@@ -280,7 +254,7 @@ func TestGetServerInfo_ReturnsVersion(t *testing.T) {
 
 	info, err := testDao.GetServerInfo(ctx)
 	require.NoError(t, err)
-	assert.Contains(t, info.Version, "PostgreSQL")
+	assert.Contains(t, info.Version, "MySQL")
 }
 
 func TestGetActiveSessions_PositiveCount(t *testing.T) {
@@ -296,11 +270,7 @@ func TestGetActiveSessions_PositiveCount(t *testing.T) {
 func TestGetTableColumnNames(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	names, err := testDao.GetTableColumnNames(ctx, schemas[0].Schema, schemas[0].Tables[0])
+	names, err := testDao.GetTableColumnNames(ctx, "auth", "users")
 	require.NoError(t, err)
 	assert.NotEmpty(t, names)
 }
@@ -313,28 +283,30 @@ func TestCommonDataTypes_NonEmpty(t *testing.T) {
 }
 
 func TestDefaultCreateTableDDL_ContainsTableName(t *testing.T) {
-	ddl := testDao.DefaultCreateTableDDL("public", "my_pg_table")
-	assert.Contains(t, ddl, "my_pg_table")
+	ddl := testDao.DefaultCreateTableDDL("auth", "my_my_table")
+	assert.Contains(t, ddl, "my_my_table")
 }
 
-// --- Row CRUD (insert / get / update / delete) ---
+// --- Row CRUD (insert / update / delete) ---
 
 func TestInsertRow_UpdateRow_DeleteRow(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.crud_pg_test (
-			id    SERIAL PRIMARY KEY,
-			label TEXT  NOT NULL
+		`CREATE TABLE IF NOT EXISTS `+"`auth`.`crud_my_test`"+` (
+			id    INT          NOT NULL AUTO_INCREMENT,
+			label VARCHAR(255) NOT NULL,
+			PRIMARY KEY (id)
 		)`)
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.crud_pg_test`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`crud_my_test`") //nolint:errcheck
 
 	newRow := database.Row{"label": "hello"}
-	pk, err := testDao.InsertRow(ctx, "public", "crud_pg_test", newRow)
+	pk, err := testDao.InsertRow(ctx, "auth", "crud_my_test", newRow)
 	require.NoError(t, err)
 
-	rows, _, err := testDao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT label FROM public.crud_pg_test WHERE id = %v`, pk.Columns["id"]))
+	rows, _, err := testDao.ExecuteQuery(ctx,
+		fmt.Sprintf("SELECT label FROM `auth`.`crud_my_test` WHERE id = %v", pk.Columns["id"]))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	original := rows[0]
@@ -346,18 +318,20 @@ func TestInsertRow_UpdateRow_DeleteRow(t *testing.T) {
 	}
 	updated["label"] = "world"
 	updated["id"] = pk.Columns["id"]
-	err = testDao.UpdateRow(ctx, "public", "crud_pg_test", pk, original, updated)
+	err = testDao.UpdateRow(ctx, "auth", "crud_my_test", pk, original, updated)
 	require.NoError(t, err)
 
-	rows, _, err = testDao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT label FROM public.crud_pg_test WHERE id = %v`, pk.Columns["id"]))
+	rows, _, err = testDao.ExecuteQuery(ctx,
+		fmt.Sprintf("SELECT label FROM `auth`.`crud_my_test` WHERE id = %v", pk.Columns["id"]))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "world", rows[0]["label"])
 
-	err = testDao.DeleteRows(ctx, "public", "crud_pg_test", []database.PrimaryKey{pk})
+	err = testDao.DeleteRows(ctx, "auth", "crud_my_test", []database.PrimaryKey{pk})
 	require.NoError(t, err)
 
-	rows, _, err = testDao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT id FROM public.crud_pg_test WHERE id = %v`, pk.Columns["id"]))
+	rows, _, err = testDao.ExecuteQuery(ctx,
+		fmt.Sprintf("SELECT id FROM `auth`.`crud_my_test` WHERE id = %v", pk.Columns["id"]))
 	require.NoError(t, err)
 	assert.Empty(t, rows, "row should not exist after delete")
 }
@@ -368,18 +342,15 @@ func TestListRows_WithWhere(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.filter_pg_test (
-			id     SERIAL PRIMARY KEY,
-			status TEXT NOT NULL
-		)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`filter_my_test` (id INT NOT NULL AUTO_INCREMENT, status VARCHAR(50) NOT NULL, PRIMARY KEY (id))")
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.filter_pg_test`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`filter_my_test`") //nolint:errcheck
 
 	_, err = testDao.ExecuteStatement(ctx,
-		`INSERT INTO public.filter_pg_test (status) VALUES ('active'),('inactive'),('active')`)
+		"INSERT INTO `auth`.`filter_my_test` (status) VALUES ('active'),('inactive'),('active')")
 	require.NoError(t, err)
 
-	state := database.NewTableState("public", "filter_pg_test")
+	state := database.NewTableState("auth", "filter_my_test")
 	state.BatchSize = 100
 
 	_, rows, err := testDao.FetchTableRows(ctx, state, "status = 'active'", "")
@@ -394,18 +365,15 @@ func TestListRows_WithOrderBy(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.order_pg_test (
-			id    SERIAL PRIMARY KEY,
-			label TEXT NOT NULL
-		)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`order_my_test` (id INT NOT NULL AUTO_INCREMENT, label VARCHAR(255) NOT NULL, PRIMARY KEY (id))")
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.order_pg_test`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`order_my_test`") //nolint:errcheck
 
 	_, err = testDao.ExecuteStatement(ctx,
-		`INSERT INTO public.order_pg_test (label) VALUES ('charlie'),('alpha'),('bravo')`)
+		"INSERT INTO `auth`.`order_my_test` (label) VALUES ('charlie'),('alpha'),('bravo')")
 	require.NoError(t, err)
 
-	state := database.NewTableState("public", "order_pg_test")
+	state := database.NewTableState("auth", "order_my_test")
 	state.BatchSize = 100
 
 	_, rows, err := testDao.FetchTableRows(ctx, state, "", "label ASC")
@@ -424,37 +392,33 @@ func TestRenameTable_And_RenameBack(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := testDao.ExecuteStatement(ctx,
-		`CREATE TABLE IF NOT EXISTS public.rename_pg_src (id SERIAL PRIMARY KEY)`)
+		"CREATE TABLE IF NOT EXISTS `auth`.`rename_my_src` (id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))")
 	require.NoError(t, err)
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.rename_pg_src`) //nolint:errcheck
-	defer testDao.ExecuteStatement(ctx, `DROP TABLE IF EXISTS public.rename_pg_dst`) //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`rename_my_src`") //nolint:errcheck
+	defer testDao.ExecuteStatement(ctx, "DROP TABLE IF EXISTS `auth`.`rename_my_dst`") //nolint:errcheck
 
-	err = testDao.RenameTable(ctx, "public", "rename_pg_src", "rename_pg_dst")
+	err = testDao.RenameTable(ctx, "auth", "rename_my_src", "rename_my_dst")
 	require.NoError(t, err)
 
-	schemas, err := testDao.ListSchemas(ctx, "")
+	schemas, err := testDao.ListSchemas(ctx, "auth")
 	require.NoError(t, err)
 	var tables []string
 	for _, s := range schemas {
-		if s.Schema == "public" {
+		if s.Schema == "auth" {
 			tables = s.Tables
 		}
 	}
-	assert.Contains(t, tables, "rename_pg_dst")
-	assert.NotContains(t, tables, "rename_pg_src")
+	assert.Contains(t, tables, "rename_my_dst")
+	assert.NotContains(t, tables, "rename_my_src")
 
-	err = testDao.RenameTable(ctx, "public", "rename_pg_dst", "rename_pg_src")
+	err = testDao.RenameTable(ctx, "auth", "rename_my_dst", "rename_my_src")
 	require.NoError(t, err)
 }
 
 func TestGetEstimatedRowCount(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	count, _, err := testDao.GetEstimatedRowCount(ctx, schemas[0].Schema, schemas[0].Tables[0])
+	count, _, err := testDao.GetEstimatedRowCount(ctx, "auth", "users")
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, count, int64(0))
 }
@@ -462,14 +426,14 @@ func TestGetEstimatedRowCount(t *testing.T) {
 func TestRenameColumn(t *testing.T) {
 	ctx := context.Background()
 
-	require.NoError(t, testDao.CreateTable(ctx, "public",
-		"CREATE TABLE rename_col_pg (id SERIAL PRIMARY KEY, old_name TEXT)"))
-	defer testDao.DropTable(ctx, "public", "rename_col_pg") //nolint:errcheck
+	require.NoError(t, testDao.CreateTable(ctx, "auth",
+		"CREATE TABLE `auth`.`rename_col_my` (id INT NOT NULL AUTO_INCREMENT, old_name VARCHAR(255), PRIMARY KEY (id))"))
+	defer testDao.DropTable(ctx, "auth", "rename_col_my") //nolint:errcheck
 
-	err := testDao.RenameColumn(ctx, "public", "rename_col_pg", "old_name", "new_name")
+	err := testDao.RenameColumn(ctx, "auth", "rename_col_my", "old_name", "new_name")
 	require.NoError(t, err)
 
-	names, err := testDao.GetTableColumnNames(ctx, "public", "rename_col_pg")
+	names, err := testDao.GetTableColumnNames(ctx, "auth", "rename_col_my")
 	require.NoError(t, err)
 	assert.Contains(t, names, "new_name")
 	assert.NotContains(t, names, "old_name")
@@ -480,15 +444,8 @@ func TestRenameColumn(t *testing.T) {
 func TestListQueryRows_WithPagination(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas[0].Tables)
-
-	schema := schemas[0].Schema
-	table := schemas[0].Tables[0]
-
 	_, rows, cols, err := testDao.FetchQueryRows(ctx,
-		`SELECT * FROM "`+schema+`"."`+table+`"`, 2, 0)
+		"SELECT * FROM `auth`.`users`", 2, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, cols)
 	assert.LessOrEqual(t, len(rows), 2)
@@ -498,13 +455,13 @@ func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
 	ctx := context.Background()
 
 	const batch = 3
-	_, rows, _, err := testDao.FetchQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, 0)
+	_, rows, _, err := testDao.FetchQueryRows(ctx, "SELECT * FROM `auth`.`users`", batch, 0)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
 	assert.NotEmpty(t, rows)
 
 	// auth.users has 1001 rows, so page 2 must also be full.
-	_, rows2, _, err := testDao.FetchQueryRows(ctx, `SELECT * FROM "auth"."users"`, batch, batch)
+	_, rows2, _, err := testDao.FetchQueryRows(ctx, "SELECT * FROM `auth`.`users`", batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, rows2, batch, "second page should also have a full batch")
 }
@@ -512,22 +469,21 @@ func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
 func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
 	ctx := context.Background()
 
-	const userLimit = 5
 	const batch = 2
 
 	_, page1, _, err := testDao.FetchQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, 0)
+		"SELECT * FROM `auth`.`users` LIMIT 5", batch, 0)
 	require.NoError(t, err)
 	assert.Len(t, page1, batch, "first page should return batch rows")
 
 	_, page2, _, err := testDao.FetchQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch)
+		"SELECT * FROM `auth`.`users` LIMIT 5", batch, batch)
 	require.NoError(t, err)
 	assert.Len(t, page2, batch, "second page should return batch rows")
 
 	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
 	_, page3, _, err := testDao.FetchQueryRows(ctx,
-		`SELECT * FROM "auth"."users" LIMIT 5`, batch, batch*2)
+		"SELECT * FROM `auth`.`users` LIMIT 5", batch, batch*2)
 	require.NoError(t, err)
 	assert.Len(t, page3, 1, "last page should have the remainder row")
 }

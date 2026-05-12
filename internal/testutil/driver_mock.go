@@ -91,14 +91,6 @@ func (m *MockDriver) FetchTableRows(ctx context.Context, state *database.TableSt
 	return args.String(0), args.Get(1).([]database.Row), args.Error(2)
 }
 
-func (m *MockDriver) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {
-	args := m.Called(ctx, schema, table, pk)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(database.Row), args.Error(1)
-}
-
 func (m *MockDriver) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
 	args := m.Called(ctx, schema, table, row)
 	return args.Get(0).(database.PrimaryKey), args.Error(1)

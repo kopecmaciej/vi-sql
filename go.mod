@@ -16,6 +16,7 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.36.0
+	github.com/testcontainers/testcontainers-go/modules/mysql v0.36.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.36.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.35.0

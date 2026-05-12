@@ -20,7 +20,6 @@ type Driver interface {
 	// GetEstimatedRowCount runs estimate count if available, if not normal count is executed
 	GetEstimatedRowCount(ctx context.Context, schema, table string) (count int64, isEstimate bool, err error)
 	FetchTableRows(ctx context.Context, state *TableState, where, orderBy string) (string, []Row, error)
-	GetRow(ctx context.Context, schema, table string, pk PrimaryKey) (Row, error)
 	InsertRow(ctx context.Context, schema, table string, row Row) (PrimaryKey, error)
 	UpdateRow(ctx context.Context, schema, table string, pk PrimaryKey, original, updated Row) error
 	DeleteRows(ctx context.Context, schema, table string, pks []PrimaryKey) error

@@ -20,3 +20,7 @@ func SampleSQLitePath() string {
 func SamplePostgresPath() string {
 	return filepath.Join(RepoRoot(), "sample-sql", "sample.postgres.sql")
 }
+
+func SampleMySQLPath() string {
+	return filepath.Join(RepoRoot(), "sample-sql", "sample.mysql.sql")
+}

@@ -15,7 +15,7 @@ func init() {
 			if err := client.Connect(context.Background()); err != nil {
 				return nil, nil, err
 			}
-			return NewDao(client), &Formatter{}, nil
+			return NewDao(client), database.DefaultFormatter{}, nil
 		},
 		FormSpec: []database.FieldSpec{
 			{Kind: database.FieldInput, Label: "Path / URI", Clipboard: true},

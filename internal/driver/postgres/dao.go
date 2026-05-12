@@ -387,29 +387,6 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 	return query, result, nil
 }
 
-func (d *Dao) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {
-	fqTable := pgx.Identifier{schema, table}.Sanitize()
-	whereParts, args := buildPKWhere(pk)
-	query := fmt.Sprintf("SELECT * FROM %s WHERE %s", fqTable, strings.Join(whereParts, " AND "))
-
-	queryArgs := append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)
-	rows, err := d.client.Pool.Query(ctx, query, queryArgs...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get row: %w", err)
-	}
-	defer rows.Close()
-
-	result, err := scanTextRows(rows)
-	if err != nil {
-		return nil, err
-	}
-	if len(result) == 0 {
-		return nil, fmt.Errorf("row not found")
-	}
-
-	return result[0], nil
-}
-
 func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
 	log.Info().Str("schema", schema).Str("table", table).Msg("Inserting row")
 	fqTable := pgx.Identifier{schema, table}.Sanitize()
@@ -525,8 +502,15 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 	fqTable := pgx.Identifier{schema, table}.Sanitize()
 
 	for _, pk := range pks {
-		whereParts, args := buildPKWhere(pk)
-		query := fmt.Sprintf("DELETE FROM %s WHERE %s", fqTable, strings.Join(whereParts, " AND "))
+		parts := make([]string, 0, len(pk.Columns))
+		args := make([]any, 0, len(pk.Columns))
+		i := 1
+		for col, val := range pk.Columns {
+			parts = append(parts, fmt.Sprintf("%s = $%d", pgx.Identifier{col}.Sanitize(), i))
+			args = append(args, val)
+			i++
+		}
+		query := fmt.Sprintf("DELETE FROM %s WHERE %s", fqTable, strings.Join(parts, " AND "))
 
 		result, err := d.client.Pool.Exec(ctx, query, args...)
 		if err != nil {

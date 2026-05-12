@@ -50,17 +50,20 @@ func (c *Client) Connect(ctx context.Context) error {
 }
 
 func (c *Client) buildDSN() (string, error) {
-	// If a raw DSN is configured, use it directly (resolve $ENV_VAR references).
 	if raw := c.Config.DSN; raw != "" {
 		if strings.HasPrefix(raw, "$") {
 			if resolved := os.Getenv(strings.TrimPrefix(raw, "$")); resolved != "" {
-				return resolved, nil
+				raw = resolved
 			}
 		}
-		return raw, nil
+		cfg, err := mysqldrv.ParseDSN(raw)
+		if err != nil {
+			return "", fmt.Errorf("could not parse mysql DSN: %w", err)
+		}
+		applyConnectionDefaults(cfg)
+		return cfg.FormatDSN(), nil
 	}
 
-	// Build DSN from individual fields, decrypting the password if needed.
 	password := c.Config.Password
 	if util.IsEncrypted(password) {
 		if config.EncryptionKey == "" {
@@ -84,15 +87,30 @@ func (c *Client) buildDSN() (string, error) {
 	cfg.Net = "tcp"
 	cfg.Addr = fmt.Sprintf("%s:%d", c.Config.Host, port)
 	cfg.DBName = c.Config.Database
-	cfg.ParseTime = true
-	cfg.MultiStatements = true
 
-	// Map SSLMode to the MySQL TLS config token understood by go-sql-driver.
-	if c.Config.SSLMode != "" && c.Config.SSLMode != "disable" {
-		cfg.TLSConfig = "skip-verify"
+	// SSLMode stores the go-sql-driver tls token directly (false/skip-verify/preferred/true).
+	if c.Config.SSLMode != "" && c.Config.SSLMode != "false" {
+		cfg.TLSConfig = c.Config.SSLMode
 	}
 
+	applyConnectionDefaults(cfg)
 	return cfg.FormatDSN(), nil
+}
+
+// applyConnectionDefaults sets per-connection options that must apply to every
+// pooled connection, regardless of whether the DSN came from form fields or a
+// user-supplied raw string. User values in Params win.
+func applyConnectionDefaults(cfg *mysqldrv.Config) {
+	cfg.ParseTime = true
+	cfg.MultiStatements = true
+	if cfg.Params == nil {
+		cfg.Params = map[string]string{}
+	}
+	// Default is 1024 bytes; raise so GROUP_CONCAT in schema/FK/index queries
+	// doesn't silently truncate and corrupt the final entry on strings.Split.
+	if _, ok := cfg.Params["group_concat_max_len"]; !ok {
+		cfg.Params["group_concat_max_len"] = "1048576"
+	}
 }
 
 func (c *Client) Close() {
