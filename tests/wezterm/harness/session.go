@@ -24,6 +24,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -36,6 +37,7 @@ const (
 	defaultKeyDelay  = 40 * time.Millisecond
 	slowKeyDelay     = 300 * time.Millisecond
 	readyMarker      = "Vi-SQL started"
+	connectedMarker  = "Connected to database"
 	startupTimeout   = 15 * time.Second
 	assertionTimeout = 3 * time.Second
 )
@@ -94,6 +96,20 @@ func Spawn(t *testing.T, args ...string) *Session {
 	t.Cleanup(s.Close)
 
 	s.WaitForLog(readyMarker, startupTimeout)
+
+	// When --connection-name/-n is passed, wait for the DB connection result.
+	// "Vi-SQL started" is logged before the tview event loop runs; the actual
+	// connection attempt is async and happens later.
+	for i, a := range args {
+		if (a == "--connection-name" || a == "-n") && i+1 < len(args) {
+			found := s.waitForOneOf(startupTimeout, connectedMarker, "Failed to connect to database")
+			if found != connectedMarker {
+				s.t.Fatalf("Spawn: DB connection failed for %q — check stored password or config", args[i+1])
+			}
+			break
+		}
+	}
+
 	return s
 }
 
@@ -188,9 +204,50 @@ func (s *Session) waitForPane(substr string, timeout time.Duration, fatal bool) 
 	}
 }
 
+// TypeQuery types a multi-line SQL query into the active editor.
+// Each \n in sql is sent as an Enter keystroke.
+// When using vim mode, the caller must ensure the editor is in insert mode first (send "i").
+func (s *Session) TypeQuery(sql string) {
+	s.t.Helper()
+	lines := strings.Split(sql, "\n")
+	for i, line := range lines {
+		s.Type(line)
+		if i < len(lines)-1 {
+			s.Send("Enter")
+		}
+	}
+}
+
+// GetPaneText returns the current visible text of the pane.
+func (s *Session) GetPaneText() string {
+	s.t.Helper()
+	text, err := weztermGetText(s.PaneID)
+	if err != nil {
+		s.t.Fatalf("GetPaneText: %v", err)
+	}
+	return text
+}
+
 // Close kills the wezterm pane. Registered automatically by Spawn via t.Cleanup.
 func (s *Session) Close() {
 	_ = weztermKillPane(s.PaneID)
+}
+
+// waitForOneOf polls the log until one of substrs appears and returns the match,
+// or fails the test after timeout. Used to detect either success or failure logs.
+func (s *Session) waitForOneOf(timeout time.Duration, substrs ...string) string {
+	s.t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		for _, sub := range substrs {
+			if s.logContains(sub) {
+				return sub
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	s.t.Fatalf("waitForOneOf: none of %v found in log within %v", substrs, timeout)
+	return ""
 }
 
 func (s *Session) logContains(substr string) bool {
@@ -229,6 +286,34 @@ func fileExists(path string) bool {
 func projectRoot() string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "..", "..")
+}
+
+// CurrentConnectionName returns the name of the connection currently marked as
+// active in vi-sql's config (the one shown with * in `vi-sql -l`). Returns an
+// empty string if the binary is unavailable or no current connection is found.
+func CurrentConnectionName() string {
+	binary := os.Getenv("VI_SQL_WEZTERM_BINARY")
+	if binary == "" {
+		binary = filepath.Join(projectRoot(), ".build", "vi-sql")
+	}
+	abs, err := filepath.Abs(binary)
+	if err != nil || !fileExists(abs) {
+		return ""
+	}
+	out, err := exec.Command(abs, "-l").Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "*") {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(line), "*"))
+		if len(fields) > 0 {
+			return fields[0]
+		}
+	}
+	return ""
 }
 
 func keyDelayFromEnv() time.Duration {
