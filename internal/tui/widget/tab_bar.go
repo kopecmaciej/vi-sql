@@ -22,6 +22,7 @@ const (
 	KindTable
 	KindStructure
 	KindIndex
+	KindView
 )
 
 type tabBarComponent struct {
@@ -162,6 +163,8 @@ func (t *TabBar) tabIcon(kind TabKind) string {
 		return sym.Icon(sym.TabStructure)
 	case KindIndex:
 		return sym.Icon(sym.TabIndex)
+	case KindView:
+		return sym.Icon(sym.View)
 	default:
 		return sym.Icon(sym.TabQuery)
 	}
@@ -234,23 +237,25 @@ func (t *TabBar) Render() {
 	styles := t.styles
 	t.Clear()
 
+	activeStyle := tcell.StyleDefault.
+		Foreground(styles.Global.SecondaryTextColor.Color()).
+		Background(styles.Global.ContrastBackgroundColor.Color()).
+		Attributes(tcell.AttrBold)
+	inactiveStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color())
+	navStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color())
+
 	_, _, width, _ := t.GetInnerRect()
 	if width <= 0 {
 		for i, tab := range t.tabs {
 			cell := tview.NewTableCell(t.tabLabel(tab))
 			if i == t.active {
-				cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
-				cell.SetAttributes(tcell.AttrBold)
-				cell.SetBackgroundColor(styles.Global.MoreContrastBackgroundColor.Color())
+				cell.SetStyle(activeStyle).SetTransparency(false)
 			} else {
-				cell.SetTextColor(styles.Global.TextColor.Color())
+				cell.SetStyle(inactiveStyle)
 			}
 			t.SetCell(0, i, cell)
 		}
-		plusCell := tview.NewTableCell(" + ").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, len(t.tabs), plusCell)
+		t.SetCell(0, len(t.tabs), tview.NewTableCell(" + ").SetStyle(navStyle).SetSelectable(false))
 		return
 	}
 
@@ -259,10 +264,7 @@ func (t *TabBar) Render() {
 	col := 0
 
 	if t.offset > 0 {
-		leftCell := tview.NewTableCell("< ").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, col, leftCell)
+		t.SetCell(0, col, tview.NewTableCell("< ").SetStyle(navStyle).SetSelectable(false))
 		col++
 	}
 
@@ -272,28 +274,20 @@ func (t *TabBar) Render() {
 		tab := t.tabs[i]
 		cell := tview.NewTableCell(t.tabLabel(tab))
 		if i == t.active {
-			cell.SetTextColor(styles.TabBar.ActiveTextColor.Color())
-			cell.SetAttributes(tcell.AttrBold)
-			cell.SetBackgroundColor(styles.Global.MoreContrastBackgroundColor.Color())
+			cell.SetStyle(activeStyle).SetTransparency(false)
 		} else {
-			cell.SetTextColor(styles.Global.TextColor.Color())
+			cell.SetStyle(inactiveStyle)
 		}
 		t.SetCell(0, col, cell)
 		col++
 	}
 
 	if visibleEnd < len(t.tabs) {
-		rightCell := tview.NewTableCell(" >").
-			SetTextColor(styles.Global.SecondaryTextColor.Color()).
-			SetSelectable(false)
-		t.SetCell(0, col, rightCell)
+		t.SetCell(0, col, tview.NewTableCell(" >").SetStyle(navStyle).SetSelectable(false))
 		col++
 	}
 
-	plusCell := tview.NewTableCell(" + ").
-		SetTextColor(styles.Global.SecondaryTextColor.Color()).
-		SetSelectable(false)
-	t.SetCell(0, col, plusCell)
+	t.SetCell(0, col, tview.NewTableCell(" + ").SetStyle(navStyle).SetSelectable(false))
 }
 
 func (t *TabBar) GetActiveComponent() TabBarPrimitive {
@@ -320,11 +314,11 @@ func (t *TabBar) GetActiveTabName() string {
 	return ""
 }
 
-// SwitchToTabByName activates the first tab with the given name.
+// SwitchToTabByName activates the first tab matching both name and kind.
 // Returns true if a matching tab was found.
-func (t *TabBar) SwitchToTabByName(name string) bool {
+func (t *TabBar) SwitchToTabByName(name string, kind TabKind) bool {
 	for i, tab := range t.tabs {
-		if tab.id == name {
+		if tab.id == name && tab.kind == kind {
 			t.active = i
 			t.Render()
 			return true

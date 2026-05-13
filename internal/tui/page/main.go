@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -30,45 +31,43 @@ type Main struct {
 	footer       *component.Footer
 	topBar       *component.TopBar
 	schemas      *component.SchemaTree
+	queryTabs    []*component.Data
 	footerHeight int
-
-	// queryTabs holds only Content (query/table) tabs.
-	queryTabs []*component.Data
-
-	// structureTabs and indexTabs cache open structure/index tabs by "schema.table" key.
-	structureTabs map[string]*component.Structure
-	indexTabs     map[string]*component.Indexes
-
+	// structureTabs, viewStructureTabs, and indexTabs cache open tabs by "schema.name" key.
+	structureTabs     map[string]*component.Structure
+	viewStructureTabs map[string]*component.Structure
+	indexTabs         map[string]*component.Indexes
 	// lastSchemas caches the most recent schema list for new-tab autocomplete.
 	lastSchemas []database.Schema
-
 	// queryTabNums tracks which "Query N" numbers are currently in use,
 	// so closed tabs release their number for reuse.
-	queryTabNums map[int]bool
-
-	tabRegistry *manager.TabRegistry
-
+	queryTabNums    map[int]bool
+	tabRegistry     *manager.TabRegistry
 	actionsModal    *modal.ActionsModal
 	importModal     *modal.ImportModal
 	serverInfoModal *modal.ServerInfoModal
-	renameModal     *core.InputModal
+	goToObjectModal *modal.GoToObjectModal
+	renameModal     *core.InputField
+	updateHandler   func()
 }
 
 func NewMain() *Main {
 	m := &Main{
-		BaseElement:     core.NewBaseElement(),
-		Flex:            core.NewFlex(),
-		innerFlex:       core.NewFlex(),
-		footer:          component.NewFooter(),
-		topBar:          component.NewTopBar(),
-		schemas:         component.NewSchemaTree(),
-		structureTabs:   make(map[string]*component.Structure),
-		indexTabs:       make(map[string]*component.Indexes),
-		queryTabNums:    make(map[int]bool),
-		actionsModal:    modal.NewActionsModal(),
-		importModal:     modal.NewImportModal(),
-		serverInfoModal: modal.NewServerInfoModal(),
-		renameModal:     core.NewInputModal(),
+		BaseElement:       core.NewBaseElement(),
+		Flex:              core.NewFlex(),
+		innerFlex:         core.NewFlex(),
+		footer:            component.NewFooter(),
+		topBar:            component.NewTopBar(),
+		schemas:           component.NewSchemaTree(),
+		structureTabs:     make(map[string]*component.Structure),
+		viewStructureTabs: make(map[string]*component.Structure),
+		indexTabs:         make(map[string]*component.Indexes),
+		queryTabNums:      make(map[int]bool),
+		actionsModal:      modal.NewActionsModal(),
+		importModal:       modal.NewImportModal(),
+		serverInfoModal:   modal.NewServerInfoModal(),
+		goToObjectModal:   modal.NewGoToObjectModal(),
+		renameModal:       core.NewInputField(),
 	}
 
 	m.SetIdentifier(MainPageId)
@@ -81,7 +80,7 @@ func (m *Main) SetRegistry(r *manager.TabRegistry) { m.tabRegistry = r }
 
 func (m *Main) init() error {
 	m.renameModal.SetBorder(true)
-	m.renameModal.SetTitle("Rename tab")
+	m.renameModal.SetTitle(" Rename tab ")
 	m.setStyles()
 	m.setKeybindings()
 	m.handleEvents()
@@ -107,10 +106,19 @@ func (m *Main) handleEvents() {
 					m.openNewQueryTabWithRequest(req)
 				})
 			}
+		case manager.UpdateQueryTab:
+			if req, ok := event.Message.Data.(manager.UpdateQueryTabRequest); ok {
+				go m.App.Application.QueueUpdateDraw(func() {
+					m.tabRegistry.SetText(req.TabID, req.Query)
+				})
+			}
 		case manager.OpenTableTab:
 			if req, ok := event.Message.Data.(manager.TableTabRequest); ok {
 				go m.App.Application.QueueUpdateDraw(func() {
-					m.openTableTabWithOptions(context.Background(), req.Schema, req.Table, component.TabOptions{Where: req.Where})
+					m.openTableTabWithOptions(context.Background(), req.Schema, req.Table, component.TabOptions{
+						Where:       req.Where,
+						FocusColumn: req.FocusColumn,
+					})
 				})
 			}
 		}
@@ -138,9 +146,18 @@ func (m *Main) initComponents() error {
 	if err := m.serverInfoModal.Init(m.App); err != nil {
 		return err
 	}
+	if err := m.goToObjectModal.Init(m.App); err != nil {
+		return err
+	}
 
 	m.schemas.SetImportFunc(func(schema, table string) {
 		m.importModal.Render(schema, table)
+	})
+	m.importModal.SetOnDone(func() {
+		active := m.topBar.GetActiveComponent()
+		if data, ok := active.(*component.Data); ok {
+			data.Refresh()
+		}
 	})
 
 	m.schemas.SetOnSchemasLoaded(func(schemas []database.Schema) {
@@ -180,6 +197,14 @@ func (m *Main) Render() {
 		m.openIndexesTab(ctx, schema, table)
 	})
 
+	m.schemas.SetViewSelectFunc(func(ctx context.Context, schema, view string) error {
+		return m.openViewDataTab(ctx, schema, view)
+	})
+
+	m.schemas.SetViewDDLFunc(func(ctx context.Context, schema, view string) {
+		m.openViewStructureTab(ctx, schema, view)
+	})
+
 	m.render()
 }
 
@@ -207,7 +232,8 @@ func (m *Main) openNewTableTab(ctx context.Context, schema, table string) error 
 	m.queryTabs = append(m.queryTabs, tab)
 	m.topBar.AddDynamicTab(table, tab, widget.KindTable)
 	m.rebuildInnerFlex()
-	// Defer data loading so the first draw properly get height from c.table.GetInnerRect()
+	// Defer so the empty tab frame renders before the blocking metadata queries
+	// (GetTableColumns, GetTableForeignKeys) run on the main goroutine.
 	go m.App.Application.QueueUpdateDraw(func() {
 		if err := tab.HandleTableSelection(ctx, schema, table); err != nil {
 			modal.ShowError(m.App.Pages, "Failed to load table data", err)
@@ -250,6 +276,7 @@ func (m *Main) openNewQueryTabWithRequest(req manager.OpenQueryTabRequest) {
 	}
 	tab := m.queryTabs[len(m.queryTabs)-1]
 	tab.SetEditorText(req.Query)
+	tab.EnterNormalMode()
 }
 
 func (m *Main) openNewQueryTabWithQuery(query string, execute bool) {
@@ -272,7 +299,7 @@ func (m *Main) openNewQueryTab() {
 func (m *Main) openNewQueryTabFull(tabID, name string) {
 	n := m.nextQueryTabNum()
 	m.queryTabNums[n] = true
-	tab := component.NewData()
+	tab := component.NewQueryMode()
 	if err := tab.Init(m.App); err != nil {
 		modal.ShowError(m.App.Pages, "Failed to create tab", err)
 		m.queryTabNums[n] = false
@@ -291,6 +318,7 @@ func (m *Main) openNewQueryTabFull(tabID, name string) {
 		m.topBar.AddDynamicTabWithID(displayName, tabID, widget.KindQuery, tab)
 		if m.tabRegistry != nil {
 			m.tabRegistry.Register(tabID, tab.GetEditorText)
+			m.tabRegistry.RegisterSetter(tabID, tab.SetEditorText)
 		}
 	} else {
 		m.topBar.AddDynamicTab(displayName, tab, widget.KindQuery)
@@ -325,10 +353,13 @@ func (m *Main) closeActiveTab() {
 			delete(m.queryTabNums, n)
 		}
 	case *component.Structure:
-		for key, s := range m.structureTabs {
-			if s == tab {
-				delete(m.structureTabs, key)
-				break
+		structures := []map[string]*component.Structure{m.structureTabs, m.viewStructureTabs}
+		for _, tabs := range structures {
+			for key, s := range tabs {
+				if s == tab {
+					delete(tabs, key)
+					break
+				}
 			}
 		}
 	case *component.Indexes:
@@ -364,12 +395,18 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.queryTabs = m.queryTabs[:0]
 	m.queryTabNums = make(map[int]bool)
 	m.structureTabs = make(map[string]*component.Structure)
+	m.viewStructureTabs = make(map[string]*component.Structure)
 	m.indexTabs = make(map[string]*component.Indexes)
 	m.topBar.ClearAllTabs()
 
 	m.topBar.ResetRendered()
 	m.topBar.Render()
 	m.rebuildInnerFlex()
+}
+
+func (m *Main) SetUpdateHandler(fn func()) {
+	m.updateHandler = fn
+	m.topBar.SetUpdateAvailable()
 }
 
 func (m *Main) JumpToTable(schema, table string) error {
@@ -434,13 +471,13 @@ func (m *Main) ToggleFooter() {
 
 func (m *Main) setKeybindings() {
 	k := m.App.GetKeys()
-	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	m.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if _, isInputBar := m.App.GetFocus().(*component.InputBar); isInputBar {
 			return event
 		}
 
 		switch {
-		case k.Contains(k.Navigation.FocusRight, event.Name()):
+		case k.Match(k.Navigation.FocusRight, event):
 			if !m.topBar.HasTabs() {
 				return nil
 			}
@@ -456,7 +493,7 @@ func (m *Main) setKeybindings() {
 			}
 			// On last tab: do nothing; focus and footer keys stay intact
 			return nil
-		case k.Contains(k.Navigation.FocusLeft, event.Name()):
+		case k.Match(k.Navigation.FocusLeft, event):
 			if m.topBar.HasTabs() {
 				if active, ok := m.topBar.GetActiveComponent().(*component.Indexes); ok && active.IsAddFormFocused() {
 					return event
@@ -470,14 +507,14 @@ func (m *Main) setKeybindings() {
 				m.setFocusToActiveTab()
 			}
 			return nil
-		case k.Contains(k.Main.FocusSchemaTree, event.Name()):
+		case k.Match(k.Main.FocusSchemaTree, event):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); !ok {
 				m.showSchemas()
 			} else {
 				m.App.SetFocus(m.schemas)
 			}
 			return nil
-		case k.Contains(k.Main.HideSchema, event.Name()):
+		case k.Match(k.Main.HideSchema, event):
 			if _, ok := m.GetItem(0).(*component.SchemaTree); ok {
 				m.RemoveItem(m.schemas)
 				if m.topBar.HasTabs() {
@@ -487,27 +524,33 @@ func (m *Main) setKeybindings() {
 				m.showSchemas()
 			}
 			return nil
-		case k.Contains(k.Main.ServerInfo, event.Name()):
+		case k.Match(k.Main.ServerInfo, event):
 			m.showServerInfo()
 			return nil
-		case k.Contains(k.Main.OpenActions, event.Name()):
+		case k.Match(k.Main.OpenActions, event):
 			m.openActionsModal()
 			return nil
-		case k.Contains(k.Main.NewTab, event.Name()):
+		case k.Match(k.Main.NewTab, event):
 			m.openNewQueryTab()
 			return nil
-		case k.Contains(k.Main.CloseTab, event.Name()):
+		case k.Match(k.Main.CloseTab, event):
 			m.closeActiveTab()
 			return nil
-		case k.Contains(k.Main.RenameTab, event.Name()):
+		case k.Match(k.Main.RenameTab, event):
 			m.renameActiveTab()
 			return nil
-		case k.Contains(k.Main.ImportData, event.Name()):
+		case k.Match(k.Main.ImportData, event):
 			m.importModal.Render(m.schemas.SelectedTable())
+			return nil
+		case k.Match(k.Main.GoToTable, event):
+			m.openGoToTableModal()
+			return nil
+		case k.Match(k.Main.GoToView, event):
+			m.openGoToViewModal()
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 // setFocusToActiveTab sets focus on the right inner primitive of the currently active tab.
@@ -539,15 +582,14 @@ func (m *Main) renameActiveTab() {
 			}
 			m.topBar.RenameActiveTab(newName)
 			m.renameModal.SetText("")
-			m.App.Pages.RemovePage(mainRenameModalId)
+			m.App.Pages.RemoveModalPage(mainRenameModalId)
 		case tcell.KeyEscape:
 			m.renameModal.SetText("")
-			m.App.Pages.RemovePage(mainRenameModalId)
+			m.App.Pages.RemoveModalPage(mainRenameModalId)
 		}
 		return event
 	})
-	m.App.Pages.AddPage(mainRenameModalId, m.renameModal, true, true)
-	m.App.SetFocusOnly(m.renameModal)
+	m.App.Pages.ShowModal(mainRenameModalId, core.CenteredFlex(m.renameModal, 2, 1), m.renameModal, true, true)
 }
 
 func (m *Main) openActionsModal() {
@@ -559,7 +601,14 @@ func (m *Main) openActionsModal() {
 		mcpLabel = "Disable MCP server"
 	}
 
-	entries := []modal.ActionEntry{
+	entries := []modal.ActionEntry{}
+	if m.updateHandler != nil {
+		entries = append(entries, modal.ActionEntry{
+			Label:   "Update vi-sql",
+			Handler: m.updateHandler,
+		})
+	}
+	entries = append(entries, []modal.ActionEntry{
 		{
 			Label:   "Server info",
 			KeyHint: k.Main.ServerInfo.String(),
@@ -583,6 +632,17 @@ func (m *Main) openActionsModal() {
 			Label:   "Options page",
 			Handler: m.App.OpenOptionsPage,
 		},
+	}...)
+
+	cfg := m.App.GetConfig()
+	if cfg.Security.Method == config.SecurityMethodMaster && cfg.IsMasterConfigured() {
+		entries = append(entries, modal.ActionEntry{
+			Label:   "Change master password",
+			Handler: m.openChangeMasterModal,
+		})
+	}
+
+	entries = append(entries, []modal.ActionEntry{
 		{
 			Label:   "New tab",
 			KeyHint: k.Main.NewTab.String(),
@@ -608,29 +668,49 @@ func (m *Main) openActionsModal() {
 			KeyHint: k.Common.Add.String(),
 			Handler: func() { m.schemas.OpenCreateTable(ctx) },
 		},
-	}
+		{
+			Label:   "Go to table",
+			KeyHint: k.Main.GoToTable.String(),
+			Handler: m.openGoToTableModal,
+		},
+		{
+			Label:   "Go to view",
+			KeyHint: k.Main.GoToView.String(),
+			Handler: m.openGoToViewModal,
+		},
+	}...)
 
-	// Resolve the schema/table for Structure and Indexes actions:
-	// prefer the active table tab; fall back to the schema tree selection.
+	// Resolve the schema/table (or view) for Structure/Indexes/View DDL actions:
+	// prefer the active data tab; fall back to the schema tree selection.
 	structSchema, structTable := "", ""
+	isViewAction := false
 	if data, ok := m.topBar.GetActiveComponent().(*component.Data); ok {
 		structSchema, structTable = data.SelectedTable()
+		isViewAction = data.IsViewTab()
 	}
 	if structTable == "" {
 		structSchema, structTable = m.schemas.SelectedTable()
+		isViewAction = m.schemas.IsViewSelected()
 	}
 	if structTable != "" {
-		schema, table := structSchema, structTable
-		entries = append(entries,
-			modal.ActionEntry{
-				Label:   "Structure",
-				Handler: func() { m.openStructureTab(ctx, schema, table) },
-			},
-			modal.ActionEntry{
-				Label:   "Indexes",
-				Handler: func() { m.openIndexesTab(ctx, schema, table) },
-			},
-		)
+		schema, name := structSchema, structTable
+		if isViewAction {
+			entries = append(entries, modal.ActionEntry{
+				Label:   "View DDL",
+				Handler: func() { m.openViewStructureTab(ctx, schema, name) },
+			})
+		} else {
+			entries = append(entries,
+				modal.ActionEntry{
+					Label:   "Structure",
+					Handler: func() { m.openStructureTab(ctx, schema, name) },
+				},
+				modal.ActionEntry{
+					Label:   "Indexes",
+					Handler: func() { m.openIndexesTab(ctx, schema, name) },
+				},
+			)
+		}
 	}
 
 	if data, ok := m.topBar.GetActiveComponent().(*component.Data); ok {
@@ -645,6 +725,11 @@ func (m *Main) openActionsModal() {
 
 		entries = append(entries,
 			modal.ActionEntry{
+				Label:    "Count rows",
+				Handler:  func() { data.RunCount() },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
 				Label:    "Export data",
 				KeyHint:  k.Data.ExportData.String(),
 				Handler:  func() { data.OpenExport(ctx) },
@@ -657,11 +742,31 @@ func (m *Main) openActionsModal() {
 				Disabled: !hasResults,
 			},
 			modal.ActionEntry{
+				Label:    "Copy row as JSON",
+				KeyHint:  k.Data.CopyRowJSON.String(),
+				Handler:  func() { data.CopyRowAs(util.ExportJSON) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
+				Label:    "Copy row as CSV",
+				KeyHint:  k.Data.CopyRowCSV.String(),
+				Handler:  func() { data.CopyRowAs(util.ExportCSV) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
 				Label:   "History",
 				KeyHint: k.SQLQueryEditor.OpenHistory.String(),
 				Handler: historyHandler,
 			},
 		)
+
+		if data.IsQueryTab() {
+			entries = append(entries, modal.ActionEntry{
+				Label:   "Format query",
+				KeyHint: k.SQLQueryEditor.Prettify.String(),
+				Handler: data.Prettify,
+			})
+		}
 	}
 
 	m.actionsModal.Open(entries)
@@ -681,7 +786,44 @@ func (m *Main) openStructureTab(ctx context.Context, schema, table string) {
 		m.rebuildInnerFlex()
 		tab.HandleTableSelection(ctx, schema, table)
 	} else {
-		m.topBar.SwitchToTabByName(table)
+		m.topBar.SwitchToTabByName(table, widget.KindStructure)
+		m.rebuildInnerFlex()
+	}
+	m.App.SetFocus(tab)
+}
+
+func (m *Main) openViewDataTab(ctx context.Context, schema, view string) error {
+	tab := component.NewViewTab()
+	if err := tab.Init(m.App); err != nil {
+		return err
+	}
+	tab.SetSchemasForAutocomplete(m.lastSchemas)
+	m.queryTabs = append(m.queryTabs, tab)
+	m.topBar.AddDynamicTab(view, tab, widget.KindView)
+	m.rebuildInnerFlex()
+	go m.App.Application.QueueUpdateDraw(func() {
+		if err := tab.HandleTableSelection(ctx, schema, view); err != nil {
+			modal.ShowError(m.App.Pages, "Failed to load view data", err)
+		}
+	})
+	return nil
+}
+
+func (m *Main) openViewStructureTab(ctx context.Context, schema, view string) {
+	key := schema + "." + view
+	tab, exists := m.viewStructureTabs[key]
+	if !exists {
+		tab = component.NewStructure()
+		if err := tab.Init(m.App); err != nil {
+			modal.ShowError(m.App.Pages, "Failed to init view structure tab", err)
+			return
+		}
+		m.viewStructureTabs[key] = tab
+		m.topBar.AddDynamicTab(view, tab, widget.KindStructure)
+		m.rebuildInnerFlex()
+		tab.HandleViewSelection(ctx, schema, view)
+	} else {
+		m.topBar.SwitchToTabByName(view, widget.KindStructure)
 		m.rebuildInnerFlex()
 	}
 	m.App.SetFocus(tab)
@@ -701,10 +843,35 @@ func (m *Main) openIndexesTab(ctx context.Context, schema, table string) {
 		m.rebuildInnerFlex()
 		tab.HandleTableSelection(ctx, schema, table)
 	} else {
-		m.topBar.SwitchToTabByName(table)
+		m.topBar.SwitchToTabByName(table, widget.KindIndex)
 		m.rebuildInnerFlex()
 	}
 	m.App.SetFocus(tab)
+}
+
+func (m *Main) openGoToTableModal() {
+	m.goToObjectModal.Open(m.lastSchemas, " Go to table ", func(s database.Schema) []string { return s.Tables }, m.JumpToTable)
+}
+
+func (m *Main) openGoToViewModal() {
+	m.goToObjectModal.Open(m.lastSchemas, " Go to view ", func(s database.Schema) []string { return s.Views }, m.JumpToView)
+}
+
+func (m *Main) JumpToView(schema, view string) error {
+	if m.Driver == nil {
+		return fmt.Errorf("not connected to a database")
+	}
+	ctx := context.Background()
+	return m.schemas.JumpToView(ctx, schema, view)
+}
+
+func (m *Main) openChangeMasterModal() {
+	mp := modal.NewMasterPasswordModal(modal.MasterModeChange)
+	if err := mp.Init(m.App); err != nil {
+		modal.ShowError(m.App.Pages, "Failed to init master password modal", err)
+		return
+	}
+	mp.Render()
 }
 
 func (m *Main) showServerInfo() {

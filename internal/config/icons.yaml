@@ -24,6 +24,20 @@ nerd:
   tabQuery: "" # nf-fa-terminal
   tabStructure: "" # nf-fa-sitemap
   tabIndex: "" # nf-fa-list-ol
+  view: "󱂔" # nf-md-table_eye
+  primaryKey: "" # nf-fa-key
+  foreignKey: "" # nf-fa-link
+  completionKeyword: "󰘦" # nf-md-tag
+  completionCTE: "󰆍" # nf-md-source_branch
+  completionAlias: "" # nf-fa-arrow_right
+  completionFunction: "󰊕" # nf-md-function
+  driverPostgres: "" # nf-dev-postgresql
+  driverMySQL: "" # nf-dev-mysql
+  driverSQLite: "" # nf-dev-sqlite
+  driverMariaDB: "" # nf-dev-mariadb
+  driverCockroachDB: "" # nf-fa-database
+  driverDefault: "" # nf-fa-database
+  update: "" # nf-fa-arrow_circle_up
 ascii:
   openNode: "▾"
   closedNode: "▸"
@@ -47,3 +61,17 @@ ascii:
   tabQuery: "Q"
   tabStructure: "S"
   tabIndex: "I"
+  view: "V"
+  primaryKey: "*"
+  foreignKey: "fk"
+  completionKeyword: "kw"
+  completionCTE: "ct"
+  completionAlias: "al"
+  completionFunction: "fn"
+  driverPostgres: "PG"
+  driverMySQL: "MY"
+  driverMariaDB: "MA"
+  driverSQLite: "SQ"
+  driverCockroachDB: "CR"
+  driverDefault: "DB"
+  update: "↑"

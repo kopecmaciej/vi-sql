@@ -135,20 +135,30 @@ func TestTableState_DeleteRow(t *testing.T) {
 	assert.Equal(t, "Bob", rows[0]["name"])
 }
 
-func TestTableState_Pagination(t *testing.T) {
+func TestTableState_AppendRows(t *testing.T) {
 	state := NewTableState("public", "t")
-	state.BatchSize = 10
-	state.Count = 25
+	state.PopulateRows([]Row{{"id": int64(1)}})
 
-	assert.Equal(t, int64(1), state.GetCurrentPage())
-	assert.Equal(t, int64(3), state.GetTotalPages())
+	state.AppendRows([]Row{{"id": int64(2)}, {"id": int64(3)}})
 
-	state.SetOffset(10)
-	assert.Equal(t, int64(2), state.GetCurrentPage())
+	assert.Equal(t, 3, state.RowCount())
+	rows := state.GetAllRows()
+	assert.Equal(t, int64(1), rows[0]["id"])
+	assert.Equal(t, int64(2), rows[1]["id"])
+	assert.Equal(t, int64(3), rows[2]["id"])
+}
 
-	// Negative offset is clamped to 0
-	state.SetOffset(-5)
-	assert.Equal(t, int64(0), state.Offset)
+func TestTableState_ClearBuffer(t *testing.T) {
+	state := NewTableState("public", "t")
+	state.PopulateRows([]Row{{"id": int64(1)}})
+	state.Count = 42
+	state.CountIsEstimate = true
+
+	state.ClearBuffer()
+
+	assert.Equal(t, 0, state.RowCount())
+	assert.Equal(t, int64(0), state.Count)
+	assert.False(t, state.CountIsEstimate)
 }
 
 func TestStateMap_SetAndGet(t *testing.T) {
@@ -159,21 +169,4 @@ func TestStateMap_SetAndGet(t *testing.T) {
 	got, ok := sm.Get(sm.Key("public", "users"))
 	assert.True(t, ok)
 	assert.Same(t, state, got)
-}
-
-func TestStateMap_HiddenColumns(t *testing.T) {
-	sm := NewStateMap()
-
-	assert.Empty(t, sm.GetHiddenColumns("public", "users"))
-
-	sm.AddHiddenColumn("public", "users", "secret")
-	sm.AddHiddenColumn("public", "users", "internal")
-	cols := sm.GetHiddenColumns("public", "users")
-	assert.ElementsMatch(t, []string{"secret", "internal"}, cols)
-
-	// Other tables are unaffected
-	assert.Empty(t, sm.GetHiddenColumns("public", "orders"))
-
-	sm.ResetHiddenColumns("public", "users")
-	assert.Empty(t, sm.GetHiddenColumns("public", "users"))
 }

@@ -39,7 +39,10 @@ func NewTestApp(t *testing.T) (*core.App, tcell.SimulationScreen) {
 	sim.SetSize(120, 40)
 	app.SetScreen(sim)
 
-	t.Cleanup(func() { app.Stop() })
+	t.Cleanup(func() {
+		app.GetManager().Stop()
+		app.Stop()
+	})
 
 	return app, sim
 }

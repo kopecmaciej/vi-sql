@@ -1,6 +1,6 @@
 global:
   backgroundColor: "#0F172A"
-  contrastBackgroundColor: "#1E293B"
+  contrastBackgroundColor: "#26344a"
   moreContrastBackgroundColor: "#387D44"
   textColor: "#E2E8F0"
   secondaryTextColor: "#FDE68A"
@@ -9,6 +9,9 @@ global:
   titleColor: "#387D44"
   graphicsColor: "#387D44"
   dimColor: "#64748B"
+  successColor: "#4ADE80"
+  errorColor: "#F87171"
+  warningColor: "#FACC15"
 connection:
   listTextColor: "#F1FA8C"
   listSelectedTextColor: "#F1FA8C"
@@ -16,21 +19,17 @@ connection:
   listSecondaryTextColor: "#387D44"
 data:
   cellTextColor: "#387D44"
-  selectedRowColor: "#4ADE80"
+  selectedRowColor: "#449650"
   multiSelectedRowColor: "#2E6B4A"
 tabBar:
   activeTextColor: "#FDE68A"
-inputBar:
-  autocomplete:
-    backgroundColor: "#1E293B"
-    textColor: "#E2E8F0"
-    activeBackgroundColor: "#387D44"
-    activeTextColor: "#0F172A"
-    secondaryTextColor: "#FDE68A"
-    borderColor: "#4ADE80"
-help:
-  scrollBarTrackColor: "#4A5568"
-  selectedBackgroundColor: "#FDE68A"
+autocomplete:
+  backgroundColor: "#141f38"
+  textColor: "#E2E8F0"
+  activeBackgroundColor: "#263a69"
+  activeTextColor: "#E2E8F0"
+  secondaryTextColor: "#FDE68A"
+  borderColor: "#449650"
 others:
   leafIconColor: "#387D44"
   separatorColor: "#334155"
@@ -38,7 +37,7 @@ others:
   deleteButtonSelectedBackgroundColor: "#DA3312"
   peekerHighlightColor: "#3A4963"
 sqlEditor:
-  keywordColor: "#4ADE80"
+  keywordColor: "#449650"
   stringColor: "#FDE68A"
   numberColor: "#FB923C"
   commentColor: "#64748B"

@@ -31,20 +31,36 @@ func (p *Pages) SetStyle(style *config.Styles) {
 		Background(style.Global.BackgroundColor.Color()))
 }
 
-// AddPage wraps tview.Pages.AddPage with focus tracking.
+// AddPage is a plain pass-through to tview.Pages.AddPage
 func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
+	return p.Pages.AddPage(string(view), page, resize, visible)
+}
+
+// AddModalPage snapshots the current focus and adds the page. The captured
+// focus is restored when the page is dismissed via RemoveModalPage.
+func (p *Pages) AddModalPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
 	p.app.SnapshotFocus()
-	p.Pages.AddPage(string(view), page, resize, visible)
-	if visible && page.HasFocus() {
-		p.app.FocusChanged(page)
-	}
+	return p.Pages.AddPage(string(view), page, resize, visible)
+}
+
+// RemovePage is a plain pass-through. Used to dismiss pages added via AddPage.
+func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
+	return p.Pages.RemovePage(string(view))
+}
+
+// RemoveModalPage removes a page added via AddModalPage and restores the
+// focus captured at open time.
+func (p *Pages) RemoveModalPage(view tview.Identifier) *tview.Pages {
+	p.Pages.RemovePage(string(view))
+	p.app.RestoreFocus()
 	return p.Pages
 }
 
-// RemovePage wraps tview.Pages.RemovePage with focus restoration.
-func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
-	p.Pages.RemovePage(string(view))
-	p.app.RestoreFocus()
+// ShowModal snapshots focus, adds the page, and focuses the given primitive.
+// Use RemoveModalPage to dismiss.
+func (p *Pages) ShowModal(view tview.Identifier, page tview.Primitive, focus tview.Primitive, resize, visible bool) *tview.Pages {
+	p.AddModalPage(view, page, resize, visible)
+	p.app.SetFocusOnly(focus)
 	return p.Pages
 }
 
@@ -52,3 +68,4 @@ func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
 func (p *Pages) HasPage(view tview.Identifier) bool {
 	return p.Pages.HasPage(string(view))
 }
+

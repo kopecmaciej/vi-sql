@@ -210,13 +210,13 @@ func (c *Changelog) InputHandler() func(event *tcell.EventKey, setFocus func(p t
 		switch {
 		case event.Key() == tcell.KeyEnter:
 			c.activateButton()
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			c.textView.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
+		case k.Match(k.Navigation.MoveUp, event):
 			c.textView.InputHandler()(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveLeft, event.Name()):
+		case k.Match(k.Navigation.MoveLeft, event):
 			c.form.InputHandler()(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), setFocus)
-		case k.Contains(k.Navigation.MoveRight, event.Name()):
+		case k.Match(k.Navigation.MoveRight, event):
 			c.form.InputHandler()(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), setFocus)
 		default:
 			c.form.InputHandler()(event, setFocus)
@@ -246,8 +246,7 @@ func (c *Changelog) Render() {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	c.App.Pages.AddPage(ChangelogModalId, wrapper, true, true)
-	c.App.SetFocusOnly(c)
+	c.App.Pages.ShowModal(ChangelogModalId, wrapper, c, true, true)
 }
 
 // changeGroup holds a named set of changelog items that share the same category.

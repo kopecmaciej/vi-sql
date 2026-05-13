@@ -24,6 +24,8 @@ type (
 	ElementManager struct {
 		mutex     sync.Mutex
 		listeners map[tview.Identifier]chan EventMsg
+		done      chan struct{}
+		stopOnce  sync.Once
 	}
 )
 
@@ -31,41 +33,51 @@ func NewElementManager() *ElementManager {
 	return &ElementManager{
 		mutex:     sync.Mutex{},
 		listeners: make(map[tview.Identifier]chan EventMsg),
+		done:      make(chan struct{}),
 	}
 }
 
-func (eh *ElementManager) Subscribe(element tview.Identifier) chan EventMsg {
-	eh.mutex.Lock()
-	defer eh.mutex.Unlock()
+func (em *ElementManager) Subscribe(element tview.Identifier) chan EventMsg {
+	em.mutex.Lock()
+	defer em.mutex.Unlock()
 	listener := make(chan EventMsg, 1)
-	eh.listeners[element] = listener
+	em.listeners[element] = listener
 	return listener
 }
 
-func (eh *ElementManager) Unsubscribe(element tview.Identifier, listener chan EventMsg) {
-	eh.mutex.Lock()
-	defer eh.mutex.Unlock()
-	delete(eh.listeners, element)
-}
-
-func (eh *ElementManager) Broadcast(event EventMsg) {
-	eh.mutex.Lock()
-	channels := make([]chan EventMsg, 0, len(eh.listeners))
-	for _, ch := range eh.listeners {
+func (em *ElementManager) Broadcast(event EventMsg) {
+	em.mutex.Lock()
+	channels := make([]chan EventMsg, 0, len(em.listeners))
+	for _, ch := range em.listeners {
 		channels = append(channels, ch)
 	}
-	eh.mutex.Unlock()
+	em.mutex.Unlock()
 
 	for _, ch := range channels {
-		go func(c chan EventMsg) { c <- event }(ch)
+		go func(c chan EventMsg) {
+			select {
+			case c <- event:
+			case <-em.done:
+			}
+		}(ch)
 	}
 }
 
-func (eh *ElementManager) SendTo(element tview.Identifier, event EventMsg) {
-	eh.mutex.Lock()
-	ch, exists := eh.listeners[element]
-	eh.mutex.Unlock()
+func (em *ElementManager) SendTo(element tview.Identifier, event EventMsg) {
+	em.mutex.Lock()
+	ch, exists := em.listeners[element]
+	em.mutex.Unlock()
 	if exists {
 		go func() { ch <- event }()
 	}
+}
+
+func (em *ElementManager) Done() chan struct{} {
+	return em.done
+}
+
+func (em *ElementManager) Stop() {
+	em.stopOnce.Do(func() {
+		close(em.done)
+	})
 }

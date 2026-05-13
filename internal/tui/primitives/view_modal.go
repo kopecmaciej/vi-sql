@@ -6,6 +6,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
+	"github.com/kopecmaciej/vi-sql/internal/config"
 )
 
 // RowLine represents a single row field displayed in the ViewModal.
@@ -13,7 +14,6 @@ type RowLine struct {
 	Key   string
 	Type  string
 	Value string
-	IsPK  bool
 	// PrettyValue holds a pre-formatted multi-line representation of Value
 	// (e.g. indented JSON or XML). When non-empty it is used instead of
 	// word-wrapping Value in the expanded view.
@@ -54,7 +54,10 @@ type ViewModal struct {
 
 	isFullScreen bool
 
-	done func(buttonIndex int, buttonLabel string)
+	keys *config.KeyBindings
+	// buttonsFocused switches keyboard routing from row navigation to button navigation.
+	buttonsFocused bool
+	done           func(buttonIndex int, buttonLabel string)
 }
 
 // NewViewModal returns a new ViewModal.
@@ -111,6 +114,13 @@ func (m *ViewModal) SetTitleColor(color tcell.Color) *tview.Box {
 	return m.Box
 }
 
+// SetFrameTitle sets the visible title on the frame border (the drawn surface).
+// Use this instead of SetTitle, which targets the embedded Box that is never drawn.
+func (m *ViewModal) SetFrameTitle(title string) *ViewModal {
+	m.frame.SetTitle(title)
+	return m
+}
+
 func (m *ViewModal) SetFocusStyle(style tcell.Style) *tview.Box {
 	m.Box.SetFocusStyle(style)
 	m.frame.SetFocusStyle(style)
@@ -164,18 +174,14 @@ func (m *ViewModal) AddButtons(labels []string) *ViewModal {
 					m.done(i, l)
 				}
 			})
-			button := m.form.GetButton(m.form.GetButtonCount() - 1)
-			button.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-				switch event.Rune() {
-				case 'h':
-					return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone)
-				case 'l':
-					return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-				}
-				return event
-			})
 		}(index, label)
 	}
+	return m
+}
+
+// SetKeys provides config-driven navigation keys used in the input handler.
+func (m *ViewModal) SetKeys(k *config.KeyBindings) *ViewModal {
+	m.keys = k
 	return m
 }
 
@@ -192,6 +198,7 @@ func (m *ViewModal) SetRows(rows []RowLine) {
 	m.scrollPosition = 0
 	m.selectedRow = 0
 	m.expanded = make(map[int]bool)
+	m.buttonsFocused = false
 }
 
 // --- Full screen ---
@@ -479,7 +486,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 				if visualLine >= maxVisualLines {
 					break
 				}
-				valueLine := fmt.Sprintf("[%s]%s%s", m.valueColor.CSS(), indent, wl)
+				valueLine := fmt.Sprintf("[%s]%s%s", m.valueColor.CSS(), indent, tview.Escape(wl))
 				if isSelected {
 					valueLine = fmt.Sprintf("[-:%s:b] %s[-:-:-]", m.highlightColor.CSS(), valueLine)
 				} else {
@@ -498,7 +505,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 			line := fmt.Sprintf("[%s]%-*s  [%s]%-*s  [%s]%s",
 				m.keyColor.CSS(), maxKeyLen, rl.Key,
 				m.typeColor.CSS(), maxTypeLen, displayType,
-				m.valueColor.CSS(), displayValue,
+				m.valueColor.CSS(), tview.Escape(displayValue),
 			)
 
 			if isSelected {
@@ -525,34 +532,70 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 
 func (m *ViewModal) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return m.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		switch event.Key() {
-		case tcell.KeyDown:
+		if m.buttonsFocused {
+			m.handleButtonsInput(event, setFocus)
+			return
+		}
+		m.handleRowsInput(event, setFocus)
+	})
+}
+
+func (m *ViewModal) handleRowsInput(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	if m.keys != nil {
+		switch {
+		case m.keys.Match(m.keys.Navigation.FocusDown, event):
+			if m.form.GetButtonCount() > 0 {
+				m.buttonsFocused = true
+			}
+			return
+		case m.keys.Match(m.keys.Navigation.MoveDown, event):
 			m.MoveDown()
 			return
-		case tcell.KeyUp:
+		case m.keys.Match(m.keys.Navigation.MoveUp, event):
 			m.MoveUp()
 			return
-		case tcell.KeyEnter:
-			m.ToggleExpand()
-			return
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 'j':
-				m.MoveDown()
-				return
-			case 'k':
-				m.MoveUp()
-				return
-			}
 		}
+	}
 
-		if m.frame.HasFocus() {
+	switch event.Key() {
+	case tcell.KeyDown:
+		m.MoveDown()
+		return
+	case tcell.KeyUp:
+		m.MoveUp()
+		return
+	case tcell.KeyEnter:
+		m.ToggleExpand()
+		return
+	}
+
+	if handler := m.frame.InputHandler(); handler != nil {
+		handler(event, setFocus)
+	}
+}
+
+func (m *ViewModal) handleButtonsInput(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	if m.keys != nil {
+		switch {
+		case m.keys.Match(m.keys.Navigation.FocusUp, event):
+			m.buttonsFocused = false
+			return
+		case m.keys.Match(m.keys.Navigation.MoveLeft, event):
 			if handler := m.frame.InputHandler(); handler != nil {
-				handler(event, setFocus)
-				return
+				handler(tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModNone), setFocus)
 			}
+			return
+		case m.keys.Match(m.keys.Navigation.MoveRight, event):
+			if handler := m.frame.InputHandler(); handler != nil {
+				handler(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone), setFocus)
+			}
+			return
 		}
-	})
+	}
+
+	if handler := m.frame.InputHandler(); handler != nil {
+		handler(event, setFocus)
+	}
 }
 
 // --- Mouse handling ---

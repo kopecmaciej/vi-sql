@@ -34,6 +34,7 @@ type (
 	}
 	TextView struct {
 		*tview.TextView
+		rawInput bool
 	}
 	TextArea struct {
 		*tview.TextArea
@@ -50,16 +51,22 @@ type (
 	ViewModal struct {
 		*primitives.ViewModal
 	}
-	FormModal struct {
-		*primitives.FormModal
-	}
-	InputModal struct {
-		*primitives.InputModal
-	}
 )
 
 func NewFlex() *Flex {
 	return &Flex{Flex: tview.NewFlex()}
+}
+
+// CenteredFlex wraps inner in a 1:widthRatio:1 / 1:heightRatio:1 flex grid,
+// producing a centered modal effect when added as a full-screen page.
+func CenteredFlex(inner tview.Primitive, widthRatio, heightRatio int) *tview.Flex {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(inner, 0, heightRatio, true).
+			AddItem(nil, 0, 1, false), 0, widthRatio, true).
+		AddItem(nil, 0, 1, false)
 }
 
 func NewList() *List {
@@ -69,6 +76,12 @@ func NewList() *List {
 func NewTextView() *TextView {
 	return &TextView{TextView: tview.NewTextView()}
 }
+
+// SetRawInput marks this TextView as a raw-input surface (e.g. a key-capture
+// panel) so the sequence machine treats it like a text input and does not
+// absorb sequence prefixes while it has focus.
+func (t *TextView) SetRawInput(v bool) { t.rawInput = v }
+func (t *TextView) IsRawInput() bool   { return t.rawInput }
 
 func NewTextArea() *TextArea {
 	return &TextArea{TextArea: tview.NewTextArea()}
@@ -88,14 +101,6 @@ func NewModal() *Modal {
 
 func NewViewModal() *ViewModal {
 	return &ViewModal{ViewModal: primitives.NewViewModal()}
-}
-
-func NewFormModal() *FormModal {
-	return &FormModal{FormModal: primitives.NewFormModal()}
-}
-
-func NewInputModal() *InputModal {
-	return &InputModal{InputModal: primitives.NewInputModal()}
 }
 
 func (f *Flex) SetStyle(style *config.Styles) {
@@ -131,7 +136,7 @@ func (i *InputField) SetStyle(style *config.Styles) {
 	i.SetLabelStyle(tcell.StyleDefault.
 		Foreground(style.Global.TextColor.Color()).
 		Background(style.Global.BackgroundColor.Color()))
-	i.SetFieldBackgroundColor(style.Global.BackgroundColor.Color())
+	i.SetFieldBackgroundColor(style.Global.ContrastBackgroundColor.Color())
 	i.SetFieldTextColor(style.Global.TextColor.Color())
 	i.SetPlaceholderTextColor(style.Global.TextColor.Color())
 }
@@ -150,35 +155,22 @@ func (v *ViewModal) SetStyle(style *config.Styles) {
 	v.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
 }
 
-func (m *InputModal) SetStyle(style *config.Styles) {
-	SetCommonStyle(m.Box, style)
-	m.SetFieldTextColor(style.Global.SecondaryTextColor.Color())
-	m.SetFieldBackgroundColor(style.Global.ContrastBackgroundColor.Color())
-}
-
-func (f *FormModal) SetStyle(style *config.Styles) {
-	SetCommonStyle(f.FormModal, style)
-	SetCommonStyle(f.FormModal.Form, style)
-	f.Form.SetButtonBackgroundColor(style.Global.MoreContrastBackgroundColor.Color())
-	f.Form.SetButtonTextColor(style.Others.ButtonsTextColor.Color())
-}
-
 // DropdownInputCapture returns an input capture that translates configured
 // dropdown keys to the arrow/enter keys that tview's autocomplete list understands.
 // Use this on any InputField with autocomplete or tview.DropDown.
 func DropdownInputCapture(k *config.KeyBindings, next func(*tcell.EventKey) *tcell.EventKey) func(*tcell.EventKey) *tcell.EventKey {
-	return func(event *tcell.EventKey) *tcell.EventKey {
+	return k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 		}
 		if next != nil {
 			return next(event)
 		}
 		return event
-	}
+	})
 }

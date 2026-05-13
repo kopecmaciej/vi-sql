@@ -36,7 +36,7 @@ func TestFilterPendingEntries(t *testing.T) {
 			wantCount:   0,
 		},
 		{
-			name:        "entry equal to stored version — no show (loop prevention)",
+			name:        "entry equal to stored version",
 			lastVersion: "0.0.2",
 			entries:     makeChangelogEntries("0.0.2"),
 			wantCount:   0,
@@ -48,22 +48,16 @@ func TestFilterPendingEntries(t *testing.T) {
 			wantCount:   1,
 		},
 		{
-			name:        "multiple entries, only newer ones returned",
+			name:        "multiple entries only newer ones returned",
 			lastVersion: "0.0.2",
 			entries:     makeChangelogEntries("0.0.1", "0.0.2", "0.0.3", "0.1.0"),
 			wantCount:   2,
 		},
 		{
-			name:        "v-prefix in stored version handled",
+			name:        "stored version with v prefix",
 			lastVersion: "v0.0.1",
 			entries:     makeChangelogEntries("0.0.2"),
 			wantCount:   1,
-		},
-		{
-			name:        "dirty dev build stored, entry for same tag — no show",
-			lastVersion: "0.0.2",
-			entries:     makeChangelogEntries("0.0.2"),
-			wantCount:   0,
 		},
 	}
 
@@ -75,17 +69,14 @@ func TestFilterPendingEntries(t *testing.T) {
 	}
 }
 
-// TestNoLoopAfterAcknowledge verifies the loop-prevention property: once the config
-// version is updated to the current build version, FilterPendingEntries returns nothing
-// so the changelog modal cannot re-trigger in the same session.
 func TestNoLoopAfterAcknowledge(t *testing.T) {
 	entries := makeChangelogEntries("0.0.2")
 
 	pending := FilterPendingEntries("0.0.1", entries)
-	assert.NotEmpty(t, pending, "changelog should appear on upgrade")
+	assert.NotEmpty(t, pending)
 
 	pendingAfter := FilterPendingEntries("0.0.2", entries)
-	assert.Empty(t, pendingAfter, "changelog must not appear again after acknowledging")
+	assert.Empty(t, pendingAfter)
 }
 
 func TestRunMigrations(t *testing.T) {
@@ -109,7 +100,7 @@ func TestRunMigrations(t *testing.T) {
 		assert.Equal(t, 2, called)
 	})
 
-	t.Run("first migration fails — stops immediately", func(t *testing.T) {
+	t.Run("first migration fails stops immediately", func(t *testing.T) {
 		secondCalled := false
 		entries := []ChangelogEntry{
 			{Version: "0.0.1", MigrationFn: func() error { return errBoom }},
@@ -118,7 +109,7 @@ func TestRunMigrations(t *testing.T) {
 		err := RunMigrations(entries)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errBoom)
-		assert.False(t, secondCalled, "second migration must not run after first fails")
+		assert.False(t, secondCalled)
 	})
 
 	t.Run("error wraps version", func(t *testing.T) {

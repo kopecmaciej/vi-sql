@@ -15,11 +15,11 @@ func ScreenRow(sim tcell.SimulationScreen, y int) string {
 	w, _ := sim.Size()
 	var sb strings.Builder
 	for x := 0; x < w; x++ {
-		ch, _, _, _ := sim.GetContent(x, y)
-		if ch == 0 {
-			ch = ' '
+		str, _, _ := sim.Get(x, y)
+		if str == "" {
+			str = " "
 		}
-		sb.WriteRune(ch)
+		sb.WriteString(str)
 	}
 	return strings.TrimRight(sb.String(), " ")
 }

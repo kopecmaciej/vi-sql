@@ -1,0 +1,610 @@
+//go:build integration
+
+package sqlite
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"testing"
+
+	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/database"
+	"github.com/kopecmaciej/vi-sql/internal/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// fixtureDB is the path to a pre-loaded SQLite file written once by TestMain.
+// Each test copies it to its own temp file so tests run independently in parallel.
+var fixtureDB string
+
+func TestMain(m *testing.M) {
+	f, err := os.CreateTemp("", "vi-sql-fixture-*.sqlite")
+	if err != nil {
+		panic("create fixture temp file: " + err.Error())
+	}
+	f.Close()
+	fixtureDB = f.Name()
+	defer os.Remove(fixtureDB)
+
+	cfg := &config.SQLConfig{Driver: "sqlite", DSN: fixtureDB}
+	client := NewClient(cfg)
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		panic("connect to fixture db: " + err.Error())
+	}
+	if err := testutil.LoadSQLiteFixture(ctx, client.DB,
+		testutil.SampleSQLitePath(),
+		testutil.EnsureSeed()); err != nil {
+		panic("load sqlite fixture: " + err.Error())
+	}
+	client.Close()
+
+	os.Exit(m.Run())
+}
+
+// newTestDao copies the pre-loaded fixture file to a fresh temp file and opens
+// a Dao against it. The copy is O(file size) and avoids reloading 35k rows per test.
+func newTestDao(t *testing.T) *Dao {
+	t.Helper()
+
+	dst, err := os.CreateTemp("", "vi-sql-test-*.sqlite")
+	require.NoError(t, err)
+	dst.Close()
+	t.Cleanup(func() { os.Remove(dst.Name()) })
+
+	require.NoError(t, copyFile(dst.Name(), fixtureDB))
+
+	cfg := &config.SQLConfig{Driver: "sqlite", DSN: dst.Name()}
+	client := NewClient(cfg)
+	ctx := context.Background()
+	require.NoError(t, client.Connect(ctx))
+	t.Cleanup(func() { client.Close() })
+
+	return NewDao(client)
+}
+
+func copyFile(dst, src string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+// --- Schema browsing ---
+
+func TestListSchemas(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter string
+		setup  func(t *testing.T, dao *Dao)
+		check  func(t *testing.T, schemas []database.Schema)
+	}{
+		{
+			name:   "returns main schema with tables",
+			filter: "",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Equal(t, "main", schemas[0].Schema)
+				assert.Contains(t, schemas[0].Tables, "users")
+				assert.Contains(t, schemas[0].Tables, "orders")
+				assert.Contains(t, schemas[0].Tables, "products")
+			},
+		},
+		{
+			name:   "filter by table name prefix",
+			filter: "user",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				for _, table := range schemas[0].Tables {
+					assert.Contains(t, table, "user")
+				}
+			},
+		},
+		{
+			name:   "filter no match returns empty tables",
+			filter: "nonexistent_xyz",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Empty(t, schemas[0].Tables)
+			},
+		},
+		{
+			name:   "includes views",
+			filter: "",
+			setup: func(t *testing.T, dao *Dao) {
+				_, err := dao.ExecuteStatement(context.Background(),
+					"CREATE VIEW v_test_users AS SELECT id, email FROM users")
+				require.NoError(t, err)
+			},
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Contains(t, schemas[0].Views, "v_test_users")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dao := newTestDao(t)
+			ctx := context.Background()
+			if tt.setup != nil {
+				tt.setup(t, dao)
+			}
+			schemas, err := dao.ListSchemas(ctx, tt.filter)
+			require.NoError(t, err)
+			tt.check(t, schemas)
+		})
+	}
+}
+
+func TestGetViewDDL_ReturnsDefinition(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	_, err := dao.ExecuteStatement(ctx, "CREATE VIEW v_ddl_test AS SELECT id, email FROM users")
+	require.NoError(t, err)
+
+	ddl, err := dao.GetViewDDL(ctx, "main", "v_ddl_test")
+	require.NoError(t, err)
+	assert.NotEmpty(t, ddl)
+	assert.Contains(t, ddl, "users")
+}
+
+// --- Table structure ---
+
+func TestGetTableColumns_Users(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	cols, err := dao.GetTableColumns(ctx, "main", "users")
+	require.NoError(t, err)
+	require.NotEmpty(t, cols)
+
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = c.Name
+	}
+	assert.Contains(t, names, "id")
+	assert.Contains(t, names, "email")
+
+	var idCol database.ColumnInfo
+	for _, c := range cols {
+		if c.Name == "id" {
+			idCol = c
+			break
+		}
+	}
+	assert.True(t, idCol.IsPK)
+}
+
+func TestGetTableConstraints_UsersPrimaryKey(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	constraints, err := dao.GetTableConstraints(ctx, "main", "users")
+	require.NoError(t, err)
+
+	var found bool
+	for _, c := range constraints {
+		if c.Type == "PRIMARY KEY" {
+			found = true
+			assert.Contains(t, c.Columns, "id")
+		}
+	}
+	assert.True(t, found, "expected a PRIMARY KEY constraint on users")
+}
+
+func TestGetTableForeignKeys_OrderItems(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	fks, err := dao.GetTableForeignKeys(ctx, "main", "order_items")
+	require.NoError(t, err)
+	require.NotEmpty(t, fks, "order_items should have foreign keys")
+
+	tables := make([]string, len(fks))
+	for i, fk := range fks {
+		tables[i] = fk.ReferencedTable
+	}
+	assert.Contains(t, tables, "orders")
+	assert.Contains(t, tables, "product_variants")
+}
+
+// --- Row CRUD ---
+
+func TestListRows_BasicPagination(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	state := database.NewTableState("main", "users")
+	state.BatchSize = 3
+
+	_, rows, err := dao.FetchTableRows(ctx, state, "", "")
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(rows), 3)
+	assert.NotEmpty(t, rows)
+}
+
+func TestListRows_WithWhere(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	state := database.NewTableState("main", "users")
+	state.BatchSize = 100
+
+	_, rows, err := dao.FetchTableRows(ctx, state, "status = 'active'", "")
+	require.NoError(t, err)
+	for _, row := range rows {
+		assert.Equal(t, "active", row["status"])
+	}
+}
+
+func TestListRows_WithOrderBy(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	state := database.NewTableState("main", "users")
+	state.BatchSize = 100
+
+	_, rows, err := dao.FetchTableRows(ctx, state, "", "email ASC")
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	for i := 1; i < len(rows); i++ {
+		prev := rows[i-1]["email"].(string)
+		curr := rows[i]["email"].(string)
+		assert.LessOrEqual(t, prev, curr, "rows should be ordered by email ASC")
+	}
+}
+
+func TestInsertRow_DeleteRow(t *testing.T) {
+	dao := newTestDao(t) // not parallel — modifies shared-nothing DB
+	ctx := context.Background()
+
+	const insertedID = "test-uuid-001"
+	newRow := database.Row{
+		"id":            insertedID,
+		"email":         "test@example.com",
+		"password_hash": "hash",
+		"full_name":     "Test User",
+		"status":        "active",
+	}
+
+	_, err := dao.InsertRow(ctx, "main", "users", newRow)
+	require.NoError(t, err)
+
+	// SQLite's InsertRow returns lastInsertId (rowid), not the text PK.
+	// Verify via a direct query using the known PK value.
+	pk := database.PrimaryKey{Columns: map[string]any{"id": insertedID}}
+	rows, _, err := dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT email FROM "main"."users" WHERE id = '%s'`, insertedID))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "test@example.com", rows[0]["email"])
+
+	err = dao.DeleteRows(ctx, "main", "users", []database.PrimaryKey{pk})
+	require.NoError(t, err)
+
+	rows, _, err = dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT id FROM "main"."users" WHERE id = '%s'`, insertedID))
+	require.NoError(t, err)
+	assert.Empty(t, rows, "row should not exist after delete")
+}
+
+func TestUpdateRow_ChangedField(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	// Get an existing row first.
+	state := database.NewTableState("main", "users")
+	state.BatchSize = 1
+	_, rows, err := dao.FetchTableRows(ctx, state, "", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+
+	original := rows[0]
+	pk := database.PrimaryKey{Columns: map[string]any{"id": original["id"]}}
+
+	updated := make(database.Row)
+	for k, v := range original {
+		updated[k] = v
+	}
+	updated["full_name"] = "Updated Name"
+
+	err = dao.UpdateRow(ctx, "main", "users", pk, original, updated)
+	require.NoError(t, err)
+
+	rows, _, err = dao.ExecuteQuery(ctx, fmt.Sprintf(`SELECT full_name FROM "main"."users" WHERE id = '%s'`, original["id"]))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, "Updated Name", rows[0]["full_name"])
+}
+
+func TestDeleteRows_NonExistentPK(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	pk := database.PrimaryKey{Columns: map[string]any{"id": "does-not-exist"}}
+	err := dao.DeleteRows(ctx, "main", "users", []database.PrimaryKey{pk})
+	assert.NoError(t, err, "deleting non-existent row should not error")
+}
+
+// --- Raw SQL ---
+
+func TestExecuteQuery_Select(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	rows, cols, err := dao.ExecuteQuery(ctx, "SELECT id, email FROM users LIMIT 5")
+	require.NoError(t, err)
+	require.NotEmpty(t, cols)
+	assert.Equal(t, "id", cols[0].Name)
+	assert.Equal(t, "email", cols[1].Name)
+	assert.NotEmpty(t, rows)
+}
+
+func TestExecuteStatement_Insert(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	affected, err := dao.ExecuteStatement(ctx,
+		`INSERT INTO users (id, email, password_hash, full_name, status) VALUES ('stmt-test-1', 'stmt@test.com', 'hash', 'Stmt User', 'active')`)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), affected)
+}
+
+func TestExplainQuery_ReturnsText(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	plan, err := dao.ExplainPlan(ctx, "SELECT * FROM users WHERE id = 'x'")
+	require.NoError(t, err)
+	assert.NotEmpty(t, plan)
+}
+
+func TestListQueryRows_WithPagination(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	_, rows, cols, err := dao.FetchQueryRows(ctx, "SELECT id, email FROM users", 2, 0)
+	require.NoError(t, err)
+	require.NotEmpty(t, cols)
+	assert.LessOrEqual(t, len(rows), 2)
+}
+
+// --- DDL ---
+
+func TestCreateTable_And_DropTable(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	ddl := `CREATE TABLE test_ddl (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`
+	err := dao.CreateTable(ctx, "main", ddl)
+	require.NoError(t, err)
+
+	schemas, err := dao.ListSchemas(ctx, "")
+	require.NoError(t, err)
+	assert.Contains(t, schemas[0].Tables, "test_ddl")
+
+	err = dao.DropTable(ctx, "main", "test_ddl")
+	require.NoError(t, err)
+
+	schemas, err = dao.ListSchemas(ctx, "")
+	require.NoError(t, err)
+	assert.NotContains(t, schemas[0].Tables, "test_ddl")
+}
+
+func TestRenameTable_And_RenameBack(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	// Create a table to rename so we don't break other tests' fixture tables.
+	require.NoError(t, dao.CreateTable(ctx, "main",
+		"CREATE TABLE rename_src (id INTEGER PRIMARY KEY)"))
+
+	err := dao.RenameTable(ctx, "main", "rename_src", "rename_dst")
+	require.NoError(t, err)
+
+	schemas, _ := dao.ListSchemas(ctx, "")
+	assert.Contains(t, schemas[0].Tables, "rename_dst")
+	assert.NotContains(t, schemas[0].Tables, "rename_src")
+
+	err = dao.RenameTable(ctx, "main", "rename_dst", "rename_src")
+	require.NoError(t, err)
+}
+
+func TestTruncateTable(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	// Create and populate a disposable table.
+	require.NoError(t, dao.CreateTable(ctx, "main",
+		"CREATE TABLE trunc_test (id INTEGER PRIMARY KEY)"))
+	_, err := dao.ExecuteStatement(ctx,
+		"INSERT INTO trunc_test VALUES (1), (2), (3)")
+	require.NoError(t, err)
+
+	err = dao.TruncateTable(ctx, "main", "trunc_test")
+	require.NoError(t, err)
+
+	state := database.NewTableState("main", "trunc_test")
+	state.BatchSize = 100
+	_, rows, err := dao.FetchTableRows(ctx, state, "", "")
+	require.NoError(t, err)
+	assert.Empty(t, rows, "table should be empty after TRUNCATE")
+}
+
+func TestRenameColumn(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	require.NoError(t, dao.CreateTable(ctx, "main",
+		"CREATE TABLE rename_col_test (id INTEGER PRIMARY KEY, old_name TEXT)"))
+
+	err := dao.RenameColumn(ctx, "main", "rename_col_test", "old_name", "new_name")
+	require.NoError(t, err)
+
+	names, err := dao.GetTableColumnNames(ctx, "main", "rename_col_test")
+	require.NoError(t, err)
+	assert.Contains(t, names, "new_name")
+	assert.NotContains(t, names, "old_name")
+}
+
+// --- Indexes ---
+
+func TestCreateIndex_GetIndexes_DropIndex(t *testing.T) {
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	def := database.IndexDefinition{
+		Name:     "idx_users_full_name",
+		Columns:  []string{"full_name"},
+		IsUnique: false,
+	}
+	err := dao.CreateIndex(ctx, "main", "users", def)
+	require.NoError(t, err)
+
+	indexes, err := dao.GetIndexes(ctx, "main", "users")
+	require.NoError(t, err)
+	var found bool
+	for _, idx := range indexes {
+		if idx.Name == "idx_users_full_name" {
+			found = true
+		}
+	}
+	assert.True(t, found, "newly created index should appear in GetIndexes")
+
+	err = dao.DropIndex(ctx, "main", "idx_users_full_name")
+	require.NoError(t, err)
+
+	indexes, err = dao.GetIndexes(ctx, "main", "users")
+	require.NoError(t, err)
+	for _, idx := range indexes {
+		assert.NotEqual(t, "idx_users_full_name", idx.Name, "index should be gone after drop")
+	}
+}
+
+// --- Autocomplete ---
+
+func TestGetTableColumnNames(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	names, err := dao.GetTableColumnNames(ctx, "main", "users")
+	require.NoError(t, err)
+	assert.Contains(t, names, "id")
+	assert.Contains(t, names, "email")
+}
+
+// --- Server info ---
+
+func TestGetServerInfo(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	info, err := dao.GetServerInfo(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, info.Version, "SQLite")
+}
+
+func TestGetActiveSessions_ReturnsZero(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	sessions, err := dao.GetActiveSessions(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), sessions)
+}
+
+// --- Driver info ---
+
+func TestCommonDataTypes_NonEmpty(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+
+	types := dao.CommonDataTypes()
+	assert.NotEmpty(t, types)
+}
+
+func TestDefaultCreateTableDDL_ContainsTableName(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+
+	ddl := dao.DefaultCreateTableDDL("main", "my_table")
+	assert.Contains(t, ddl, "my_table")
+}
+
+// --- FetchQueryRows ---
+
+func TestListQueryRows_NoLimit_Paginates(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	const batch = 3
+	_, rows, _, err := dao.FetchQueryRows(ctx, "SELECT * FROM users", batch, 0)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(rows), batch, "first page must not exceed batch size")
+	assert.NotEmpty(t, rows)
+
+	// Second page must have rows too (fixture has 6 users).
+	_, rows2, _, err := dao.FetchQueryRows(ctx, "SELECT * FROM users", batch, int64(batch))
+	require.NoError(t, err)
+	assert.Len(t, rows2, batch, "second page should also have a full batch")
+}
+
+func TestListQueryRows_WithUserLimit_Paginates(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	const batch = 2
+
+	_, page1, _, err := dao.FetchQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, 0)
+	require.NoError(t, err)
+	assert.Len(t, page1, batch, "first page should return batch rows")
+
+	_, page2, _, err := dao.FetchQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, int64(batch))
+	require.NoError(t, err)
+	assert.Len(t, page2, batch, "second page should return batch rows")
+
+	// Third page: offset=4 (batch*2), so only 1 row remains out of userLimit=5.
+	_, page3, _, err := dao.FetchQueryRows(ctx, "SELECT * FROM users LIMIT 5", batch, int64(batch*2))
+	require.NoError(t, err)
+	assert.Len(t, page3, 1, "last page should have the remainder row")
+}
+
+// TestListQueryRows_ExplainBypasses verifies that EXPLAIN queries are still
+// executed as-is without any pagination wrapper.
+func TestListQueryRows_Explain_Bypasses(t *testing.T) {
+	t.Parallel()
+	dao := newTestDao(t)
+	ctx := context.Background()
+
+	_, rows, _, err := dao.FetchQueryRows(ctx, "EXPLAIN SELECT * FROM users", 10, 0)
+	require.NoError(t, err)
+	// SQLite EXPLAIN returns opcode rows — just verify no error and non-empty result.
+	assert.NotEmpty(t, rows)
+}

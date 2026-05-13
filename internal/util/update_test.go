@@ -1,12 +1,15 @@
 package util
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNormalizeVersion(t *testing.T) {
+func TestTagToVersion(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
@@ -14,18 +17,16 @@ func TestNormalizeVersion(t *testing.T) {
 		{"v0.0.2", "0.0.2"},
 		{"v0.1.0", "0.1.0"},
 		{"v1.2.3", "1.2.3"},
-		// dirty dev builds — everything after the first '-' is stripped
 		{"v0.0.2-dirty", "0.0.2"},
 		{"v0.0.1-15-g75060dc-dirty", "0.0.1"},
 		{"v0.0.2-3-gabcdef0", "0.0.2"},
-		// no 'v' prefix (e.g. stored in config after normalisation)
 		{"0.0.2", "0.0.2"},
 		{"0.1.0", "0.1.0"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.want, NormalizeVersion(tt.input))
+			assert.Equal(t, tt.want, TagToVersion(tt.input))
 		})
 	}
 }
@@ -37,22 +38,17 @@ func TestIsNewerVersion(t *testing.T) {
 		latest  string
 		want    bool
 	}{
-		// normal upgrades
 		{"patch upgrade", "0.0.1", "0.0.2", true},
 		{"minor upgrade", "0.0.2", "0.1.0", true},
 		{"major upgrade", "0.9.9", "1.0.0", true},
-		// no change
-		{"equal", "0.0.2", "0.0.2", false},
-		// downgrade
+		{"equal versions", "0.0.2", "0.0.2", false},
 		{"downgrade patch", "0.0.2", "0.0.1", false},
 		{"downgrade minor", "0.1.0", "0.0.9", false},
-		// 'v' prefix handling
-		{"v prefix current", "v0.0.1", "0.0.2", true},
-		{"v prefix latest", "0.0.1", "v0.0.2", true},
-		{"v prefix both", "v0.0.1", "v0.0.2", true},
-		// dirty dev builds stripped before compare
-		{"dirty current older", "v0.0.1-15-g75060dc-dirty", "0.0.2", true},
-		{"dirty current equal", "v0.0.2-dirty", "0.0.2", false},
+		{"v prefix on current", "v0.0.1", "0.0.2", true},
+		{"v prefix on latest", "0.0.1", "v0.0.2", true},
+		{"v prefix on both", "v0.0.1", "v0.0.2", true},
+		{"dirty current older than latest", "v0.0.1-15-g75060dc-dirty", "0.0.2", true},
+		{"dirty current equal to latest", "v0.0.2-dirty", "0.0.2", false},
 	}
 
 	for _, tt := range tests {
@@ -62,74 +58,101 @@ func TestIsNewerVersion(t *testing.T) {
 	}
 }
 
-func TestChangelogVersionFlow(t *testing.T) {
-	// Simulates the real-world upgrade scenario end-to-end using only util functions.
-	// A user upgrades from configVersion to buildVersion; the changelog has one entry.
+func TestBuildAssetName(t *testing.T) {
+	cases := []struct {
+		goos, goarch string
+		want         string
+	}{
+		{"linux", "amd64", "vi-sql_Linux_x86_64.tar.gz"},
+		{"linux", "arm64", "vi-sql_Linux_arm64.tar.gz"},
+		{"linux", "386", "vi-sql_Linux_i386.tar.gz"},
+		{"darwin", "amd64", "vi-sql_Darwin_x86_64.tar.gz"},
+		{"darwin", "arm64", "vi-sql_Darwin_arm64.tar.gz"},
+		{"windows", "amd64", "vi-sql_Windows_x86_64.zip"},
+		{"windows", "arm64", "vi-sql_Windows_arm64.zip"},
+	}
+	for _, tc := range cases {
+		got := buildAssetName(tc.goos, tc.goarch)
+		if got != tc.want {
+			t.Errorf("buildAssetName(%q,%q) = %q, want %q", tc.goos, tc.goarch, got, tc.want)
+		}
+	}
+}
 
+func TestVerifyShaChecksum(t *testing.T) {
+	data := []byte("hello world")
+	sum := sha256.Sum256(data)
+	goodHex := hex.EncodeToString(sum[:])
+	asset := "vi-sql_Linux_x86_64.tar.gz"
+	checksumFile := fmt.Sprintf("%s  %s\ndeadbeef  other_asset.tar.gz\n", goodHex, asset)
+
+	if err := verifyShaChecksum(data, asset, checksumFile); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if err := verifyShaChecksum([]byte("different"), asset, checksumFile); err == nil {
+		t.Fatal("expected mismatch error")
+	}
+
+	if err := verifyShaChecksum(data, "missing_asset.tar.gz", checksumFile); err == nil {
+		t.Fatal("expected not-found error")
+	}
+}
+
+func TestChangelogVersionFlow(t *testing.T) {
 	tests := []struct {
-		name          string
-		configVersion string // what is stored in config.yaml
-		buildVersion  string // injected via ldflags at build time
-		entryVersion  string // version field in changelog.yaml
-		shouldShow    bool   // should the changelog modal appear?
-		storedAfter   string // what NormalizeVersion(buildVersion) produces
+		name             string
+		storedVersion    string
+		buildVersion     string
+		changelogVersion string
+		changelogShows   bool
+		normalizedStored string
 	}{
 		{
-			name:          "normal upgrade: 0.0.1 → 0.0.2",
-			configVersion: "0.0.1",
-			buildVersion:  "v0.0.2",
-			entryVersion:  "0.0.2",
-			shouldShow:    true,
-			storedAfter:   "0.0.2",
+			name:             "normal upgrade",
+			storedVersion:    "0.0.1",
+			buildVersion:     "v0.0.2",
+			changelogVersion: "0.0.2",
+			changelogShows:   true,
+			normalizedStored: "0.0.2",
 		},
 		{
-			name:          "dirty build on new tag",
-			configVersion: "0.0.1",
-			buildVersion:  "v0.0.2-dirty",
-			entryVersion:  "0.0.2",
-			shouldShow:    true,
-			storedAfter:   "0.0.2",
+			name:             "dirty build on new tag",
+			storedVersion:    "0.0.1",
+			buildVersion:     "v0.0.2-dirty",
+			changelogVersion: "0.0.2",
+			changelogShows:   true,
+			normalizedStored: "0.0.2",
 		},
 		{
-			name:          "already up to date",
-			configVersion: "0.0.2",
-			buildVersion:  "v0.0.2",
-			entryVersion:  "0.0.2",
-			shouldShow:    false,
-			storedAfter:   "0.0.2",
+			name:             "already up to date",
+			storedVersion:    "0.0.2",
+			buildVersion:     "v0.0.2",
+			changelogVersion: "0.0.2",
+			changelogShows:   false,
+			normalizedStored: "0.0.2",
 		},
 		{
-			name:          "dev build below entry — shows every run (expected)",
-			configVersion: "0.0.1",
-			buildVersion:  "v0.0.1-14-gabcdef0-dirty",
-			entryVersion:  "0.0.2",
-			shouldShow:    true,
-			storedAfter:   "0.0.1",
-		},
-		{
-			name:          "after acknowledging on dev build — still shows (expected)",
-			configVersion: "0.0.1", // stored after previous dev run
-			buildVersion:  "v0.0.1-15-g1234567-dirty",
-			entryVersion:  "0.0.2",
-			shouldShow:    true, // dev below entry, keeps showing until tag is cut
-			storedAfter:   "0.0.1",
+			name:             "dev build below changelog entry",
+			storedVersion:    "0.0.1",
+			buildVersion:     "v0.0.1-14-gabcdef0-dirty",
+			changelogVersion: "0.0.2",
+			changelogShows:   true,
+			normalizedStored: "0.0.1",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			shows := IsNewerVersion(tt.configVersion, tt.entryVersion)
-			assert.Equal(t, tt.shouldShow, shows, "modal visibility mismatch")
+			shows := IsNewerVersion(tt.storedVersion, tt.changelogVersion)
+			assert.Equal(t, tt.changelogShows, shows)
 
-			stored := NormalizeVersion(tt.buildVersion)
-			assert.Equal(t, tt.storedAfter, stored, "stored version mismatch")
+			normalized := TagToVersion(tt.buildVersion)
+			assert.Equal(t, tt.normalizedStored, normalized)
 
-			// After acknowledging: verify no second show
-			if tt.shouldShow {
-				showsAgain := IsNewerVersion(stored, tt.entryVersion)
-				if tt.storedAfter >= tt.entryVersion {
-					assert.False(t, showsAgain, "modal should not show again after acknowledging")
-				}
+			if tt.changelogShows && normalized >= tt.changelogVersion {
+				showsAgain := IsNewerVersion(normalized, tt.changelogVersion)
+				assert.False(t, showsAgain)
 			}
 		})
 	}

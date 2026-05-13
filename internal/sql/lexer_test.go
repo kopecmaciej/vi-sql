@@ -1,0 +1,303 @@
+package sql
+
+import (
+	"testing"
+)
+
+func TestTokenize_Basic(t *testing.T) {
+	tokens := Tokenize("SELECT * FROM users")
+	wantTypes := []TokenType{
+		TokenKeyword,    // SELECT
+		TokenWhitespace, // " "
+		TokenStar,       // *
+		TokenWhitespace, // " "
+		TokenKeyword,    // FROM
+		TokenWhitespace, // " "
+		TokenIdentifier, // users
+	}
+	if len(tokens) != len(wantTypes) {
+		t.Fatalf("got %d tokens, want %d; tokens: %v", len(tokens), len(wantTypes), tokens)
+	}
+	for i, tt := range wantTypes {
+		if tokens[i].Type != tt {
+			t.Errorf("token[%d]: got type %d (%q), want %d", i, tokens[i].Type, tokens[i].Value, tt)
+		}
+	}
+}
+
+func TestTokenize_StringLiteral(t *testing.T) {
+	tests := []struct {
+		sql      string
+		wantVal  string
+		wantType TokenType
+	}{
+		{"'hello'", "'hello'", TokenString},
+		{"'it''s'", "'it''s'", TokenString},     // escaped quote
+		{"'a''b''c'", "'a''b''c'", TokenString}, // multiple escaped quotes
+	}
+	for _, tc := range tests {
+		tokens := Tokenize(tc.sql)
+		if len(tokens) != 1 {
+			t.Errorf("sql=%q: got %d tokens, want 1", tc.sql, len(tokens))
+			continue
+		}
+		if tokens[0].Type != tc.wantType {
+			t.Errorf("sql=%q: type=%d, want %d", tc.sql, tokens[0].Type, tc.wantType)
+		}
+		if tokens[0].Value != tc.wantVal {
+			t.Errorf("sql=%q: value=%q, want %q", tc.sql, tokens[0].Value, tc.wantVal)
+		}
+	}
+}
+
+func TestTokenize_QuotedIdentifier(t *testing.T) {
+	tokens := Tokenize(`"My Table"`)
+	if len(tokens) != 1 {
+		t.Fatalf("got %d tokens, want 1", len(tokens))
+	}
+	if tokens[0].Type != TokenQuotedIdentifier {
+		t.Errorf("type=%d, want TokenQuotedIdentifier", tokens[0].Type)
+	}
+	if tokens[0].Value != `"My Table"` {
+		t.Errorf("value=%q", tokens[0].Value)
+	}
+}
+
+// TestTokenize_QuotedIdentifier_EscapedQuote verifies the "" escape inside a
+// double-quoted identifier is handled correctly.
+func TestTokenize_QuotedIdentifier_EscapedQuote(t *testing.T) {
+	// "foo""bar" should be a single TokenQuotedIdentifier
+	sql := `"foo""bar"`
+	tokens := Tokenize(sql)
+	if len(tokens) != 1 {
+		t.Fatalf("sql=%q: got %d tokens, want 1: %v", sql, len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenQuotedIdentifier {
+		t.Errorf("type=%d, want TokenQuotedIdentifier", tokens[0].Type)
+	}
+	if tokens[0].Value != sql {
+		t.Errorf("value=%q, want %q", tokens[0].Value, sql)
+	}
+}
+
+// TestTokenize_QuotedIdentifier_Dialects covers backtick (MySQL) and bracket
+// (SQL Server) quoting, including the ]] escape.
+func TestTokenize_QuotedIdentifier_Dialects(t *testing.T) {
+	tests := []struct {
+		sql     string
+		wantVal string
+	}{
+		{"`My Col`", "`My Col`"},
+		{"`a``b`", "`a``b`"}, // doubled backtick escape
+		{`[My Col]`, `[My Col]`},
+		{`[a]]b]`, `[a]]b]`}, // ]] escape
+	}
+	for _, tc := range tests {
+		tokens := Tokenize(tc.sql)
+		if len(tokens) != 1 {
+			t.Errorf("sql=%q: got %d tokens, want 1: %v", tc.sql, len(tokens), tokens)
+			continue
+		}
+		if tokens[0].Type != TokenQuotedIdentifier {
+			t.Errorf("sql=%q: type=%d, want TokenQuotedIdentifier", tc.sql, tokens[0].Type)
+		}
+		if tokens[0].Value != tc.wantVal {
+			t.Errorf("sql=%q: value=%q, want %q", tc.sql, tokens[0].Value, tc.wantVal)
+		}
+	}
+}
+
+// TestTokenize_UnterminatedQuote verifies an unterminated quoted identifier is
+// bounded to its identifier run so a following keyword stays a separate token
+// (regression for issue #55: FROM must not be swallowed).
+func TestTokenize_UnterminatedQuote(t *testing.T) {
+	tests := []struct{ name, sql, wantQuoted string }{
+		{"ansi", `SELECT "c FROM users`, `"c`},
+		{"backtick", "SELECT `c FROM users", "`c"},
+		{"bracket", `SELECT [c FROM users`, `[c`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := Tokenize(tc.sql)
+			var gotQuoted string
+			var sawFrom bool
+			for _, tok := range tokens {
+				if tok.Type == TokenQuotedIdentifier {
+					gotQuoted = tok.Value
+				}
+				if tok.Type == TokenKeyword && tok.Value == "FROM" {
+					sawFrom = true
+				}
+			}
+			if gotQuoted != tc.wantQuoted {
+				t.Errorf("quoted token=%q, want %q", gotQuoted, tc.wantQuoted)
+			}
+			if !sawFrom {
+				t.Errorf("FROM keyword was swallowed by the unterminated quote")
+			}
+		})
+	}
+}
+
+// TestTokenize_BracketNotArray verifies Postgres array syntax is unaffected:
+// [ only opens a bracket identifier when followed by an identifier-start char.
+func TestTokenize_BracketNotArray(t *testing.T) {
+	for _, sql := range []string{"int[]", "arr[1]"} {
+		tokens := Tokenize(sql)
+		for _, tok := range tokens {
+			if tok.Type == TokenQuotedIdentifier {
+				t.Errorf("sql=%q: unexpected quoted identifier %q", sql, tok.Value)
+			}
+		}
+	}
+}
+
+func TestTokenize_LineComment(t *testing.T) {
+	tokens := Tokenize("-- comment\nSELECT")
+	if len(tokens) != 3 {
+		t.Fatalf("got %d tokens, want 3: %v", len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenComment {
+		t.Errorf("token[0] type=%d, want TokenComment", tokens[0].Type)
+	}
+	if tokens[1].Type != TokenWhitespace {
+		t.Errorf("token[1] type=%d, want TokenWhitespace", tokens[1].Type)
+	}
+	if tokens[2].Type != TokenKeyword || tokens[2].Value != "SELECT" {
+		t.Errorf("token[2]=%v", tokens[2])
+	}
+}
+
+func TestTokenize_BlockComment(t *testing.T) {
+	tokens := Tokenize("/* block */SELECT")
+	if len(tokens) != 2 {
+		t.Fatalf("got %d tokens, want 2: %v", len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenComment {
+		t.Errorf("token[0] type=%d, want TokenComment", tokens[0].Type)
+	}
+	if tokens[1].Type != TokenKeyword {
+		t.Errorf("token[1] type=%d, want TokenKeyword", tokens[1].Type)
+	}
+}
+
+func TestTokenize_Typecast(t *testing.T) {
+	tokens := Tokenize("val::text")
+	wantTypes := []TokenType{TokenIdentifier, TokenTypecast, TokenIdentifier}
+	if len(tokens) != len(wantTypes) {
+		t.Fatalf("got %d tokens: %v", len(tokens), tokens)
+	}
+	for i, tt := range wantTypes {
+		if tokens[i].Type != tt {
+			t.Errorf("token[%d] type=%d, want %d", i, tokens[i].Type, tt)
+		}
+	}
+}
+
+func TestTokenize_Dot(t *testing.T) {
+	tokens := Tokenize("public.users")
+	wantTypes := []TokenType{TokenIdentifier, TokenDot, TokenIdentifier}
+	if len(tokens) != len(wantTypes) {
+		t.Fatalf("got %d tokens: %v", len(tokens), tokens)
+	}
+	for i, tt := range wantTypes {
+		if tokens[i].Type != tt {
+			t.Errorf("token[%d] type=%d (%q), want %d", i, tokens[i].Type, tokens[i].Value, tt)
+		}
+	}
+}
+
+func TestTokenize_Operators(t *testing.T) {
+	cases := []struct {
+		sql string
+		val string
+	}{
+		{"!=", "!="},
+		{"<>", "<>"},
+		{"<=", "<="},
+		{">=", ">="},
+		{"=", "="},
+		{"<", "<"},
+		{">", ">"},
+	}
+	for _, tc := range cases {
+		tokens := Tokenize(tc.sql)
+		if len(tokens) != 1 || tokens[0].Type != TokenOperator || tokens[0].Value != tc.val {
+			t.Errorf("sql=%q: got %v", tc.sql, tokens)
+		}
+	}
+}
+
+func TestTokenize_Number(t *testing.T) {
+	cases := []string{"42", "3.14", "1e10"}
+	for _, sql := range cases {
+		tokens := Tokenize(sql)
+		if len(tokens) != 1 || tokens[0].Type != TokenNumber {
+			t.Errorf("sql=%q: got %v", sql, tokens)
+		}
+	}
+}
+
+// TestTokenize_NumberArithmetic verifies that 1-2 tokenizes as three tokens,
+// not one. This was broken when isNumContinue accepted '+' and '-'.
+func TestTokenize_NumberArithmetic(t *testing.T) {
+	tokens := Tokenize("1-2")
+	if len(tokens) != 3 {
+		t.Fatalf("sql=%q: got %d tokens, want 3: %v", "1-2", len(tokens), tokens)
+	}
+	if tokens[0].Type != TokenNumber || tokens[0].Value != "1" {
+		t.Errorf("token[0]=%v, want Number '1'", tokens[0])
+	}
+	if tokens[1].Type != TokenOperator || tokens[1].Value != "-" {
+		t.Errorf("token[1]=%v, want Operator '-'", tokens[1])
+	}
+	if tokens[2].Type != TokenNumber || tokens[2].Value != "2" {
+		t.Errorf("token[2]=%v, want Number '2'", tokens[2])
+	}
+}
+
+func TestTokenize_Parameter(t *testing.T) {
+	tokens := Tokenize("$1")
+	if len(tokens) != 1 || tokens[0].Type != TokenIdentifier || tokens[0].Value != "$1" {
+		t.Errorf("got %v", tokens)
+	}
+}
+
+func TestTokenize_KeywordCaseInsensitive(t *testing.T) {
+	for _, kw := range []string{"select", "SELECT", "Select"} {
+		tokens := Tokenize(kw)
+		if len(tokens) != 1 || tokens[0].Type != TokenKeyword {
+			t.Errorf("kw=%q: got type %d", kw, tokens[0].Type)
+		}
+	}
+}
+
+func TestTokenize_BytePositions(t *testing.T) {
+	sql := "SELECT id"
+	tokens := Tokenize(sql)
+	// SELECT: 0..6, space: 6..7, id: 7..9
+	cases := []struct{ start, end int }{{0, 6}, {6, 7}, {7, 9}}
+	if len(tokens) != 3 {
+		t.Fatalf("got %d tokens", len(tokens))
+	}
+	for i, c := range cases {
+		if tokens[i].Start != c.start || tokens[i].End != c.end {
+			t.Errorf("token[%d]: got [%d,%d), want [%d,%d)", i, tokens[i].Start, tokens[i].End, c.start, c.end)
+		}
+	}
+}
+
+func TestTokenize_ComplexQuery(t *testing.T) {
+	sql := `SELECT u.id, u.name FROM "public".users u WHERE u.age > 18 -- filter`
+	tokens := Tokenize(sql)
+	// Sanity: no panics, all bytes covered, start/end monotonic
+	for i := 1; i < len(tokens); i++ {
+		if tokens[i].Start != tokens[i-1].End {
+			t.Errorf("gap between token[%d].End=%d and token[%d].Start=%d",
+				i-1, tokens[i-1].End, i, tokens[i].Start)
+		}
+	}
+	if len(tokens) > 0 && tokens[len(tokens)-1].End != len(sql) {
+		t.Errorf("last token ends at %d, want %d", tokens[len(tokens)-1].End, len(sql))
+	}
+}

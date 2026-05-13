@@ -27,9 +27,10 @@ type Indexes struct {
 	*core.BaseElement
 	*core.Flex
 
-	table       *core.Table
-	deleteModal *modal.Confirm
-	addForm     *core.Form
+	table        *core.Table
+	deleteModal  *modal.Confirm
+	addForm      *core.Form
+	sqlEditModal *SQLEditModal
 
 	schema           string
 	tbl              string
@@ -37,17 +38,16 @@ type Indexes struct {
 	colKeys          []string
 	columnCount      int
 	isAddFormVisible bool
-	isSQLMode        bool
 }
 
 func NewIndexes() *Indexes {
 	idx := &Indexes{
-		BaseElement:      core.NewBaseElement(),
-		Flex:             core.NewFlex(),
-		table:            core.NewTable(),
-		deleteModal:      modal.NewConfirm(IndexDeleteModalId),
-		addForm:          core.NewForm(),
-		isAddFormVisible: false,
+		BaseElement:  core.NewBaseElement(),
+		Flex:         core.NewFlex(),
+		table:        core.NewTable(),
+		deleteModal:  modal.NewConfirm(IndexDeleteModalId),
+		addForm:      core.NewForm(),
+		sqlEditModal: NewSQLEditModal(),
 	}
 
 	idx.SetIdentifier(IndexId)
@@ -64,6 +64,9 @@ func (idx *Indexes) init() error {
 	idx.setKeybindings()
 
 	if err := idx.deleteModal.Init(idx.App); err != nil {
+		return err
+	}
+	if err := idx.sqlEditModal.Init(idx.App); err != nil {
 		return err
 	}
 
@@ -93,42 +96,39 @@ func (idx *Indexes) setKeybindings() {
 
 	idx.addForm.ApplyFormNavKeys(k)
 
-	idx.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	idx.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Add, event.Name()):
+		case k.Match(k.Common.Add, event):
 			if !idx.isAddFormVisible {
 				idx.showAddForm()
 				return nil
 			}
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Delete, event):
 			if !idx.isAddFormVisible {
 				idx.showDeleteIndexModal(context.Background())
 				return nil
 			}
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			if idx.isAddFormVisible {
 				idx.closeAddForm()
 				return nil
 			}
-		case k.Contains(k.IndexAddForm.ToggleSQLMode, event.Name()):
+		case k.Match(k.IndexAddForm.ToggleSQLMode, event):
+			idx.openSQLModal()
+			return nil
+		case k.Match(k.IndexAddForm.AddColumn, event):
 			if idx.isAddFormVisible {
-				idx.isSQLMode = !idx.isSQLMode
-				idx.showAddForm()
-				return nil
-			}
-		case k.Contains(k.IndexAddForm.AddColumn, event.Name()):
-			if idx.isAddFormVisible && !idx.isSQLMode {
 				idx.addColumn()
 				return nil
 			}
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			if idx.isAddFormVisible {
 				idx.handleCreate()
 				return nil
 			}
 		}
 		return event
-	})
+	}))
 }
 
 func (idx *Indexes) handleEvents() {
@@ -241,21 +241,17 @@ func (idx *Indexes) showAddForm() {
 	idx.columnCount = 1
 	idx.addForm.Clear(true)
 
-	if idx.isSQLMode {
-		idx.addForm.AddInputField("SQL", "", 0, nil, nil)
-	} else {
-		idx.insertColumnPair(0, 1)
-		idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
-		idx.addForm.AddInputField("Index Name", "", 30, nil, nil)
-		idx.addForm.AddDropDown("Type", []string{"btree", "hash", "gin", "gist", "brin", "spgist"}, 0, nil)
-		idx.addForm.AddCheckbox("Unique", false, nil)
-		idx.addForm.AddButton("+Column", idx.addColumn)
-	}
-
+	idx.insertColumnPair(0, 1)
+	idx.addForm.AddTextView("──────────────", "──────────────────────────────────────────────────", 0, 1, false, false)
+	idx.addForm.AddInputField("Index Name", "", 30, nil, nil)
+	idx.addForm.AddDropDown("Type", []string{"btree", "hash", "gin", "gist", "brin", "spgist"}, 0, nil)
+	idx.addForm.AddCheckbox("Unique", false, nil)
+	idx.addForm.AddButton("+Column", idx.addColumn)
 	idx.addForm.AddButton("Create", idx.handleCreate)
 	idx.addForm.AddButton("Cancel", idx.closeAddForm)
 
 	idx.addForm.ApplyDropdownNavKeys(idx.App.GetKeys())
+	idx.addForm.ApplyClipboard()
 	idx.isAddFormVisible = true
 	idx.Render()
 	idx.App.SetFocus(idx.addForm)
@@ -304,27 +300,13 @@ func (idx *Indexes) addColumn() {
 
 	idx.columnCount++
 	idx.insertColumnPair(sepIdx, idx.columnCount)
+	idx.addForm.ApplyClipboard()
 	idx.addForm.SetFocus(sepIdx)
 	idx.App.SetFocus(idx.addForm)
 }
 
 func (idx *Indexes) handleCreate() {
 	ctx := context.Background()
-
-	if idx.isSQLMode {
-		sql := idx.addForm.GetFormItemByLabel("SQL").(*tview.InputField).GetText()
-		if strings.TrimSpace(sql) == "" {
-			modal.ShowError(idx.App.Pages, "Validation error", fmt.Errorf("SQL statement is required"))
-			return
-		}
-		if _, err := idx.Driver.ExecuteStatement(ctx, sql); err != nil {
-			modal.ShowError(idx.App.Pages, "Error creating index", err)
-			return
-		}
-		idx.closeAddForm()
-		idx.loadData(ctx)
-		return
-	}
 
 	var columns []string
 	for i := 1; i <= idx.columnCount; i++ {
@@ -370,6 +352,67 @@ func (idx *Indexes) handleCreate() {
 	idx.loadData(ctx)
 }
 
+func (idx *Indexes) buildCreateIndexSQL() string {
+	if !idx.isAddFormVisible {
+		return fmt.Sprintf("CREATE INDEX ON \"%s\".\"%s\" ();", idx.schema, idx.tbl)
+	}
+
+	var colParts []string
+	for i := 1; i <= idx.columnCount; i++ {
+		item := idx.addForm.GetFormItemByLabel(fmt.Sprintf("Column %d", i))
+		if item == nil {
+			continue
+		}
+		col := item.(*tview.InputField).GetText()
+		if col == "" {
+			continue
+		}
+		dir := "ASC"
+		if orderItem := idx.addForm.GetFormItemByLabel(fmt.Sprintf("Order %d", i)); orderItem != nil {
+			if _, opt := orderItem.(*tview.DropDown).GetCurrentOption(); opt != "" {
+				dir = opt
+			}
+		}
+		colParts = append(colParts, fmt.Sprintf("\"%s\" %s", col, dir))
+	}
+
+	name := ""
+	if item := idx.addForm.GetFormItemByLabel("Index Name"); item != nil {
+		name = item.(*tview.InputField).GetText()
+	}
+	_, indexType := idx.addForm.GetFormItemByLabel("Type").(*tview.DropDown).GetCurrentOption()
+	unique := idx.addForm.GetFormItemByLabel("Unique").(*tview.Checkbox).IsChecked()
+
+	uniqueStr := ""
+	if unique {
+		uniqueStr = "UNIQUE "
+	}
+	usingStr := ""
+	if indexType != "" && indexType != "btree" {
+		usingStr = fmt.Sprintf(" USING %s", indexType)
+	}
+	return fmt.Sprintf("CREATE %sINDEX %s ON \"%s\".\"%s\"%s (%s);",
+		uniqueStr, name, idx.schema, idx.tbl, usingStr, strings.Join(colParts, ", "))
+}
+
+func (idx *Indexes) openSQLModal() {
+	if idx.schema == "" || idx.tbl == "" {
+		return
+	}
+	template := idx.buildCreateIndexSQL()
+	idx.sqlEditModal.Open("Create Index", template, func(sql string) {
+		ctx := context.Background()
+		if _, err := idx.Driver.ExecuteStatement(ctx, sql); err != nil {
+			modal.ShowError(idx.App.Pages, "Error creating index", err)
+			return
+		}
+		if idx.isAddFormVisible {
+			idx.closeAddForm()
+		}
+		idx.loadData(ctx)
+	})
+}
+
 func (idx *Indexes) closeAddForm() {
 	idx.addForm.Clear(true)
 	idx.isAddFormVisible = false
@@ -391,7 +434,7 @@ func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 	idx.deleteModal.SetConfirmButtonLabel("Drop")
 	idx.deleteModal.SetText(fmt.Sprintf("Drop index [::b]%s[-:-:-]?", indexName))
 	idx.deleteModal.SetOnConfirm(func() {
-		defer idx.App.Pages.RemovePage(IndexDeleteModalId)
+		idx.App.Pages.RemoveModalPage(IndexDeleteModalId)
 		err := idx.Driver.DropIndex(ctx, idx.schema, indexName)
 		if err != nil {
 			modal.ShowError(idx.App.Pages, "Error dropping index", err)
@@ -401,7 +444,7 @@ func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 		idx.table.Select(row-1, 0)
 	})
 
-	idx.App.Pages.AddPage(IndexDeleteModalId, idx.deleteModal, true, true)
+	idx.App.Pages.ShowModal(IndexDeleteModalId, idx.deleteModal, idx.deleteModal, true, true)
 }
 
 func (idx *Indexes) IsAddFormFocused() bool {

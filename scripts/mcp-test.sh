@@ -112,6 +112,35 @@ assert() {
     fi
 }
 
+assert_error() {
+    local label="$1" response="$2"
+
+    # A failure surfaces either as a JSON-RPC protocol error (.error) or, for a
+    # tool handler returning an error, as a result with isError set.
+    if echo "$response" | jq -e '.error // (.result.isError == true)' > /dev/null 2>&1; then
+        echo "  PASS  $label"
+        PASS=$((PASS+1))
+    else
+        echo "  FAIL  $label (expected an error)"
+        echo "        $response"
+        FAIL=$((FAIL+1))
+    fi
+}
+
+assert_eq() {
+    local label="$1" expected="$2" actual="$3"
+
+    if [[ "$expected" == "$actual" ]]; then
+        echo "  PASS  $label"
+        PASS=$((PASS+1))
+    else
+        echo "  FAIL  $label"
+        echo "        expected: $expected"
+        echo "        actual:   $actual"
+        FAIL=$((FAIL+1))
+    fi
+}
+
 sql_arg() { echo "$1" | jq -Rs '.'; }
 
 # --- tests ---
@@ -135,10 +164,23 @@ run_tests() {
         # Brief pause: the TUI goroutine registers the tab asynchronously.
         sleep 0.5
         assert "get_query_from_tab"  "$(call_tool get_query_from_tab "{\"tab_id\":\"$tab_id\"}")"
+        assert "update_query_in_tab" "$(call_tool update_query_in_tab "{\"tab_id\":\"$tab_id\",\"query\":$(sql_arg 'SELECT 2 AS updated')}")"
+
+        # Round-trip: the update is applied async via QueueUpdateDraw.
+        sleep 0.5
+        local updated_resp updated_query
+        updated_resp=$(call_tool get_query_from_tab "{\"tab_id\":\"$tab_id\"}")
+        updated_query=$(echo "$updated_resp" | jq -r '.result.content[0].text' | jq -r '.query // empty' 2>/dev/null || true)
+        assert_eq "update_query_in_tab applied" "SELECT 2 AS updated" "$updated_query"
     else
         echo "  SKIP  get_query_from_tab (tab_id not returned by open_query_in_tab)"
+        echo "  SKIP  update_query_in_tab (tab_id not returned by open_query_in_tab)"
+        echo "  SKIP  update_query_in_tab applied (tab_id not returned by open_query_in_tab)"
         FAIL=$((FAIL+1))
     fi
+
+    assert_error "update_query_in_tab (missing tab)" \
+        "$(call_tool update_query_in_tab "{\"tab_id\":\"nonexistent-tab\",\"query\":$(sql_arg 'SELECT 1')}")"
 
     assert "get_last_query_result"   "$(call_tool get_last_query_result '{}')"
 
@@ -193,7 +235,7 @@ case "${1:-}" in
         echo ""
         echo "  Tests: get_server_info, list_schemas, list_enum_types, explain_query,"
         echo "         describe_table, sample_table, open_query_in_tab, get_query_from_tab,"
-        echo "         get_last_query_result"
+        echo "         update_query_in_tab, get_last_query_result"
         echo "         execute_query (skipped if AllowExecute is off)"
         echo "         execute_statement (skipped if AllowWrite is off)"
         echo ""

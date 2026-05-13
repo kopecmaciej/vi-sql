@@ -4,6 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 type Form struct {
@@ -20,11 +21,11 @@ func NewForm() *Form {
 // page-specific SetInputCapture so the translation wraps the inner handler.
 func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {
 	existing := f.Form.GetInputCapture()
-	f.Form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	f.Form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			return tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			return tcell.NewEventKey(tcell.KeyBacktab, 0, tcell.ModShift)
 		case event.Key() == tcell.KeyTab || event.Key() == tcell.KeyBacktab:
 			return nil
@@ -33,7 +34,7 @@ func (f *Form) ApplyFormNavKeys(k *config.KeyBindings) {
 			return existing(event)
 		}
 		return event
-	})
+	}))
 }
 
 // ApplyDropdownNavKeys wires the configured dropdown navigation keys onto every
@@ -43,6 +44,20 @@ func (f *Form) ApplyDropdownNavKeys(k *config.KeyBindings) {
 	for i := 0; i < f.GetFormItemCount(); i++ {
 		if dd, ok := f.GetFormItem(i).(*tview.DropDown); ok {
 			dd.SetInputCapture(DropdownInputCapture(k, dd.GetInputCapture()))
+		}
+	}
+}
+
+// ApplyClipboard wires the system clipboard onto every InputField and TextArea
+// currently in the form. Call this after the form is fully populated.
+func (f *Form) ApplyClipboard() {
+	copy, paste := util.GetClipboard()
+	for i := 0; i < f.GetFormItemCount(); i++ {
+		switch item := f.GetFormItem(i).(type) {
+		case *tview.InputField:
+			item.SetClipboard(copy, paste)
+		case *tview.TextArea:
+			item.SetClipboard(copy, paste)
 		}
 	}
 }

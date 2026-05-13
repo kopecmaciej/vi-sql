@@ -11,7 +11,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const maxRows = 100
+func (s *Server) maxRows() int {
+	if s.cfg.MaxRows > 0 {
+		return s.cfg.MaxRows
+	}
+	return 100
+}
 
 func (s *Server) registerTools() {
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
@@ -45,21 +50,26 @@ func (s *Server) registerTools() {
 	}, s.handleGetQueryFromTab)
 
 	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
+		Name:        "update_query_in_tab",
+		Description: "Replace the SQL editor content of an existing tab (identified by tab_id) with a new query. Does not execute it.",
+	}, s.handleUpdateQueryInTab)
+
+	mcpsdk.AddTool(s.server, &mcpsdk.Tool{
 		Name:        "get_last_query_result",
 		Description: "Return the result of the last query executed by the user inside the vi-sql app",
 	}, s.handleGetLastQueryResult)
 
-	if s.cfg.AllowExecute {
+	if s.cfg.AllowRead {
 		mcpsdk.AddTool(s.server, &mcpsdk.Tool{
-			Name:        "execute_query",
-			Description: "Execute a read-only SQL SELECT query and return results (max 100 rows)",
-		}, s.handleExecuteQuery)
+			Name:        "read_query",
+			Description: "Execute a read-only SQL SELECT query and return results (up to the configured row limit)",
+		}, s.handleReadQuery)
 
 		if s.cfg.AllowWrite {
 			mcpsdk.AddTool(s.server, &mcpsdk.Tool{
-				Name:        "execute_statement",
+				Name:        "write_query",
 				Description: "Execute an INSERT/UPDATE/DELETE/DDL statement. Returns affected row count.",
-			}, s.handleExecuteStatement)
+			}, s.handleWriteQuery)
 		}
 	}
 
@@ -83,11 +93,11 @@ type describeTableInput struct {
 	Table  string `json:"table"  jsonschema:"Table name,required"`
 }
 
-type executeQueryInput struct {
+type readQueryInput struct {
 	Query string `json:"query" jsonschema:"SQL SELECT query,required"`
 }
 
-type executeStatementInput struct {
+type writeQueryInput struct {
 	Statement string `json:"statement" jsonschema:"SQL DML/DDL statement,required"`
 }
 
@@ -113,6 +123,11 @@ type openQueryInTabInput struct {
 
 type getQueryFromTabInput struct {
 	TabID string `json:"tab_id" jsonschema:"Tab ID returned by open_query_in_tab,required"`
+}
+
+type updateQueryInTabInput struct {
+	TabID string `json:"tab_id" jsonschema:"Tab ID returned by open_query_in_tab,required"`
+	Query string `json:"query"  jsonschema:"New SQL query to set in the editor,required"`
 }
 
 type getLastQueryResultInput struct{}
@@ -162,10 +177,10 @@ func (s *Server) handleDescribeTable(
 	return jsonResult(result)
 }
 
-func (s *Server) handleExecuteQuery(
-	ctx context.Context, _ *mcpsdk.CallToolRequest, input executeQueryInput,
+func (s *Server) handleReadQuery(
+	ctx context.Context, _ *mcpsdk.CallToolRequest, input readQueryInput,
 ) (*mcpsdk.CallToolResult, any, error) {
-	log.Debug().Str("tool", "execute_query").Msg("MCP tool called")
+	log.Debug().Str("tool", "read_query").Msg("MCP tool called")
 	if input.Query == "" {
 		return nil, nil, fmt.Errorf("query is required")
 	}
@@ -178,11 +193,11 @@ func (s *Server) handleExecuteQuery(
 
 	rows, cols, err := s.driver.ExecuteQuery(ctx, input.Query)
 	if err != nil {
-		return nil, nil, fmt.Errorf("execute_query: %w", err)
+		return nil, nil, fmt.Errorf("read_query: %w", err)
 	}
 
-	if len(rows) > maxRows {
-		rows = rows[:maxRows]
+	if len(rows) > s.maxRows() {
+		rows = rows[:s.maxRows()]
 	}
 
 	colNames := make([]string, len(cols))
@@ -198,17 +213,24 @@ func (s *Server) handleExecuteQuery(
 	return jsonResult(result)
 }
 
-func (s *Server) handleExecuteStatement(
-	ctx context.Context, _ *mcpsdk.CallToolRequest, input executeStatementInput,
+func (s *Server) handleWriteQuery(
+	ctx context.Context, _ *mcpsdk.CallToolRequest, input writeQueryInput,
 ) (*mcpsdk.CallToolResult, any, error) {
-	log.Debug().Str("tool", "execute_statement").Msg("MCP tool called")
+	log.Debug().Str("tool", "write_query").Msg("MCP tool called")
 	if input.Statement == "" {
 		return nil, nil, fmt.Errorf("statement is required")
 	}
 
 	affected, err := s.driver.ExecuteStatement(ctx, input.Statement)
 	if err != nil {
-		return nil, nil, fmt.Errorf("execute_statement: %w", err)
+		return nil, nil, fmt.Errorf("write_query: %w", err)
+	}
+
+	if s.manager != nil {
+		s.manager.Broadcast(manager.NewQueryExecutedMsg(manager.QueryResult{
+			Query:    input.Statement,
+			Affected: affected,
+		}))
 	}
 
 	result := map[string]any{"affected_rows": affected}
@@ -274,8 +296,8 @@ func (s *Server) handleSampleTable(
 	if limit <= 0 {
 		limit = 10
 	}
-	if limit > 100 {
-		limit = 100
+	if limit > s.maxRows() {
+		limit = s.maxRows()
 	}
 
 	q := fmt.Sprintf("SELECT * FROM %s.%s LIMIT %d", input.Schema, input.Table, limit)
@@ -361,6 +383,31 @@ func (s *Server) handleGetQueryFromTab(
 		return nil, nil, fmt.Errorf("tab %q not found or has been closed", input.TabID)
 	}
 	return jsonResult(map[string]string{"tab_id": input.TabID, "query": text})
+}
+
+func (s *Server) handleUpdateQueryInTab(
+	_ context.Context, _ *mcpsdk.CallToolRequest, input updateQueryInTabInput,
+) (*mcpsdk.CallToolResult, any, error) {
+	log.Debug().Str("tool", "update_query_in_tab").Str("tab_id", input.TabID).Msg("MCP tool called")
+	if input.TabID == "" || input.Query == "" {
+		return nil, nil, fmt.Errorf("tab_id and query are required")
+	}
+	if s.manager == nil {
+		return nil, nil, fmt.Errorf("update_query_in_tab: TUI manager not available")
+	}
+	if s.tabRegistry == nil {
+		return nil, nil, fmt.Errorf("update_query_in_tab: tab registry not available")
+	}
+	if !s.tabRegistry.Exists(input.TabID) {
+		return nil, nil, fmt.Errorf("tab %q not found or has been closed", input.TabID)
+	}
+
+	s.manager.Broadcast(manager.NewUpdateQueryTabMsg(manager.UpdateQueryTabRequest{
+		TabID: input.TabID,
+		Query: input.Query,
+	}))
+
+	return jsonResult(map[string]string{"tab_id": input.TabID, "status": "Query updated"})
 }
 
 func (s *Server) handleGetLastQueryResult(

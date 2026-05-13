@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
@@ -34,11 +35,11 @@ func (r *ResultsBar) SetStyle(styles *config.Styles) {
 
 // Render updates the bar text, if TableMode it shows schema.table, if
 // Query Mode than simple "sql" label is shown
-func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration, countPending bool) {
+func (r *ResultsBar) Render(state *database.TableState, execTime time.Duration) {
 	if r.styles == nil {
 		return
 	}
-	r.rerender = func() { r.SetText(r.build(state, execTime, countPending)) }
+	r.rerender = func() { r.SetText(r.build(state, execTime)) }
 	r.rerender()
 }
 
@@ -46,10 +47,9 @@ func (r *ResultsBar) RenderRunning() {
 	if r.styles == nil {
 		return
 	}
-	dimColor := "#64748B"
 	r.prevRerender = r.rerender
 	r.rerender = nil
-	r.SetText(fmt.Sprintf("[%s]Running...  Esc to cancel[-]", dimColor))
+	r.SetText(fmt.Sprintf("[%s]Running...  Esc to cancel[-]", r.styles.Global.DimColor))
 }
 
 // RestorePrevious replays the state that was active before RenderRunning was called.
@@ -67,7 +67,7 @@ func (r *ResultsBar) RenderCancelled() {
 		return
 	}
 	r.rerender = nil
-	r.SetText("[#F87171]Cancelled[-]")
+	r.SetText(fmt.Sprintf("[%s]Cancelled[-]", r.styles.Global.ErrorColor))
 }
 
 // RenderStatementResult displays the result of a non-SELECT statement.
@@ -78,13 +78,13 @@ func (r *ResultsBar) RenderStatementResult(affected int64, execTime time.Duratio
 	r.rerender = func() {
 		styles := r.styles
 		textColor := styles.Global.TextColor.String()
-		dimColor := "#64748B"
+		dimColor := styles.Global.DimColor.String()
 		sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
 
-		execColor := "#4ADE80"
+		execColor := styles.Global.SuccessColor.String()
 		switch {
 		case execTime >= 500*time.Millisecond:
-			execColor = "#F87171"
+			execColor = styles.Global.ErrorColor.String()
 		case execTime >= 100*time.Millisecond:
 			execColor = styles.Global.SecondaryTextColor.String()
 		}
@@ -100,25 +100,20 @@ func (r *ResultsBar) RenderStatementResult(affected int64, execTime time.Duratio
 	r.rerender()
 }
 
-func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, countPending bool) string {
+func (r *ResultsBar) build(state *database.TableState, execTime time.Duration) string {
 	styles := r.styles
 	textColor := styles.Global.TextColor.String()
 	accentColor := styles.Global.SecondaryTextColor.String()
 	blueColor := styles.Global.FocusColor.String()
-	dimColor := "#64748B"
+	dimColor := styles.Global.DimColor.String()
 	sep := fmt.Sprintf(" [%s]│[-] ", dimColor)
 
-	execColor := "#4ADE80"
+	execColor := styles.Global.SuccessColor.String()
 	switch {
 	case execTime >= 500*time.Millisecond:
-		execColor = "#F87171"
+		execColor = styles.Global.ErrorColor.String()
 	case execTime >= 100*time.Millisecond:
 		execColor = accentColor
-	}
-
-	rowPrefix := ""
-	if countPending {
-		rowPrefix = "~"
 	}
 
 	label := fmt.Sprintf("[%s]%s.%s[-]", dimColor, state.Schema, state.Table)
@@ -126,16 +121,33 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 		label = fmt.Sprintf("[%s]sql[-]", dimColor)
 	}
 
-	line1 := fmt.Sprintf("%s%s[%s]%s%s rows[-]%s[%s]pg %d/%d[-]%s[%s]batch %d[-]%s[%s]⏱ %s[-]",
+	loaded := int64(state.RowCount())
+	var countSegment string
+	switch {
+	case state.AllRowsLoaded:
+		countSegment = fmt.Sprintf("[%s]%s rows[-]", textColor, formatNumber(loaded))
+	case state.Where != "" && state.RawSQL == "" && (state.Count == 0 || state.CountIsEstimate):
+		countSegment = fmt.Sprintf("[%s]%s+[-]", textColor, formatNumber(loaded))
+	case state.Count == 0 && !state.CountIsEstimate:
+		countSegment = fmt.Sprintf("[%s]%s rows[-]", textColor, formatNumber(loaded))
+	case state.CountIsEstimate:
+		countSegment = fmt.Sprintf("[%s]%s (~%s)[-]", textColor, formatNumber(loaded), formatNumber(state.Count))
+	default:
+		countSegment = fmt.Sprintf("[%s]%s (%s)[-]", textColor, formatNumber(loaded), formatNumber(state.Count))
+	}
+
+	warnSegment := ""
+	if rowCount := state.RowCount(); rowCount >= 10000 {
+		warnSegment = sep + fmt.Sprintf("[%s]⚠ %dK rows in memory[-]", styles.Global.ErrorColor, rowCount/1000)
+	}
+
+	line1 := fmt.Sprintf("%s%s%s%s[%s]⏱ %s[-]%s",
 		label,
 		sep,
-		textColor, rowPrefix, formatNumber(state.Count),
-		sep,
-		dimColor, state.GetCurrentPage(), state.GetTotalPages(),
-		sep,
-		dimColor, state.BatchSize,
+		countSegment,
 		sep,
 		execColor, formatDuration(execTime),
+		warnSegment,
 	)
 
 	// WHERE / ORDER BY are baked into raw SQL — skip second line in SQL mode.
@@ -165,10 +177,10 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration, c
 
 	var filters []string
 	if whereVal != "" {
-		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, whereVal))
+		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, tview.Escape(whereVal)))
 	}
 	if orderByVal != "" {
-		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, orderByVal))
+		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, tview.Escape(orderByVal)))
 	}
 
 	if len(filters) == 0 {

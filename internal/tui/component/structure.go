@@ -30,6 +30,7 @@ type Structure struct {
 
 	schema  string
 	tbl     string
+	isView  bool
 	columns []database.ColumnInfo
 	pkCols  map[string]bool
 	fkCols  map[string]string
@@ -89,46 +90,46 @@ func (s *Structure) setLayout() {
 	s.ddlView.SetBorderPadding(0, 0, 1, 1)
 	s.ddlView.SetDynamicColors(true)
 	s.ddlView.SetScrollable(true)
-	s.ddlView.SetWrap(false)
+	s.ddlView.SetWrap(true)
 }
 
 func (s *Structure) setKeybindings() {
 	k := s.App.GetKeys()
-	s.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	s.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Refresh, event.Name()):
+		case k.Match(k.Common.Refresh, event):
 			s.loadData(context.Background(), false)
 			return nil
-		case k.Contains(k.Structure.RenameColumn, event.Name()):
+		case k.Match(k.Structure.RenameColumn, event):
 			s.handleRenameColumn(context.Background())
 			return nil
-		case k.Contains(k.Structure.ToggleDDLPane, event.Name()):
+		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
 			s.Render()
 			return nil
-		case s.showDDL && k.Contains(k.Navigation.FocusDown, event.Name()):
+		case s.showDDL && k.Match(k.Navigation.FocusDown, event):
 			s.App.SetFocusOnly(s.ddlView)
 			return nil
 		}
 		return event
-	})
+	}))
 
-	s.ddlView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	s.ddlView.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.FocusUp, event):
 			s.App.SetFocusOnly(s.table)
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			util.Copy(s.ddl)
 			return nil
-		case k.Contains(k.Structure.ToggleDDLPane, event.Name()):
+		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
 			s.Render()
 			s.App.SetFocusOnly(s.table)
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (s *Structure) handleRenameColumn(ctx context.Context) {
@@ -186,6 +187,16 @@ func (s *Structure) Render() {
 func (s *Structure) HandleTableSelection(ctx context.Context, schema, table string) {
 	s.schema = schema
 	s.tbl = table
+	s.isView = false
+	s.columns = nil
+	s.loadData(ctx, false)
+}
+
+// HandleViewSelection loads column and DDL data for the given view (read-only).
+func (s *Structure) HandleViewSelection(ctx context.Context, schema, view string) {
+	s.schema = schema
+	s.tbl = view
+	s.isView = true
 	s.columns = nil
 	s.loadData(ctx, false)
 }
@@ -207,28 +218,29 @@ func (s *Structure) loadData(ctx context.Context, useState bool) {
 		return
 	}
 
-	constraints, err := s.Driver.GetTableConstraints(ctx, s.schema, s.tbl)
-	if err != nil {
-		log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load table constraints")
-	}
-	fks, err := s.Driver.GetTableForeignKeys(ctx, s.schema, s.tbl)
-	if err != nil {
-		log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load foreign keys")
-	}
-
 	pkCols := map[string]bool{}
 	fkCols := map[string]string{}
 
-	for _, c := range constraints {
-		if c.Type == "PRIMARY KEY" {
-			for _, col := range c.Columns {
-				pkCols[col] = true
+	if !s.isView {
+		constraints, err := s.Driver.GetTableConstraints(ctx, s.schema, s.tbl)
+		if err != nil {
+			log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load table constraints")
+		}
+		fks, err := s.Driver.GetTableForeignKeys(ctx, s.schema, s.tbl)
+		if err != nil {
+			log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load foreign keys")
+		}
+		for _, c := range constraints {
+			if c.Type == "PRIMARY KEY" {
+				for _, col := range c.Columns {
+					pkCols[col] = true
+				}
 			}
 		}
-	}
-	for _, fk := range fks {
-		for _, col := range fk.Columns {
-			fkCols[col] = fk.ReferencedTable
+		for _, fk := range fks {
+			for _, col := range fk.Columns {
+				fkCols[col] = fk.ReferencedTable
+			}
 		}
 	}
 
@@ -238,12 +250,22 @@ func (s *Structure) loadData(ctx context.Context, useState bool) {
 
 	s.renderColumns(columns, pkCols, fkCols)
 
-	ddl, err := s.Driver.GetTableDDL(ctx, s.schema, s.tbl)
-	if err != nil {
-		log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load table DDL")
+	if s.isView {
+		ddl, err := s.Driver.GetViewDDL(ctx, s.schema, s.tbl)
+		if err != nil {
+			log.Warn().Err(err).Str("view", s.tbl).Msg("Failed to load view DDL")
+		} else {
+			s.ddl = ddl
+			s.renderDDL()
+		}
 	} else {
-		s.ddl = ddl
-		s.renderDDL()
+		ddl, err := s.Driver.GetTableDDL(ctx, s.schema, s.tbl)
+		if err != nil {
+			log.Warn().Err(err).Str("table", s.tbl).Msg("Failed to load table DDL")
+		} else {
+			s.ddl = ddl
+			s.renderDDL()
+		}
 	}
 }
 

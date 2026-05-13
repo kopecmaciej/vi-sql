@@ -185,11 +185,7 @@ func ImportRows(
 	imported := 0
 	rowNum := 0
 
-	for {
-		if ctx.Err() != nil {
-			break
-		}
-
+	for ctx.Err() == nil {
 		record, readErr := r.Read()
 		if readErr == io.EOF {
 			break

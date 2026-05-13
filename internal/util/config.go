@@ -1,12 +1,10 @@
 package util
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/rs/zerolog/log"
@@ -27,6 +25,9 @@ func MergeConfigs(loaded, defaultConfig any) {
 func mergeConfigsRecursive(loaded, defaultValue reflect.Value) {
 	for i := 0; i < loaded.NumField(); i++ {
 		field := loaded.Field(i)
+		if !field.CanSet() { // omit unexported fields
+			continue
+		}
 		defaultField := defaultValue.Field(i)
 
 		if field.Type().Name() == "Key" {
@@ -83,7 +84,7 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	bytes, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			bytes, err = marshalConfig(defaultConfig, configPath)
+			bytes, err = yaml.Marshal(defaultConfig)
 			if err != nil {
 				log.Error().Err(err).Str("path", configPath).Msg("Failed to marshal default config")
 				return nil, fmt.Errorf("failed to marshal default config: %w", err)
@@ -100,8 +101,7 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	}
 
 	config := new(T)
-	err = unmarshalConfig(bytes, configPath, config)
-	if err != nil {
+	if err = yaml.Unmarshal(bytes, config); err != nil {
 		log.Error().Err(err).Str("path", configPath).Msg("Failed to unmarshal config file")
 		return nil, fmt.Errorf("failed to unmarshal config file: %w", err)
 	}
@@ -111,7 +111,7 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	// Write merged config back so any fields added to the struct after the file was
 	// created appear on disk. Existing user values take priority — MergeConfigs only
 	// fills fields that are empty/zero in the loaded config.
-	mergedBytes, err := marshalConfig(config, configPath)
+	mergedBytes, err := yaml.Marshal(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal merged config: %w", err)
 	}
@@ -120,28 +120,6 @@ func LoadConfigFile[T any](defaultConfig *T, configPath string) (*T, error) {
 	}
 
 	return config, nil
-}
-
-func marshalConfig[T any](config *T, configPath string) ([]byte, error) {
-	switch filepath.Ext(configPath) {
-	case ".json":
-		return json.MarshalIndent(config, "", "    ")
-	case ".yaml", ".yml":
-		return yaml.Marshal(config)
-	default:
-		return nil, fmt.Errorf("unsupported file extension: %s", configPath)
-	}
-}
-
-func unmarshalConfig[T any](data []byte, configPath string, config *T) error {
-	switch filepath.Ext(configPath) {
-	case ".json":
-		return json.Unmarshal(data, config)
-	case ".yaml", ".yml":
-		return yaml.Unmarshal(data, config)
-	default:
-		return fmt.Errorf("unsupported file extension: %s", configPath)
-	}
 }
 
 func ensureConfigDirExist() error {
@@ -162,6 +140,17 @@ func GetConfigDir() (string, error) {
 		return "", err
 	}
 	return configPath, nil
+}
+
+func ResolveConfigPath(configPath string) string {
+	if configPath == "" {
+		return configPath
+	}
+	info, err := os.Stat(configPath)
+	if err == nil && info.IsDir() {
+		return filepath.Join(configPath, "config.yaml")
+	}
+	return configPath
 }
 
 func ValidateConfigPath(configPath string) error {
@@ -195,30 +184,9 @@ func IsHexColor(s string) bool {
 		return false
 	}
 	for _, c := range s[1:] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}
 	return true
-}
-
-func HidePasswordInUri(uri string) string {
-	if !strings.Contains(uri, "@") {
-		return uri
-	}
-	parts := strings.SplitN(uri, "://", 2)
-	if len(parts) != 2 {
-		return uri
-	}
-	rest := parts[1]
-	atIdx := strings.Index(rest, "@")
-	if atIdx < 0 {
-		return uri
-	}
-	credentials := rest[:atIdx]
-	colonIdx := strings.Index(credentials, ":")
-	if colonIdx < 0 {
-		return uri
-	}
-	return parts[0] + "://" + credentials[:colonIdx] + ":****" + rest[atIdx:]
 }

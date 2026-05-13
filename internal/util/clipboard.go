@@ -7,14 +7,19 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+var (
+	ClipboardWrite func(string) error       = clipboard.WriteAll
+	ClipboardRead  func() (string, error)   = clipboard.ReadAll
+)
+
 func Copy(text string) {
-	if err := clipboard.WriteAll(text); err != nil {
+	if err := ClipboardWrite(text); err != nil {
 		log.Error().Err(err).Msg("Error writing to clipboard")
 	}
 }
 
 func Paste() string {
-	text, err := clipboard.ReadAll()
+	text, err := ClipboardRead()
 	if err != nil {
 		log.Error().Err(err).Msg("Error reading from clipboard")
 		return ""

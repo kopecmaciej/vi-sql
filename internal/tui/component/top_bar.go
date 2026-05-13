@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
@@ -16,11 +15,10 @@ import (
 const (
 	TopBarId = "TopBar"
 
-	connInfoWidth     = 8
-	mcpIndicatorWidth = 4
-	vimIndicatorWidth = 4
-	pingInterval      = 30 * time.Second
-	pingTimeout       = 5 * time.Second
+	connInfoWidth         = 8
+	defaultIndicatorWidth = 4
+	pingInterval          = 30 * time.Second
+	pingTimeout           = 5 * time.Second
 )
 
 // healthState holds the result of the most recent ping.
@@ -40,6 +38,7 @@ type TopBar struct {
 	connText    *tview.TextView
 	mcpText     *tview.TextView
 	vimText     *tview.TextView
+	updateText  *tview.TextView
 	health      healthState
 	stopMonitor context.CancelFunc
 }
@@ -68,13 +67,18 @@ func (t *TopBar) init() error {
 	t.vimText.SetDynamicColors(true)
 	t.vimText.SetTextAlign(tview.AlignCenter)
 
+	t.updateText = tview.NewTextView()
+	t.updateText.SetDynamicColors(true)
+	t.updateText.SetTextAlign(tview.AlignCenter)
+
 	t.Flex.SetDirection(tview.FlexColumn)
 	t.Flex.SetBorder(true)
 	t.setStyle()
 
 	t.Flex.AddItem(t.tabBar, 0, 1, false)
-	t.Flex.AddItem(t.vimText, vimIndicatorWidth, 0, false)
-	t.Flex.AddItem(t.mcpText, mcpIndicatorWidth, 0, false)
+	t.Flex.AddItem(t.updateText, 0, 0, false)
+	t.Flex.AddItem(t.vimText, defaultIndicatorWidth, 0, false)
+	t.Flex.AddItem(t.mcpText, defaultIndicatorWidth, 0, false)
 	t.Flex.AddItem(t.connText, connInfoWidth, 0, false)
 
 	t.handleEvents()
@@ -143,31 +147,35 @@ func (t *TopBar) setStyle() {
 	t.connText.SetBackgroundColor(bg)
 	t.mcpText.SetBackgroundColor(bg)
 	t.vimText.SetBackgroundColor(bg)
+	t.updateText.SetBackgroundColor(bg)
+}
+
+// SetUpdateAvailable shows the update icon in the top bar.
+func (t *TopBar) SetUpdateAvailable() {
+	g := t.App.GetStyles().Global
+	sym := t.App.GetStyles().Icons
+	t.updateText.SetText(fmt.Sprintf("[%s]%s[-]", g.WarningColor, string(sym.Update)))
+	t.Flex.ResizeItem(t.updateText, defaultIndicatorWidth, 0)
 }
 
 func (t *TopBar) updateConnText() {
-	const (
-		colorGreen = "#4ADE80"
-		colorRed   = "#F87171"
-		colorGray  = "#64748B"
-	)
-
+	g := t.App.GetStyles().Global
 	sym := t.App.GetStyles().Icons
 
 	if t.App.GetConfig().GetCurrentConnection() == nil {
-		t.connText.SetText(fmt.Sprintf("[%s]%s ----[-] ", colorRed, string(sym.HealthDown)))
+		t.connText.SetText(fmt.Sprintf("[%s]%s ----[-] ", g.ErrorColor, string(sym.HealthDown)))
 		return
 	}
 
-	indicator := fmt.Sprintf("[%s]%s[-]", colorGray, string(sym.HealthDown))
+	indicator := fmt.Sprintf("[%s]%s[-]", g.DimColor, string(sym.HealthDown))
 	extra := ""
 
 	if t.health.checked {
 		if t.health.connected {
-			indicator = fmt.Sprintf("[%s]%s[-]", colorGreen, string(sym.HealthUp))
-			extra = fmt.Sprintf(" [%s]%s[-]", colorGray, formatPingLatency(t.health.latency))
+			indicator = fmt.Sprintf("[%s]%s[-]", g.SuccessColor, string(sym.HealthUp))
+			extra = fmt.Sprintf(" [%s]%s[-]", g.DimColor, formatPingLatency(t.health.latency))
 		} else {
-			indicator = fmt.Sprintf("[%s]%s[-]", colorRed, string(sym.HealthDown))
+			indicator = fmt.Sprintf("[%s]%s[-]", g.ErrorColor, string(sym.HealthDown))
 		}
 	}
 
@@ -175,27 +183,24 @@ func (t *TopBar) updateConnText() {
 }
 
 func (t *TopBar) updateMCPText() {
-	const (
-		colorGreen = "#4ADE80"
-		colorGray  = "#64748B"
-	)
+	g := t.App.GetStyles().Global
 	sym := t.App.GetStyles().Icons
 	if t.App.IsMCPEnabled() {
-		t.mcpText.SetTextColor(tcell.GetColor(colorGreen))
+		t.mcpText.SetTextColor(g.SuccessColor.Color())
 	} else {
-		t.mcpText.SetTextColor(tcell.GetColor(colorGray))
+		t.mcpText.SetTextColor(g.DimColor.Color())
 	}
 	t.mcpText.SetText(fmt.Sprintf(" %s ", string(sym.MCP)))
 }
 
 func (t *TopBar) updateVimText() {
-	const colorGreen = "#4ADE80"
+	g := t.App.GetStyles().Global
 	sym := t.App.GetStyles().Icons
 	if !t.App.GetConfig().UI.VimMode {
 		t.vimText.SetText("    ")
 		return
 	}
-	t.vimText.SetTextColor(tcell.GetColor(colorGreen))
+	t.vimText.SetTextColor(g.SuccessColor.Color())
 	t.vimText.SetText(fmt.Sprintf(" %s ", string(sym.VimMode)))
 }
 
@@ -220,6 +225,10 @@ func (t *TopBar) handleEvents() {
 		case manager.MCPStateChanged:
 			t.App.QueueUpdateDraw(func() {
 				t.updateMCPText()
+			})
+		case manager.ConfigChanged:
+			t.App.QueueUpdateDraw(func() {
+				t.updateVimText()
 			})
 		}
 	})
@@ -296,10 +305,10 @@ func (t *TopBar) GetActiveTabName() string {
 	return t.tabBar.GetActiveTabName()
 }
 
-// SwitchToTabByName activates the first tab with the given name.
+// SwitchToTabByName activates the first tab matching both name and kind.
 // Returns true if a matching tab was found.
-func (t *TopBar) SwitchToTabByName(name string) bool {
-	return t.tabBar.SwitchToTabByName(name)
+func (t *TopBar) SwitchToTabByName(name string, kind widget.TabKind) bool {
+	return t.tabBar.SwitchToTabByName(name, kind)
 }
 
 // GetTabCount returns the total number of registered tabs.

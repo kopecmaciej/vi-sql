@@ -50,7 +50,12 @@ type ImportModal struct {
 
 	schemas []database.Schema
 	columns []database.ColumnInfo // populated on Preview
+	onDone  func()                // called after successful import
 }
+
+// SetOnDone registers a callback invoked on the tview goroutine after a
+// successful import. Use it to trigger a data refresh on the active tab.
+func (m *ImportModal) SetOnDone(fn func()) { m.onDone = fn }
 
 func NewImportModal() *ImportModal {
 	m := &ImportModal{
@@ -144,8 +149,7 @@ func (m *ImportModal) Render(schema, table string) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	m.App.Pages.AddPage(ImportModalId, wrapper, true, true)
-	m.App.SetFocusOnly(m.form)
+	m.App.Pages.ShowModal(ImportModalId, wrapper, m.form, true, true)
 }
 
 func (m *ImportModal) buildForm(tableValue string) {
@@ -164,9 +168,10 @@ func (m *ImportModal) buildForm(tableValue string) {
 
 	m.form.AddButton(" Preview ", func() { m.loadPreview() })
 	m.form.AddButton(" Import  ", func() { m.doImport() })
-	m.form.AddButton(" Cancel  ", func() { m.App.Pages.RemovePage(ImportModalId) })
-	m.form.SetCancelFunc(func() { m.App.Pages.RemovePage(ImportModalId) })
+	m.form.AddButton(" Cancel  ", func() { m.App.Pages.RemoveModalPage(ImportModalId) })
+	m.form.SetCancelFunc(func() { m.App.Pages.RemoveModalPage(ImportModalId) })
 	m.form.ApplyFormNavKeys(m.App.GetKeys())
+	m.form.ApplyClipboard()
 	m.applyAutocompleteKeys()
 }
 
@@ -180,20 +185,20 @@ func (m *ImportModal) applyAutocompleteKeys() {
 	}
 	k := m.App.GetKeys()
 	existing := field.GetInputCapture()
-	field.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	field.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			return tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			return tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone)
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			return tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone)
 		}
 		if existing != nil {
 			return existing(event)
 		}
 		return event
-	})
+	}))
 }
 
 func (m *ImportModal) autocompleteTable(text string) []tview.AutocompleteItem {
@@ -320,7 +325,7 @@ func (m *ImportModal) doImport() {
 	}
 
 	opts := util.ImportOptions{HasHeader: hasHeader, BatchSize: 50}
-	m.App.Pages.RemovePage(ImportModalId)
+	m.App.Pages.RemoveModalPage(ImportModalId)
 	go m.performImport(path, opts, mapping, schema, table)
 }
 
@@ -342,6 +347,9 @@ func (m *ImportModal) performImport(
 	m.App.QueueUpdateDraw(func() {
 		if len(errs) == 0 {
 			ShowError(m.App.Pages, fmt.Sprintf("Import complete: %d rows inserted.", imported), nil)
+			if m.onDone != nil {
+				m.onDone()
+			}
 			return
 		}
 		limit := 10

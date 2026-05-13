@@ -10,26 +10,26 @@ import (
 
 // TableState stores the current view state for a table.
 type TableState struct {
-	Schema     string
-	Table      string
-	Offset     int64
-	BatchSize  int64 // our internal fetch/page size
-	UserLimit  int64 // user's explicit LIMIT value from SQL (0 = none)
-	Count      int64
-	Where      string
-	OrderBy    string
-	Columns    string
-	LastQuery  string
-	RawSQL     string // non-empty when displaying an ad-hoc SQL query result
-	primaryKey []string
-	rows       []Row
+	Schema          string
+	Table           string
+	BatchSize       int64 // DB round-trip granularity
+	UserLimit       int64 // user's explicit LIMIT value from SQL (0 = none)
+	Count           int64
+	CountIsEstimate bool // true when Count came from pg_class rather than COUNT(*)
+	AllRowsLoaded   bool
+	Where           string
+	OrderBy         string
+	Columns         string
+	LastQuery       string
+	RawSQL          string // non-empty when displaying an ad-hoc SQL query result
+	primaryKey      []string
+	rows            []Row
 }
 
 func NewTableState(schema, table string) *TableState {
 	return &TableState{
 		Schema: schema,
 		Table:  table,
-		Offset: 0,
 	}
 }
 
@@ -49,36 +49,28 @@ func (t *TableState) GetAllRows() []Row {
 	return copies
 }
 
-func (t *TableState) SetOffset(offset int64) {
-	if offset < 0 {
-		t.Offset = 0
-	} else {
-		t.Offset = offset
+// RowCount returns the number of rows currently in the buffer.
+func (t *TableState) RowCount() int {
+	return len(t.rows)
+}
+
+// AppendRows appends fetched rows to the buffer (used by scroll prefetch).
+func (t *TableState) AppendRows(rows []Row) {
+	for _, row := range rows {
+		t.rows = append(t.rows, deepCopyRow(row))
 	}
 }
 
-func (t *TableState) GetCurrentPage() int64 {
-	if t.BatchSize == 0 {
-		return 1
-	}
-	return (t.Offset / t.BatchSize) + 1
-}
-
-func (t *TableState) GetTotalPages() int64 {
-	if t.BatchSize == 0 {
-		return 1
-	}
-	total := t.Count / t.BatchSize
-	if t.Count%t.BatchSize > 0 {
-		total++
-	}
-	return total
+// ClearBuffer resets the row buffer and count. Called before a fresh fetch
+func (t *TableState) ClearBuffer() {
+	t.rows = nil
+	t.Count = 0
+	t.CountIsEstimate = false
+	t.AllRowsLoaded = false
 }
 
 func (t *TableState) SetWhere(where string) {
-	where = strings.TrimSpace(where)
-	t.Where = where
-	t.Offset = 0
+	t.Where = strings.TrimSpace(where)
 }
 
 func (t *TableState) SetOrderBy(orderBy string) {
@@ -123,15 +115,13 @@ func (t *TableState) DeleteRow(pk PrimaryKey) {
 
 // StateMap preserves table states when switching between tables.
 type StateMap struct {
-	mu            sync.RWMutex
-	states        map[string]*TableState
-	hiddenColumns map[string][]string
+	mu     sync.RWMutex
+	states map[string]*TableState
 }
 
 func NewStateMap() *StateMap {
 	return &StateMap{
-		states:        make(map[string]*TableState),
-		hiddenColumns: make(map[string][]string),
+		states: make(map[string]*TableState),
 	}
 }
 
@@ -151,29 +141,6 @@ func (sm *StateMap) Set(key string, state *TableState) {
 	defer sm.mu.Unlock()
 	sm.states[key] = state
 }
-
-func (sm *StateMap) AddHiddenColumn(schema, table, column string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	key := sm.Key(schema, table)
-	sm.hiddenColumns[key] = append(sm.hiddenColumns[key], column)
-}
-
-func (sm *StateMap) GetHiddenColumns(schema, table string) []string {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	key := sm.Key(schema, table)
-	return sm.hiddenColumns[key]
-}
-
-func (sm *StateMap) ResetHiddenColumns(schema, table string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	key := sm.Key(schema, table)
-	sm.hiddenColumns[key] = nil
-}
-
-// Helper functions
 
 func matchesPK(row Row, pk PrimaryKey) bool {
 	for col, val := range pk.Columns {

@@ -1,14 +1,10 @@
 package config
 
-func (k *KeyBindings) loadDefaults() {
+func (k *KeyBindings) loadDefaults(vimMode bool) {
 	k.Common = CommonKeys{
 		Close: Key{
 			Keys:        []string{"Esc"},
 			Description: "Close",
-		},
-		Delete: Key{
-			Keys:        []string{"Ctrl+d"},
-			Description: "Delete",
 		},
 		Add: Key{
 			Runes:       []string{"a"},
@@ -26,14 +22,6 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Enter", "Space"},
 			Description: "Select",
 		},
-		Copy: Key{
-			Runes:       []string{"c"},
-			Description: "Copy",
-		},
-		Confirm: Key{
-			Keys:        []string{"Ctrl+s"},
-			Description: "Confirm",
-		},
 		Refresh: Key{
 			Keys:        []string{"Ctrl+r"},
 			Description: "Refresh",
@@ -46,58 +34,45 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"Ctrl+v"},
 			Description: "Paste",
 		},
+		Confirm: Key{Keys: []string{"Ctrl+s"}, Description: "Confirm"},
 	}
 
-	k.Navigation = NavigationKeys{
-		MoveUp: Key{
-			Runes:       []string{"k"},
-			Keys:        []string{"Up"},
-			Description: "Move up",
-		},
-		MoveDown: Key{
-			Runes:       []string{"j"},
-			Keys:        []string{"Down"},
-			Description: "Move down",
-		},
-		MoveLeft: Key{
-			Runes:       []string{"h"},
-			Keys:        []string{"Left"},
-			Description: "Move left",
-		},
-		MoveRight: Key{
-			Runes:       []string{"l"},
-			Keys:        []string{"Right"},
-			Description: "Move right",
-		},
-		FocusUp: Key{
-			Keys:        []string{"Ctrl+k", "Backtab"},
-			Description: "Focus up",
-		},
-		FocusDown: Key{
-			Keys:        []string{"Ctrl+j", "Tab"},
-			Description: "Focus down",
-		},
-		FocusLeft: Key{
-			Keys:        []string{"Ctrl+h", "Backtab"},
-			Description: "Focus left",
-		},
-		FocusRight: Key{
-			Keys:        []string{"Ctrl+l", "Tab"},
-			Description: "Focus right",
-		},
-		AutocompleteUp: Key{
-			Keys:        []string{"Ctrl+p", "Up"},
-			Description: "Autocomplete up",
-		},
-		AutocompleteDown: Key{
-			Keys:        []string{"Ctrl+n", "Down"},
-			Description: "Autocomplete down",
-		},
-		AutocompleteAccept: Key{
-			Keys:        []string{"Ctrl+y", "Enter"},
-			Description: "Autocomplete accept",
-		},
+	if vimMode {
+		k.Common.Delete = Key{Sequences: []string{"dd"}, Description: "Delete"}
+		k.Common.Copy = Key{Sequences: []string{"yy"}, Description: "Copy"}
+
+		k.Navigation.MoveUp = Key{Runes: []string{"k"}, Keys: []string{"Up"}, Description: "Move up"}
+		k.Navigation.MoveDown = Key{Runes: []string{"j"}, Keys: []string{"Down"}, Description: "Move down"}
+		k.Navigation.MoveLeft = Key{Runes: []string{"h"}, Keys: []string{"Left"}, Description: "Move left"}
+		k.Navigation.MoveRight = Key{Runes: []string{"l"}, Keys: []string{"Right"}, Description: "Move right"}
+		k.Navigation.GoTop = Key{Sequences: []string{"gg"}, Description: "Go top"}
+		k.Navigation.GoBottom = Key{Runes: []string{"G"}, Description: "Go bottom"}
+	} else {
+		k.Common.Delete = Key{Keys: []string{"Ctrl+d"}, Description: "Delete"}
+		k.Common.Copy = Key{Runes: []string{"c"}, Description: "Copy"}
+
+		k.Navigation.MoveUp = Key{Keys: []string{"Up"}, Description: "Move up"}
+		k.Navigation.MoveDown = Key{Keys: []string{"Down"}, Description: "Move down"}
+		k.Navigation.MoveLeft = Key{Keys: []string{"Left"}, Description: "Move left"}
+		k.Navigation.MoveRight = Key{Keys: []string{"Right"}, Description: "Move right"}
+		k.Navigation.GoTop = Key{Keys: []string{"Ctrl+Home"}, Description: "Go top"}
+		k.Navigation.GoBottom = Key{Keys: []string{"Ctrl+End"}, Description: "Go bottom"}
 	}
+
+	if vimMode {
+		k.Navigation.FocusUp = Key{Keys: []string{"Ctrl+k"}, Description: "Focus up"}
+		k.Navigation.FocusDown = Key{Keys: []string{"Ctrl+j"}, Description: "Focus down"}
+		k.Navigation.FocusLeft = Key{Keys: []string{"Ctrl+h"}, Description: "Focus left"}
+		k.Navigation.FocusRight = Key{Keys: []string{"Ctrl+l"}, Description: "Focus right"}
+	} else {
+		k.Navigation.FocusUp = Key{Keys: []string{"Alt+Up"}, Description: "Focus up"}
+		k.Navigation.FocusDown = Key{Keys: []string{"Alt+Down"}, Description: "Focus down"}
+		k.Navigation.FocusLeft = Key{Keys: []string{"Alt+Left"}, Description: "Focus left"}
+		k.Navigation.FocusRight = Key{Keys: []string{"Alt+Right"}, Description: "Focus right"}
+	}
+	k.Navigation.AutocompleteUp = Key{Keys: []string{"Ctrl+p", "Up"}, Description: "Autocomplete up"}
+	k.Navigation.AutocompleteDown = Key{Keys: []string{"Ctrl+n", "Down"}, Description: "Autocomplete down"}
+	k.Navigation.AutocompleteAccept = Key{Keys: []string{"Ctrl+y", "Enter"}, Description: "Autocomplete accept"}
 
 	k.Global = GlobalKeys{
 		CloseApp: Key{
@@ -110,7 +85,7 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		ToggleFooter: Key{
 			Keys:        []string{"Alt+f"},
-			Description: "Expand/collapse footer",
+			Description: "Toggle footer",
 		},
 		OpenConnection: Key{
 			Keys:        []string{"Ctrl+o"},
@@ -143,14 +118,6 @@ func (k *KeyBindings) loadDefaults() {
 			Keys:        []string{"F2"},
 			Description: "Rename tab",
 		},
-		FocusSchemaTree: Key{
-			Keys:        []string{"Ctrl+/"},
-			Description: "Focus schema tree",
-		},
-		OpenActions: Key{
-			Keys:        []string{"Ctrl+Space"},
-			Description: "Actions",
-		},
 		ImportData: Key{
 			Keys:        []string{"Alt+i"},
 			Description: "Import CSV",
@@ -174,8 +141,27 @@ func (k *KeyBindings) loadDefaults() {
 			Runes:       []string{"e"},
 			Description: "Expand table",
 		},
+		OpenStructure: Key{
+			Runes:       []string{"s"},
+			Description: "Open structure",
+		},
+		OpenIndexes: Key{
+			Runes:       []string{"i"},
+			Description: "Open indexes",
+		},
 	}
 
+	if vimMode {
+		k.Main.FocusSchemaTree = Key{Sequences: []string{"ge"}, Description: "Focus schemas"}
+		k.Main.OpenActions = Key{Runes: []string{":"}, Description: "Actions"}
+		k.Main.GoToTable = Key{Sequences: []string{"gt"}, Description: "Go to table"}
+		k.Main.GoToView = Key{Sequences: []string{"gv"}, Description: "Go to view"}
+	} else {
+		k.Main.FocusSchemaTree = Key{Keys: []string{"Ctrl+/"}, Description: "Focus schemas"}
+		k.Main.OpenActions = Key{Keys: []string{"Ctrl+Space"}, Description: "Actions"}
+		k.Main.GoToTable = Key{Keys: []string{"Ctrl+g"}, Description: "Go to table"}
+		k.Main.GoToView = Key{Keys: []string{"Alt+v"}, Description: "Go to view"}
+	}
 	k.Data = DataKeys{
 		PeekRow: Key{
 			Runes:       []string{"o"},
@@ -196,70 +182,61 @@ func (k *KeyBindings) loadDefaults() {
 		},
 		MultipleSelect: Key{
 			Runes:       []string{"V"},
-			Description: "Multiple select",
+			Description: "Start select",
 		},
 		ClearSelection: Key{
 			Keys:        []string{"Esc"},
 			Description: "Clear selection",
 		},
-		CopyRow: Key{
-			Runes:       []string{"C"},
-			Description: "Copy row",
-		},
-		ToggleSortBar: Key{
+		ToggleOrderBar: Key{
 			Runes:       []string{"s"},
-			Description: "Sort bar",
+			Description: "Order bar",
 		},
-		SortByColumn: Key{
+		OrderByColumn: Key{
 			Runes:       []string{"S"},
-			Description: "Sort by col",
+			Description: "Order by column",
 		},
 		HideColumn: Key{
 			Runes:       []string{"H"},
-			Description: "Hide col",
+			Description: "Hide column",
 		},
 		ResetHiddenColumns: Key{
 			Runes:       []string{"r"},
 			Description: "Reset cols",
 		},
-		NextPage: Key{
-			Runes:       []string{"n"},
-			Description: "Next page",
-		},
-		PreviousPage: Key{
-			Runes:       []string{"b"},
-			Description: "Previous page",
-		},
 		ExplainQuery: Key{
-			Keys:        []string{"Ctrl+g"},
+			Keys:        []string{"Alt+e"},
 			Description: "Explain query",
 		},
 		ExportData: Key{
 			Keys:        []string{"Alt+m"},
 			Description: "Export data",
 		},
-		FollowForeignKey: Key{
-			Keys:        []string{"Ctrl+b"},
-			Description: "Follow FK",
-		},
+	}
+	if vimMode {
+		k.Data.CopyCell = Key{Sequences: []string{"yc"}, Description: "Copy cell"}
+		k.Data.CopyRow = Key{Sequences: []string{"yy"}, Description: "Copy row"}
+		k.Data.CopyRowJSON = Key{Sequences: []string{"yrj"}, Description: "Copy row as JSON"}
+		k.Data.CopyRowCSV = Key{Sequences: []string{"yrc"}, Description: "Copy row as CSV"}
+		k.Data.FollowForeignKey = Key{Sequences: []string{"gd"}, Description: "Follow FK"}
+		k.Data.FindReferences = Key{Sequences: []string{"gr"}, Description: "Find references"}
+	} else {
+		k.Data.CopyCell = Key{Runes: []string{"c"}, Description: "Copy cell"}
+		k.Data.CopyRow = Key{Runes: []string{"C"}, Description: "Copy row"}
+		k.Data.CopyRowJSON = Key{Keys: []string{"Alt+j"}, Description: "Copy row as JSON"}
+		k.Data.CopyRowCSV = Key{Keys: []string{"Alt+c"}, Description: "Copy row as CSV"}
+		k.Data.FollowForeignKey = Key{Keys: []string{"Ctrl+b"}, Description: "Follow FK"}
+		k.Data.FindReferences = Key{Keys: []string{"Alt+r"}, Description: "Find references"}
 	}
 
 	k.ExplainViewer = ExplainViewerKeys{
 		ToggleMode: Key{
 			Runes:       []string{"t"},
-			Description: "Toggle ANALYZE mode",
+			Description: "Toggle ANALYZE",
 		},
 	}
 
 	k.Peeker = PeekerKeys{
-		MoveToTop: Key{
-			Runes:       []string{"g"},
-			Description: "Go to top",
-		},
-		MoveToBottom: Key{
-			Runes:       []string{"G"},
-			Description: "Go to bottom",
-		},
 		CopyHighlight: Key{
 			Runes:       []string{"C"},
 			Description: "Copy highlight",
@@ -291,8 +268,8 @@ func (k *KeyBindings) loadDefaults() {
 
 	k.IndexAddForm = IndexAddFormKeys{
 		ToggleSQLMode: Key{
-			Keys:        []string{"Alt+e"},
-			Description: "SQL mode",
+			Keys:        []string{"Ctrl+e"},
+			Description: "SQL editor",
 		},
 		AddColumn: Key{
 			Keys:        []string{"Ctrl+a"},
@@ -314,15 +291,21 @@ func (k *KeyBindings) loadDefaults() {
 	k.SQLQueryEditor = SQLQueryEditorKeys{
 		Fullscreen: Key{
 			Keys:        []string{"Alt+z"},
-			Description: "Fullscreen editor",
+			Description: "Toggle",
 		},
 		OpenHistory: Key{
-			Keys:        []string{"Ctrl+m"},
-			Description: "Query history",
+			Keys:        []string{"Alt+r"},
+			Description: "History",
 		},
 		TermEditor: Key{
 			Keys:        []string{"Ctrl+e"},
 			Description: "Open in $EDITOR",
 		},
+	}
+
+	if vimMode {
+		k.SQLQueryEditor.Prettify = Key{Sequences: []string{"gf"}, Description: "Format SQL"}
+	} else {
+		k.SQLQueryEditor.Prettify = Key{Keys: []string{"Ctrl+f"}, Description: "Format SQL"}
 	}
 }

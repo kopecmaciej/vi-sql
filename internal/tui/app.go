@@ -15,10 +15,10 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	visqlmcp "github.com/kopecmaciej/vi-sql/internal/mcp"
+	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/page"
-	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -27,11 +27,13 @@ import (
 type App struct {
 	*core.App
 
-	connection    *page.Connection
-	main          *page.Main
-	help          *page.Help
-	mcpCancelFunc context.CancelFunc
-	tabRegistry   *manager.TabRegistry
+	connection     *page.Connection
+	main           *page.Main
+	help           *page.Help
+	mcpCancelFunc  context.CancelFunc
+	tabRegistry    *manager.TabRegistry
+	currentFocusID string
+	latestVersion  string
 }
 
 func NewApp(appConfig *config.Config) *App {
@@ -52,7 +54,8 @@ func NewApp(appConfig *config.Config) *App {
 }
 
 func (a *App) Init() error {
-	a.SetRoot(a.Pages, true).EnableMouse(true)
+	enableMouse := a.App.GetConfig().UI.Mouse
+	a.SetRoot(a.Pages, true).EnableMouse(enableMouse).EnablePaste(true)
 
 	a.App.SetOpenStyleModalFunc(a.ShowStyleChangeModal)
 	a.App.SetOpenConnectionPageFunc(a.renderConnection)
@@ -63,6 +66,7 @@ func (a *App) Init() error {
 	if err != nil {
 		return err
 	}
+	go a.handleEvents()
 	a.setKeybindings()
 
 	if err := a.connection.Init(a.App); err != nil {
@@ -74,6 +78,25 @@ func (a *App) Init() error {
 func (a *App) Run() error {
 	a.startWatchdog()
 	return a.Application.Run()
+}
+
+func (a *App) shutdown() {
+	if a.mcpCancelFunc != nil {
+		a.mcpCancelFunc()
+		log.Debug().Msg("MCP server stopped")
+	}
+
+	if driver := a.GetDriver(); driver != nil {
+		if err := driver.Close(context.Background()); err != nil {
+			log.Error().Err(err).Msg("Failed to close database connection")
+		}
+	}
+
+	a.GetManager().Stop()
+	log.Debug().Msg("Event manager stopped")
+
+	a.Stop()
+	log.Debug().Msg("App stopped")
 }
 
 // startWatchdog periodically probes the tview event loop, if the loop does not
@@ -107,64 +130,99 @@ func (a *App) startWatchdog() {
 }
 
 func (a *App) setKeybindings() {
-	a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if a.shouldHandleRune(event) {
+	k := a.GetKeys()
+	k.SequencesDisabled = a.isTextInputFocused
+	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyRune && a.isTextInputFocused() {
 			return event
 		}
 
 		switch {
-		case a.GetKeys().Contains(a.GetKeys().Global.CloseApp, event.Name()):
-			a.Stop()
+		case k.Match(k.Global.CloseApp, event):
+			a.shutdown()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.OpenConnection, event.Name()):
+		case k.Match(k.Global.OpenConnection, event):
 			a.renderConnection()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ChangeStyle, event.Name()):
+		case k.Match(k.Global.ChangeStyle, event):
 			a.ShowStyleChangeModal()
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.ToggleFooter, event.Name()):
+		case k.Match(k.Global.ToggleFooter, event):
 			if a.main.App != nil {
 				a.main.ToggleFooter()
 			}
 			return nil
-		case a.GetKeys().Contains(a.GetKeys().Global.FullScreenHelp, event.Name()):
+		case k.Match(k.Global.FullScreenHelp, event):
 			if a.Pages.HasPage(page.HelpPageId) {
-				a.Pages.RemovePage(page.HelpPageId)
+				a.Pages.RemoveModalPage(page.HelpPageId)
 				return nil
 			}
-			a.help.Render()
-			a.Pages.AddPage(page.HelpPageId, a.help, true, true)
+			a.openHelp()
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
-func (a *App) shouldHandleRune(event *tcell.EventKey) bool {
-	if !strings.HasPrefix(event.Name(), "Rune") {
+func (a *App) handleEvents() {
+	ch := a.GetManager().Subscribe("App")
+	done := a.GetManager().Done()
+	for {
+		select {
+		case event := <-ch:
+			if event.Message.Type != manager.FocusChanged {
+				continue
+			}
+			id, ok := event.Message.Data.(tview.Identifier)
+			if !ok {
+				continue
+			}
+			a.currentFocusID = string(id)
+		case <-done:
+			return
+		}
+	}
+}
+
+func (a *App) openHelp() {
+	a.help.OpenAt(a.currentFocusID)
+	a.Pages.AddModalPage(page.HelpPageId, a.help, true, true)
+}
+
+// isTextInputFocused check whether currently focused primitives is
+// raw text input or input/visual vim mode, if yes, single-rune
+// events must be pass through untouched.
+func (a *App) isTextInputFocused() bool {
+	focus := a.GetFocus()
+	if focus == nil {
 		return false
 	}
 
-	focus := a.GetFocus()
-	identifier := string(focus.GetIdentifier())
-
-	// TODO: find better way of handling this focus problem in input fields
-	if strings.Contains(identifier, "Bar") || strings.Contains(identifier, "Input") || strings.Contains(identifier, "CreateTable") {
+	switch f := focus.(type) {
+	case *tview.InputField, *core.InputField:
+		return true
+	case *tview.TextView:
+		return false
+	case *core.TextView:
+		return f.IsRawInput()
+	case *component.SQLQueryEditor:
+		return f.IsInsertMode() || f.IsVisualMode()
+	}
+	if _, ok := focus.(tview.FormItem); ok {
 		return true
 	}
 
-	_, isInputField := focus.(*tview.InputField)
-	_, isCustomInputField := focus.(*core.InputField)
-	_, isFormItem := focus.(tview.FormItem)
-	_, isInputModal := focus.(*primitives.InputModal)
-
-	return isInputField || isCustomInputField || isFormItem || isInputModal
+	return false
 }
 
 func (a *App) connectToDatabase() error {
 	currConn := a.App.GetConfig().GetCurrentConnection()
 	if currConn == nil {
 		return nil
+	}
+
+	if old := a.App.GetDriver(); old != nil {
+		_ = old.Close(context.Background())
 	}
 
 	driver, formatter, err := database.NewDriver(currConn)
@@ -229,10 +287,42 @@ func (a *App) Render() {
 		return
 	}
 	a.updateConfigVersion()
-	a.continueStartup()
+	a.gateOnMasterPassword(a.continueStartup)
+}
+
+// gateOnMasterPassword shows the master-password modal (setup or unlock,
+// depending on whether a wrapped key already exists) if in master method.
+func (a *App) gateOnMasterPassword(next func()) {
+	cfg := a.App.GetConfig()
+	if cfg.Security.Method != config.SecurityMethodMaster || config.EncryptionKey != "" {
+		next()
+		return
+	}
+
+	mode := modal.MasterModeUnlock
+	if !cfg.IsMasterConfigured() {
+		mode = modal.MasterModeSetup
+	}
+	m := modal.NewMasterPasswordModal(mode)
+	if err := m.Init(a.App); err != nil {
+		modal.ShowError(a.Pages, "Failed to init master password modal", err)
+		return
+	}
+	m.SetOnDone(func(err error) {
+		if err != nil {
+			a.Stop()
+			return
+		}
+		next()
+	})
+	m.Render()
 }
 
 func (a *App) continueStartup() {
+	if err := applyPendingConnect(a.App.GetConfig()); err != nil {
+		modal.ShowError(a.Pages, "Failed to add --connect connection", err)
+		a.App.GetConfig().ShowConnectionPage = true
+	}
 	switch {
 	case a.App.GetConfig().ShowOptionsPage:
 		a.renderOptionsOnStartup()
@@ -242,6 +332,28 @@ func (a *App) continueStartup() {
 		a.initAndRenderMain()
 	}
 	go a.checkForUpdate()
+}
+
+// applyPendingConnect adds a connection passed via --connect.
+func applyPendingConnect(cfg *config.Config) error {
+	if cfg.PendingConnect == "" {
+		return nil
+	}
+	raw := cfg.PendingConnect
+	cfg.PendingConnect = ""
+
+	// PendingConnect is stored as "name=dsn" by cmd.go after name resolution.
+	name, dsn, _ := strings.Cut(raw, "=")
+	conn, err := database.BuildConfigFromDSN(name, dsn)
+	if err != nil {
+		return err
+	}
+	if existing, _ := cfg.GetConnectionByName(conn.Name); existing == nil {
+		if err := cfg.AddConnection(conn); err != nil {
+			return err
+		}
+	}
+	return cfg.SetCurrentConnection(conn.Name)
 }
 
 func getPendingChangelog(lastVersion string) []util.ChangelogEntry {
@@ -264,7 +376,7 @@ func (a *App) showChangelogModal(entries []util.ChangelogEntry) {
 			return
 		}
 		a.updateConfigVersion()
-		a.Pages.RemovePage(modal.ChangelogModalId)
+		a.Pages.RemoveModalPage(modal.ChangelogModalId)
 		a.continueStartup()
 	})
 
@@ -276,7 +388,7 @@ func (a *App) showChangelogModal(entries []util.ChangelogEntry) {
 }
 
 func (a *App) updateConfigVersion() {
-	normalized := util.NormalizeVersion(build.Version)
+	normalized := util.TagToVersion(build.Version)
 	cfg := a.App.GetConfig()
 	if cfg.Version != normalized {
 		if err := cfg.UpdateVersion(normalized); err != nil {
@@ -286,19 +398,56 @@ func (a *App) updateConfigVersion() {
 }
 
 func (a *App) checkForUpdate() {
-	latest := util.FetchLatestVersion(context.Background())
-	cfg := a.App.GetConfig()
-	if latest == "" || !util.IsNewerVersion(build.Version, latest) || cfg.LastUpdateNotified == latest {
+	latest := util.FetchLatestVersionFromGithub(context.Background())
+	if latest == "" || !util.IsNewerVersion(build.Version, latest) {
 		return
 	}
 	a.Application.QueueUpdateDraw(func() {
-		modal.ShowUpdateNotice(a.Pages, latest, func() {
-			cfg.LastUpdateNotified = latest
-			if err := cfg.UpdateConfig(); err != nil {
-				log.Error().Err(err).Msg("Failed to persist LastUpdateNotified")
-			}
-		})
+		a.latestVersion = latest
+		if a.main.App != nil {
+			a.main.SetUpdateHandler(func() { a.startSelfUpdate(latest) })
+		}
 	})
+}
+
+func (a *App) startSelfUpdate(tag string) {
+	confirmModal := modal.NewConfirm("SelfUpdateConfirm")
+	if err := confirmModal.Init(a.App); err != nil {
+		modal.ShowError(a.Pages, "Failed to init update modal", err)
+		return
+	}
+	confirmModal.SetText(fmt.Sprintf("Update vi-sql from %s to %s?", build.Version, tag))
+	confirmModal.SetConfirmButtonLabel("Update")
+	confirmModal.SetOnConfirm(func() {
+		a.Pages.RemoveModalPage("SelfUpdateConfirm")
+
+		progress := tview.NewModal()
+		progress.SetTitle(" Updating vi-sql ")
+		progress.SetText("Starting update…")
+		progress.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+		a.Pages.AddModalPage("SelfUpdateProgress", progress, true, true)
+
+		go func() {
+			err := util.InstallRelease(context.Background(), tag, func(step string) {
+				a.Application.QueueUpdateDraw(func() { progress.SetText(step) })
+			})
+			a.Application.QueueUpdateDraw(func() {
+				a.Pages.RemoveModalPage("SelfUpdateProgress")
+				if err != nil {
+					modal.ShowError(a.Pages, "Update failed", err)
+					return
+				}
+				done := tview.NewModal()
+				done.SetTitle(" Update complete ")
+				done.SetText(fmt.Sprintf("Updated to %s! Please restart vi-sql.", tag))
+				done.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+				done.AddButtons([]string{"Exit"})
+				done.SetDoneFunc(func(_ int, _ string) { os.Exit(0) })
+				a.Pages.AddModalPage("SelfUpdateDone", done, true, true)
+			})
+		}()
+	})
+	a.Pages.ShowModal("SelfUpdateConfirm", confirmModal, confirmModal, true, true)
 }
 
 func (a *App) initAndRenderMain() {
@@ -323,10 +472,17 @@ func (a *App) initAndRenderMain() {
 
 	a.main.Render()
 
+	if a.latestVersion != "" {
+		a.main.SetUpdateHandler(func() { a.startSelfUpdate(a.latestVersion) })
+	}
+
 	if jumpInto := a.GetConfig().JumpInto; jumpInto != "" {
-		if err := a.jumpToTable(jumpInto); err != nil {
-			modal.ShowError(a.Pages, "Unable to jump into the schema/table", err)
-		}
+		// Defer past the first draw so TabBar sees the real terminal width
+		go a.Application.QueueUpdateDraw(func() {
+			if err := a.jumpToTable(jumpInto); err != nil {
+				modal.ShowError(a.Pages, "Unable to jump into the schema/table", err)
+			}
+		})
 	}
 }
 
@@ -335,6 +491,14 @@ func (a *App) renderConnection() {
 		a.Pages.RemovePage(a.connection.GetIdentifier())
 		a.initAndRenderMain()
 	})
+
+	if a.main.App != nil {
+		a.connection.SetOnCancelFunc(func() {
+			a.Pages.RemovePage(a.connection.GetIdentifier())
+		})
+	} else {
+		a.connection.SetOnCancelFunc(nil)
+	}
 
 	a.Pages.AddPage(a.connection.GetIdentifier(), a.connection, true, true)
 	a.connection.Render()
@@ -349,6 +513,9 @@ func (a *App) renderOptionsOnStartup() {
 	}
 	opts.SetOnSubmitFunc(func() {
 		a.Pages.RemovePage(opts.GetIdentifier())
+		if err := a.App.ReloadKeybindings(); err != nil {
+			log.Error().Err(err).Msg("Failed to reload keybindings")
+		}
 		a.renderConnection()
 	})
 	a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
@@ -362,11 +529,18 @@ func (a *App) renderOptions() {
 		modal.ShowError(a.Pages, "Error while rendering options page", err)
 		return
 	}
+	opts.SetOnCancelFunc(func() {
+		a.Pages.RemovePage(opts.GetIdentifier())
+	})
 	opts.SetOnSubmitFunc(func() {
 		a.Pages.RemovePage(opts.GetIdentifier())
 		if a.App.GetConfig().MCP.Enabled && a.App.GetDriver() != nil {
 			a.startMCPServer(a.App.GetDriver())
 		}
+		if err := a.App.ReloadKeybindings(); err != nil {
+			log.Error().Err(err).Msg("Failed to reload keybindings")
+		}
+		a.App.GetManager().Broadcast(manager.NewConfigChangedMsg())
 	})
 	a.Pages.AddPage(opts.GetIdentifier(), opts, true, true)
 	opts.Render()
@@ -392,9 +566,9 @@ func (a *App) jumpToTable(jumpTo string) error {
 }
 
 func parseJumpTarget(jumpTo string) (schema, table string, err error) {
-	parts := strings.SplitN(jumpTo, "/", 2)
+	parts := strings.SplitN(jumpTo, ".", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid jump target %q: expected schema/table", jumpTo)
+		return "", "", fmt.Errorf("invalid jump target %q: expected schema.table", jumpTo)
 	}
 	schema = strings.TrimSpace(parts[0])
 	table = strings.TrimSpace(parts[1])

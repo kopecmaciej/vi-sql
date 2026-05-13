@@ -1,15 +1,37 @@
 entries:
-  - version: "0.0.2"
+  - version: 0.2.0
     breaking: false
-    title: "Initial release"
+    title: Oracle driver, focus stack fix, config lifecycle improvements
     changes:
-      - "New: PostgreSQL support with full schema browsing"
-      - "New: Multi-tab query editor with syntax highlighting"
-      - "New: EXPLAIN / EXPLAIN ANALYZE with plan viewer"
-      - "New: Table data viewer with pagination, filtering, and ordering"
-      - "New: Row CRUD (add, edit, delete) with destructive-action confirmation"
-      - "New: Table structure, indexes, and DDL panels"
-      - "New: Query history with fuzzy search and preview"
-      - "New: CSV import and multi-format export (CSV, JSON, SQL, Markdown)"
-      - "New: MCP server integration for AI-assisted querying"
-      - "New: In-app changelog shown on first startup after upgrade"
+      - "New: Oracle database driver with full query, schema browsing, and pagination support"
+      - "Fix: Closing the value viewer inside a peeker modal now correctly restores focus to the peeker"
+      - "Fix: Cancelling the options page no longer overwrites the active config"
+      - "Fix: Manager shutdown now uses sync.Once to prevent panics on rapid shutdown"
+  - version: 0.1.4
+    breaking: false
+    title: SQL formatting, error modal copy, escaping connection/options pages
+    changes:
+      - "New: Format the query in the editor in place with `gf` (vim) or `Ctrl+f` (normal), also available from the actions modal"
+      - "New: Error modal now has a button to copy the error text to the clipboard"
+      - "Fix: Autocomplete for columns, schemas, and tables now behaves correctly when the cursor is inside quotes"
+      - "Fix: Focus is restored correctly after a failed row delete"
+      - "Fix: Exiting the connection or options page no longer wipes the active session"
+  - version: 0.1.3
+    breaking: false
+    title: Views in schema tree, XLSX export, dialect-aware autocomplete, Windows support
+    changes:
+      - "New: Views now appear in the schema tree; opening a view shows its data and structure"
+      - "New: XLSX export option added to the export modal"
+      - "New: Autocomplete quotes identifiers using the correct syntax per backend (Postgres/SQLite: `\"`, MySQL: `` ` ``, SQL Server: `[]`)"
+      - "New: Windows PowerShell install script; log path defaults to OS temp directory on all platforms"
+      - "Fix: Opening a table or query that already has an open tab now focuses the existing tab instead of creating a duplicate"
+      - "Fix: Copy as JSON now correctly formats nested JSON values"
+  - version: 0.1.2
+    breaking: false
+    title: Copy row as JSON/CSV, longer key sequences, paste fix
+    changes:
+      - "New: Copy row as JSON or CSV — `yrj` / `yrc` in vim mode, `Alt+j` / `Alt+c` in normal mode; also available from the actions modal"
+      - "New: Keybinding sequences now accept two or more runes, enabling chords like `yrj`"
+      - "New: `--config` accepts a directory path and resolves to `config.yaml` inside it"
+      - "Fix: Bracketed-paste input from the terminal now works correctly"
+      - "Improvement: Confirm key defaults to `Ctrl+s` in both modes (was `Ctrl+Enter` in normal mode, which doesn't register in some terminals)"

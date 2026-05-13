@@ -7,24 +7,24 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	"github.com/kopecmaciej/vi-sql/internal/database"
+	sql "github.com/kopecmaciej/vi-sql/internal/sql"
 )
 
 // SQLTokenStyle returns a tcell.Style for the token that contains byteOffset.
 // It performs a linear scan through tokens (they are sorted by Start).
-func SQLTokenStyle(tokens []database.Token, byteOffset int, s *config.SQLEditorStyle) tcell.Style {
+func SQLTokenStyle(tokens []sql.Token, byteOffset int, s *config.SQLEditorStyle) tcell.Style {
 	for _, tok := range tokens {
 		if tok.Start <= byteOffset && byteOffset < tok.End {
 			switch tok.Type {
-			case database.TokenKeyword:
+			case sql.TokenKeyword:
 				return tcell.StyleDefault.Foreground(s.KeywordColor.Color())
-			case database.TokenString:
+			case sql.TokenString:
 				return tcell.StyleDefault.Foreground(s.StringColor.Color())
-			case database.TokenNumber:
+			case sql.TokenNumber:
 				return tcell.StyleDefault.Foreground(s.NumberColor.Color())
-			case database.TokenComment:
+			case sql.TokenComment:
 				return tcell.StyleDefault.Foreground(s.CommentColor.Color())
-			case database.TokenOperator, database.TokenTypecast:
+			case sql.TokenOperator, sql.TokenTypecast:
 				return tcell.StyleDefault.Foreground(s.OperatorColor.Color())
 			default:
 				return tcell.StyleDefault.Foreground(s.IdentifierColor.Color())
@@ -36,22 +36,22 @@ func SQLTokenStyle(tokens []database.Token, byteOffset int, s *config.SQLEditorS
 
 // ColorizeSQLText converts a SQL string into a tview dynamic-color string
 // using the app's SQL editor color scheme. Use for read-only text views.
-func ColorizeSQLText(sql string, style *config.SQLEditorStyle) string {
-	tokens := database.Tokenize(sql)
+func ColorizeSQLText(sqlText string, style *config.SQLEditorStyle) string {
+	tokens := sql.Tokenize(sqlText)
 	var sb strings.Builder
 	for _, tok := range tokens {
 		escaped := tview.Escape(tok.Value)
 		var color string
 		switch tok.Type {
-		case database.TokenKeyword:
+		case sql.TokenKeyword:
 			color = style.KeywordColor.String()
-		case database.TokenString:
+		case sql.TokenString:
 			color = style.StringColor.String()
-		case database.TokenNumber:
+		case sql.TokenNumber:
 			color = style.NumberColor.String()
-		case database.TokenComment:
+		case sql.TokenComment:
 			color = style.CommentColor.String()
-		case database.TokenOperator, database.TokenTypecast:
+		case sql.TokenOperator, sql.TokenTypecast:
 			color = style.OperatorColor.String()
 		default:
 			color = style.IdentifierColor.String()

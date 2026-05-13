@@ -43,10 +43,43 @@ type IconStyle struct {
 	HealthDown    Style `yaml:"healthDown"`
 	VimMode       Style `yaml:"vimMode"`
 	MCP           Style `yaml:"mcp"`
+	Update        Style `yaml:"update"`
 	TabTable      Style `yaml:"tabTable"`
 	TabQuery      Style `yaml:"tabQuery"`
 	TabStructure  Style `yaml:"tabStructure"`
 	TabIndex      Style `yaml:"tabIndex"`
+	View          Style `yaml:"view"`
+
+	PrimaryKey         Style `yaml:"primaryKey"`
+	ForeignKey         Style `yaml:"foreignKey"`
+	CompletionKeyword  Style `yaml:"completionKeyword"`
+	CompletionCTE      Style `yaml:"completionCTE"`
+	CompletionAlias    Style `yaml:"completionAlias"`
+	CompletionFunction Style `yaml:"completionFunction"`
+
+	DriverPostgres    Style `yaml:"driverPostgres"`
+	DriverMySQL       Style `yaml:"driverMySQL"`
+	DriverMariaDB     Style `yaml:"driverMariaDB"`
+	DriverSQLite      Style `yaml:"driverSQLite"`
+	DriverCockroachDB Style `yaml:"driverCockroachDB"`
+	DriverDefault     Style `yaml:"driverDefault"`
+}
+
+func (s *IconStyle) DriverIcon(driver string) string {
+	switch driver {
+	case "postgres":
+		return string(s.DriverPostgres)
+	case "mysql":
+		return string(s.DriverMySQL)
+	case "mariadb":
+		return string(s.DriverMariaDB)
+	case "sqlite":
+		return string(s.DriverSQLite)
+	case "cockroachdb":
+		return string(s.DriverCockroachDB)
+	default:
+		return string(s.DriverDefault)
+	}
 }
 
 // TypeSymbol returns the icon for a given SQL data type.
@@ -64,7 +97,7 @@ func (s *IconStyle) TypeSymbol(dataType string) string {
 		strings.Contains(dt, "real") || strings.Contains(dt, "double") ||
 		strings.Contains(dt, "float") || strings.Contains(dt, "money"):
 		return string(s.TypeNumber)
-	case strings.Contains(dt, "bool"):
+	case strings.Contains(dt, "bool") || dt == "bit":
 		return string(s.TypeBool)
 	case strings.Contains(dt, "json"):
 		return string(s.TypeJSON)

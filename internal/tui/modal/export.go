@@ -9,6 +9,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
+	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
@@ -22,6 +23,7 @@ var exportFormats = []util.ExportFormat{
 	util.ExportSQLInsert,
 	util.ExportMarkdown,
 	util.ExportText,
+	util.ExportXLSX,
 }
 
 // fmtItemFirst is the index of the first dynamic checkbox; items 0–2 are
@@ -40,6 +42,10 @@ type ExportModal struct {
 	schema string
 	table  string
 	query  string
+
+	// When non-nil, performExport uses these instead of re-running the query.
+	preRows []database.Row
+	preCols []string
 }
 
 func NewExportModal() *ExportModal {
@@ -117,6 +123,8 @@ func (e *ExportModal) Render(_ context.Context, query, schema, table string) {
 	e.query = query
 	e.schema = schema
 	e.table = table
+	e.preRows = nil
+	e.preCols = nil
 
 	e.buildForm()
 	e.rebuildContent()
@@ -130,8 +138,31 @@ func (e *ExportModal) Render(_ context.Context, query, schema, table string) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	e.App.Pages.AddPage(ExportModalId, wrapper, true, true)
-	e.App.SetFocusOnly(e.form)
+	e.App.Pages.ShowModal(ExportModalId, wrapper, e.form, true, true)
+}
+
+// RenderWithRows opens the export dialog for a pre-fetched set of rows,
+// skipping the re-query step entirely.
+func (e *ExportModal) RenderWithRows(_ context.Context, rows []database.Row, cols []string, schema, table string) {
+	e.query = fmt.Sprintf("-- Exporting %d selected rows", len(rows))
+	e.schema = schema
+	e.table = table
+	e.preRows = rows
+	e.preCols = cols
+
+	e.buildForm()
+	e.rebuildContent()
+	e.setStyle()
+
+	wrapper := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(nil, 0, 1, false).
+			AddItem(e.Flex, 0, 6, true).
+			AddItem(nil, 0, 1, false), 0, 3, true).
+		AddItem(nil, 0, 1, false)
+
+	e.App.Pages.ShowModal(ExportModalId, wrapper, e.form, true, true)
 }
 
 func (e *ExportModal) buildForm() {
@@ -149,6 +180,7 @@ func (e *ExportModal) buildForm() {
 	e.form.AddDropDown("Format:   ", formatLabels, 0, nil)
 	e.form.AddInputField("Filename: ", e.defaultFilename(e.table, exportFormats[0]), 0, nil, nil)
 	e.form.AddInputField("Path:     ", "~/", 0, nil, nil)
+	e.form.ApplyClipboard()
 
 	dd, _ := e.form.GetFormItem(0).(*tview.DropDown)
 	filenameField, _ := e.form.GetFormItem(1).(*tview.InputField)
@@ -157,8 +189,8 @@ func (e *ExportModal) buildForm() {
 	e.rebuildCheckboxes(exportFormats[0])
 
 	e.form.AddButton(" Export ", func() { e.doExport() })
-	e.form.AddButton(" Cancel ", func() { e.App.Pages.RemovePage(ExportModalId) })
-	e.form.SetCancelFunc(func() { e.App.Pages.RemovePage(ExportModalId) })
+	e.form.AddButton(" Cancel ", func() { e.App.Pages.RemoveModalPage(ExportModalId) })
+	e.form.SetCancelFunc(func() { e.App.Pages.RemoveModalPage(ExportModalId) })
 	e.form.ApplyFormNavKeys(e.App.GetKeys())
 }
 
@@ -177,18 +209,18 @@ func (e *ExportModal) wrapDropDown(dd *tview.DropDown, filenameField *tview.Inpu
 		e.setStyle()
 	}
 
-	dd.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	dd.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		idx, _ := dd.GetCurrentOption()
 		switch {
-		case keys.Contains(keys.Navigation.MoveDown, event.Name()):
+		case keys.Match(keys.Navigation.MoveDown, event):
 			onChange((idx + 1) % n)
 			return nil
-		case keys.Contains(keys.Navigation.MoveUp, event.Name()):
+		case keys.Match(keys.Navigation.MoveUp, event):
 			onChange((idx - 1 + n) % n)
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 // rebuildCheckboxes removes all dynamic items (index ≥ fmtItemFirst) and adds
@@ -207,6 +239,8 @@ func (e *ExportModal) rebuildCheckboxes(format util.ExportFormat) {
 		e.form.AddCheckbox("Compress (GZIP)", false, nil)
 	case util.ExportSQLInsert:
 		e.form.AddCheckbox("Compress (GZIP)", false, nil)
+	case util.ExportXLSX:
+		e.form.AddInputField("Sheet Name", "Sheet1", 0, nil, nil)
 	}
 }
 
@@ -218,6 +252,7 @@ func (e *ExportModal) doExport() {
 	includeHeaders := e.checkboxValue("Include Headers")
 	compress := e.checkboxValue("Compress (GZIP)")
 	prettyPrint := e.checkboxValue("Pretty Print")
+	sheetName := e.inputValue("Sheet Name")
 
 	if filename == "" {
 		return
@@ -240,9 +275,10 @@ func (e *ExportModal) doExport() {
 		IncludeHeaders: includeHeaders,
 		Compress:       compress,
 		PrettyPrint:    prettyPrint,
+		SheetName:      sheetName,
 	}
 
-	e.App.Pages.RemovePage(ExportModalId)
+	e.App.Pages.RemoveModalPage(ExportModalId)
 	go e.performExport(fullPath, exportFormats[fmtIdx], opts)
 }
 
@@ -254,18 +290,35 @@ func (e *ExportModal) checkboxValue(label string) bool {
 	return ok && cb.IsChecked()
 }
 
-func (e *ExportModal) performExport(path string, format util.ExportFormat, opts util.ExportOptions) {
-	rows, cols, err := e.Driver.ExecuteQuery(context.Background(), e.query)
-	if err != nil {
-		e.App.QueueUpdateDraw(func() {
-			ShowError(e.App.Pages, "Export: query failed", err)
-		})
-		return
+func (e *ExportModal) inputValue(label string) string {
+	item := e.form.GetFormItemByLabel(label)
+	f, ok := item.(*tview.InputField)
+	if !ok {
+		return ""
 	}
+	return strings.TrimSpace(f.GetText())
+}
 
-	columns := make([]string, len(cols))
-	for i, col := range cols {
-		columns[i] = col.Name
+func (e *ExportModal) performExport(path string, format util.ExportFormat, opts util.ExportOptions) {
+	var rows []database.Row
+	var columns []string
+
+	if e.preRows != nil {
+		rows = e.preRows
+		columns = e.preCols
+	} else {
+		queryRows, cols, err := e.Driver.ExecuteQuery(context.Background(), e.query)
+		if err != nil {
+			e.App.QueueUpdateDraw(func() {
+				ShowError(e.App.Pages, "Export: query failed", err)
+			})
+			return
+		}
+		rows = queryRows
+		columns = make([]string, len(cols))
+		for i, col := range cols {
+			columns[i] = col.Name
+		}
 	}
 
 	f, err := os.Create(path)
@@ -291,7 +344,7 @@ func (e *ExportModal) performExport(path string, format util.ExportFormat, opts 
 
 func (e *ExportModal) syncExt(field *tview.InputField, format util.ExportFormat) {
 	current := field.GetText()
-	for _, ext := range []string{".csv", ".json", ".sql", ".md", ".txt"} {
+	for _, ext := range []string{".csv", ".json", ".sql", ".md", ".txt", ".xlsx"} {
 		current = strings.TrimSuffix(current, ext)
 	}
 	field.SetText(current + extForFormat(format))
@@ -318,6 +371,8 @@ func extForFormat(f util.ExportFormat) string {
 		return ".md"
 	case util.ExportText:
 		return ".txt"
+	case util.ExportXLSX:
+		return ".xlsx"
 	default:
 		return ""
 	}

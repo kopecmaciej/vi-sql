@@ -2,15 +2,18 @@ package page
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/security"
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -19,41 +22,51 @@ const (
 
 // itemDescriptions maps focusable form item labels to help text shown in the side panel.
 var itemDescriptions = map[string]string{
-	"Enable $EDITOR":  "Open SQL queries in an external editor (vim, nano, etc.) instead of the built-in editor.\n\nOnce enabled, use the 'Move to $EDITOR' keybinding from within the SQL editor to transfer the current query.\n\n[::b]Note: the built-in editor has SQL autocomplete; external editors do not.[::-]",
-	"Set editor":      "Command to invoke as the external editor.\n\nUse a bare command (e.g. 'vim') or prefix with '$' to read from an env var (e.g. '$EDITOR').",
-	"Log File":        "Path where structured log output is written.\n\nDefault: /tmp/vi-sql.log\n\nChange takes effect on restart.",
-	"Log Level":       "Controls how verbose the log output is.\n\n'debug' logs everything; 'info' is suitable for normal use; 'error' logs only failures.\n\nChange takes effect on restart.",
-	"Nerd Font icons": "Enable Nerd Font symbols for richer icons in the schema tree and UI.\n\nRequires a Nerd Font to be installed and selected in your terminal emulator (e.g. JetBrainsMono Nerd Font).",
-	"Connection page": "Show the connection selection page on every startup.\n\nWhen disabled, vi-sql connects to the last-used connection automatically.",
-	"Vim mode":        "Enable Vim keybindings in the SQL editor.\n\nSupports Normal, Insert, and Visual modes with motions (hjkl, w/b/e, f/t, gg/G, {}), operators (d, c, y, r, s), and visual selection.\n\nPress Escape to enter Normal mode; i/a/o/I/A/O to return to Insert.",
-	"MCP enabled":     "Start an HTTP MCP server when vi-sql launches.\n\n[::b]Claude Code[::-]\nclaude mcp add --transport http vi-sql http://localhost:9741/mcp\n\n[::b]Other MCP-compatible tools[::-]\n{\n    \"mcpServers\": {\n      \"vi-sql\": {\n        \"url\": \"http://127.0.0.1:9741/mcp\"\n      }\n    }\n  }",
-	"MCP port":        "TCP port the MCP server listens on.\n\nDefault: 9741. Change this if the port is already in use.",
-	"Allow execute":   "Allow the MCP client to execute SQL queries directly against the database.\n\nWhen disabled, the AI can only open queries in a vi-sql tab for you to review and run manually.\n\n[::b]Recommended: leave off unless you trust the AI to query without confirmation.[::-]",
-	"Allow writes":    "Allow the MCP client to execute INSERT, UPDATE, DELETE, and DDL statements.\n\nOnly takes effect when 'Allow execute' is also enabled.\n\nDisabled by default. Enable only when you fully trust the AI agent and want it to modify data.",
+	"Enable $EDITOR":    "Open SQL queries in an external editor (vim, nano, etc.) instead of the built-in editor.\n\nOnce enabled, use the 'Move to $EDITOR' keybinding from within the SQL editor to transfer the current query.\n\n[::b]Note: the built-in editor has SQL autocomplete; external editors do not.[::-]",
+	"Set editor":        "Command to invoke as the external editor.\n\nUse a bare command (e.g. 'vim') or prefix with '$' to read from an env var (e.g. '$EDITOR').",
+	"Log File":          "Path where structured log output is written.\n\nDefaults to vi-sql.log in the OS temp directory.\n\nChange takes effect on restart.",
+	"Log Level":         "Controls how verbose the log output is.\n\n'debug' logs everything; 'info' is suitable for normal use; 'error' logs only failures.\n\nChange takes effect on restart.",
+	"Nerd Font icons":   "Enable Nerd Font symbols for richer icons in the schema tree and UI.\n\nRequires a Nerd Font to be installed and selected in your terminal emulator (e.g. JetBrainsMono Nerd Font).",
+	"Connection page":   "Show the connection selection page on every startup.\n\nWhen disabled, vi-sql connects to the last-used connection automatically.",
+	"Vim mode":          "Enable Vim keybindings in the SQL editor.\n\nSupports Normal, Insert, and Visual modes with motions (hjkl, w/b/e, f/t, gg/G, {}), operators (d, c, y, r, s), and visual selection.\n\nPress Escape to enter Normal mode; i/a/o/I/A/O to return to Insert.",
+	"Enable mouse":      "Enable mouse support (click to focus, scroll to navigate).\n\nDisable if your terminal captures mouse events itself or if you prefer keyboard-only navigation.\n\nChange takes effect on restart.",
+	"MCP enabled":       "Start an HTTP MCP server when vi-sql launches.\n\n[::b]Claude Code[::-]\nclaude mcp add --transport http vi-sql http://localhost:9741/mcp\n\n[::b]Other MCP-compatible tools[::-]\n{\n    \"mcpServers\": {\n      \"vi-sql\": {\n        \"url\": \"http://127.0.0.1:9741/mcp\"\n      }\n    }\n  }",
+	"MCP port":          "TCP port the MCP server listens on.\n\nDefault: 9741. Change this if the port is already in use.",
+	"Allow read":        "Allow the MCP client to execute SQL queries directly against the database.\n\nWhen disabled, the AI can only open queries in a vi-sql tab for you to review and run manually.",
+	"Allow write":       "Allow the MCP client to execute INSERT, UPDATE, DELETE, and DDL statements.\n\nOnly takes effect when 'Allow read' is also enabled.\n\nDisabled by default. Enable only when you fully trust the AI agent and want it to modify data.",
+	"Encryption method": "How connection passwords are protected at rest.\n\n[::b]Keyring[::-] — uses your OS secret service (Gnome Keyring, macOS Keychain, Windows Credential Manager). The key is generated automatically and never stored on disk in plaintext.\n\n[::b]Master password[::-] — derive an encryption key from a passphrase via Argon2id. You will be prompted on every startup.\n\n[::b]Env var[::-] — read the key from the VI_SQL_SECRET_KEY environment variable. Useful for scripts and CI.\n\n[::b]Off[::-] — passwords are stored in plaintext in config.yaml. A ⚠ warning is shown on connections with a plain-text password.",
+	"Security status":   "Current status of the selected encryption backend.",
 }
 
 type Options struct {
 	*core.BaseElement
 	*core.Flex
 
-	form          *core.Form
-	footer        *component.Footer
-	descPanel     *tview.TextView
-	mcpEnabled    bool
-	mcpOptions    *core.FormGroup
-	editorEnabled bool
-	editorOptions *core.FormGroup
-	groups        []*core.FormGroup
+	form            *core.Form
+	footer          *component.Footer
+	descPanel       *tview.TextView
+	mcpEnabled      bool
+	mcpOptions      *core.FormGroup
+	editorEnabled   bool
+	editorOptions   *core.FormGroup
+	securityMethod  string
+	securityOptions *core.FormGroup
+	draftConfig     *config.Config
+	groups          []*core.FormGroup
 
 	onSubmit func()
+	onCancel func()
 }
 
 func NewOptions() *Options {
+	footer := component.NewFooter()
+	footer.SetIdentifier("OptionsFooter")
+
 	w := &Options{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		form:        core.NewForm(),
-		footer:      component.NewFooter(),
+		footer:      footer,
 		descPanel:   tview.NewTextView(),
 	}
 
@@ -64,6 +77,7 @@ func NewOptions() *Options {
 
 func (w *Options) Init(app *core.App) error {
 	w.App = app
+	w.draftConfig = w.App.GetConfig().Clone()
 
 	if err := w.footer.Init(app); err != nil {
 		return err
@@ -100,36 +114,20 @@ func (w *Options) setLayout() {
 	w.descPanel.SetDynamicColors(true)
 	w.descPanel.SetScrollable(false)
 
-	w.form.AddButton("Save", func() {
-		err := w.saveConfig()
-		if err != nil {
-			modal.ShowError(w.App.Pages, "Error while saving config", err)
-			return
-		}
-		if w.onSubmit != nil {
-			w.onSubmit()
-		}
-	})
-
-	w.form.AddButton("Exit", func() {
-		w.App.Stop()
-	})
-
-	w.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := w.App.GetKeys()
-		if k.Contains(k.Common.Confirm, event.Name()) {
-			err := w.saveConfig()
-			if err != nil {
-				modal.ShowError(w.App.Pages, "Error while saving config", err)
-				return nil
-			}
-			if w.onSubmit != nil {
-				w.onSubmit()
+	k := w.App.GetKeys()
+	w.form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Match(k.Common.Confirm, event):
+			w.submit()
+			return nil
+		case k.Match(k.Common.Close, event):
+			if w.onCancel != nil {
+				w.onCancel()
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (w *Options) setStyle() {
@@ -197,23 +195,35 @@ func (w *Options) Render() {
 
 func (w *Options) renderFooter() {
 	k := w.App.GetKeys()
-	w.footer.SetKeys([]config.Key{
+	keys := []config.Key{
 		k.Navigation.FocusUp,
 		k.Navigation.FocusDown,
 		k.Common.Confirm,
-	})
+	}
+	if w.onCancel != nil {
+		keys = append(keys, k.Common.Close)
+	}
+	w.footer.SetKeys(keys)
 }
 
 func (w *Options) SetOnSubmitFunc(onSubmit func()) {
 	w.onSubmit = onSubmit
 }
 
+func (w *Options) SetOnCancelFunc(onCancel func()) {
+	w.onCancel = onCancel
+}
+
 func (w *Options) buildGroups() {
 	if w.groups != nil {
 		return
 	}
-	cfg := w.App.GetConfig()
+	cfg := w.draftConfig
 	w.mcpEnabled = cfg.MCP.Enabled
+	w.securityMethod = cfg.Security.Method
+	if w.securityMethod == "" {
+		w.securityMethod = config.SecurityMethodKeyring
+	}
 
 	configFile, _ := cfg.GetCurrentConfigPath()
 
@@ -225,11 +235,42 @@ func (w *Options) buildGroups() {
 		mcpURL := fmt.Sprintf("http://localhost:%s/mcp", mcpPort)
 		return []tview.FormItem{
 			tview.NewInputField().SetLabel("MCP port").SetText(mcpPort).SetFieldWidth(10),
-			tview.NewCheckbox().SetLabel("Allow execute").SetChecked(cfg.MCP.AllowExecute),
-			tview.NewCheckbox().SetLabel("Allow writes").SetChecked(cfg.MCP.AllowWrite),
+			tview.NewCheckbox().SetLabel("Allow read").SetChecked(cfg.MCP.AllowRead),
+			tview.NewCheckbox().SetLabel("Allow write").SetChecked(cfg.MCP.AllowWrite),
+			tview.NewInputField().SetLabel("Max rows").SetText(fmt.Sprintf("%d", mcpMaxRows(cfg))).SetFieldWidth(6),
 			tview.NewTextView().SetLabel("MCP URL").
 				SetText(mcpURL).
 				SetSize(1, 60).SetDynamicColors(true).SetScrollable(false),
+		}
+	})
+
+	w.securityOptions = core.NewFormGroup(w.securityMethod != config.SecurityMethodOff, func() []tview.FormItem {
+		var statusText string
+		switch w.securityMethod {
+		case config.SecurityMethodKeyring:
+			if security.IsKeyringAvailable() {
+				statusText = "[green]Keyring available — key managed automatically[-]"
+			} else {
+				statusText = "[red]⚠ Keyring backend not available on this system[-]"
+			}
+		case config.SecurityMethodMaster:
+			if cfg.IsMasterConfigured() {
+				statusText = "[green]Master password configured[-]"
+			} else {
+				statusText = "[yellow]Not configured — save options to set it now[-]"
+			}
+		case config.SecurityMethodEnv:
+			if os.Getenv(security.EncryptionKeyEnv) != "" {
+				statusText = "[green]" + security.EncryptionKeyEnv + " is set[-]"
+			} else {
+				statusText = "[red]⚠ " + security.EncryptionKeyEnv + " is not set — encryption disabled[-]"
+			}
+		}
+		return []tview.FormItem{
+			tview.NewTextView().SetLabel("Security status").
+				SetText(statusText).
+				SetDynamicColors(true).
+				SetSize(2, 0).SetScrollable(false),
 		}
 	})
 
@@ -241,6 +282,9 @@ func (w *Options) buildGroups() {
 			tview.NewInputField().SetLabel("Set editor").SetText(editorCmd).SetFieldWidth(30),
 		}
 	})
+
+	securityMethods := []string{"Keyring", "Master password", "Env var", "Off"}
+	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
 
 	w.groups = []*core.FormGroup{
 		core.NewFormGroup(true, func() []tview.FormItem {
@@ -258,6 +302,7 @@ func (w *Options) buildGroups() {
 				tview.NewCheckbox().SetLabel("Nerd Font icons").SetChecked(cfg.Styles.NerdFont),
 				tview.NewCheckbox().SetLabel("Connection page").SetChecked(cfg.ShowConnectionPage),
 				tview.NewCheckbox().SetLabel("Vim mode").SetChecked(cfg.UI.VimMode),
+				tview.NewCheckbox().SetLabel("Enable mouse").SetChecked(cfg.UI.Mouse),
 			}
 		}),
 		core.NewFormGroup(true, func() []tview.FormItem {
@@ -266,6 +311,7 @@ func (w *Options) buildGroups() {
 					SetChangedFunc(func(checked bool) {
 						w.editorEnabled = checked
 						w.editorOptions.SetVisible(checked)
+						w.applyFormToConfig()
 						w.form.RenderGroups(w.groups)
 						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 						if idx := w.form.GetFormItemIndex("Enable $EDITOR"); idx >= 0 {
@@ -282,6 +328,7 @@ func (w *Options) buildGroups() {
 					SetChangedFunc(func(checked bool) {
 						w.mcpEnabled = checked
 						w.mcpOptions.SetVisible(checked)
+						w.applyFormToConfig()
 						w.form.RenderGroups(w.groups)
 						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 						if idx := w.form.GetFormItemIndex("MCP enabled"); idx >= 0 {
@@ -292,26 +339,149 @@ func (w *Options) buildGroups() {
 			}
 		}),
 		w.mcpOptions,
+		core.NewFormGroup(true, func() []tview.FormItem {
+			return []tview.FormItem{
+				tview.NewButtonGroup("Encryption method", securityMethods, securityMethodIndex(w.securityMethod, methodKeys),
+					func(_ string, idx int) {
+						w.securityMethod = methodKeys[idx]
+						w.securityOptions.SetVisible(w.securityMethod != config.SecurityMethodOff)
+						w.applyFormToConfig()
+						w.form.RenderGroups(w.groups)
+						w.form.ApplyDropdownNavKeys(w.App.GetKeys())
+						if i := w.form.GetFormItemIndex("Encryption method"); i >= 0 {
+							w.form.SetFocus(i)
+						}
+						w.App.SetFocusOnly(w.form)
+					}),
+			}
+		}),
+		w.securityOptions,
 	}
 }
 
 func (w *Options) renderForm() {
 	w.buildGroups()
 	w.form.RenderGroups(w.groups)
+	w.renderButtons()
 	w.form.ApplyDropdownNavKeys(w.App.GetKeys())
 }
 
-func (w *Options) saveConfig() error {
-	logFile := w.form.GetFormItemByLabel("Log File").(*tview.InputField).GetText()
-	_, logLevelIdx := w.form.GetFormItemByLabel("Log Level").(*tview.ButtonGroup).GetCurrentOption()
+func (w *Options) renderButtons() {
+	w.form.ClearButtons()
+	w.form.AddButton("Save", w.submit)
+	w.form.AddButton("Exit", func() {
+		w.App.Stop()
+	})
+}
+
+func (w *Options) submit() {
+	originalMethod := w.App.GetConfig().Security.Method
+	if w.readDesiredMethod() == config.SecurityMethodMaster && !w.App.GetConfig().IsMasterConfigured() {
+		w.promptMasterPassword(originalMethod)
+		return
+	}
+	if err := w.saveConfig(); err != nil {
+		modal.ShowError(w.App.Pages, "Error while saving config", err)
+		return
+	}
+	w.finishSubmit(originalMethod)
+}
+
+func (w *Options) finishSubmit(originalMethod string) {
+	if originalMethod != w.App.GetConfig().Security.Method {
+		log.Info().Msgf("Changing security method from [%s] to [%s]", originalMethod, w.App.GetConfig().Security.Method)
+		showSecurityRestartNotice(w.App.Pages, func() {
+			if w.onSubmit != nil {
+				w.onSubmit()
+			}
+		})
+		return
+	}
+	if w.onSubmit != nil {
+		w.onSubmit()
+	}
+}
+
+func showSecurityRestartNotice(pages *core.Pages, onDismiss func()) {
+	const id = "SecurityRestartNotice"
+	m := tview.NewModal()
+	m.SetTitle(" Restart required ")
+	m.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	m.SetText("Encryption method changed. Restart vi-sql to load the new key — existing connection passwords stay encrypted under the previous key until then.")
+	m.AddButtons([]string{"Ok"})
+	m.SetDoneFunc(func(_ int, _ string) {
+		pages.RemoveModalPage(id)
+		if onDismiss != nil {
+			onDismiss()
+		}
+	})
+	pages.ShowModal(tview.Identifier(id), m, m, true, true)
+}
+
+func (w *Options) readDesiredMethod() string {
+	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
+	_, idx := w.form.GetFormItemByLabel("Encryption method").(*tview.ButtonGroup).GetCurrentOption()
+	return methodKeys[idx]
+}
+
+func (w *Options) promptMasterPassword(originalMethod string) {
+	m := modal.NewMasterPasswordModal(modal.MasterModeSetup)
+	if err := m.Init(w.App); err != nil {
+		modal.ShowError(w.App.Pages, "Failed to init master password modal", err)
+		return
+	}
+	m.SetOnDone(func(err error) {
+		if err != nil {
+			w.App.SetFocusOnly(w.form)
+			return
+		}
+		// Needed as master password modal writes new security settings
+		w.draftConfig.Security = w.App.GetConfig().Security
+		if err := w.saveConfig(); err != nil {
+			modal.ShowError(w.App.Pages, "Error while saving config", err)
+			return
+		}
+		w.finishSubmit(originalMethod)
+	})
+	m.Render()
+}
+
+// applyFormToConfig writes form values into the draft config, as RenderGroups
+// rebuilds form items clearing them, so unsaved changes would be lost.
+func (w *Options) applyFormToConfig() {
+	c := w.draftConfig
 	logLevels := []string{"debug", "info", "warn", "error", "fatal", "panic"}
-	logLevel := logLevels[logLevelIdx]
+	methodKeys := []string{config.SecurityMethodKeyring, config.SecurityMethodMaster, config.SecurityMethodEnv, config.SecurityMethodOff}
 
-	c := w.App.GetConfig()
+	if item := w.form.GetFormItemByLabel("Log File"); item != nil {
+		c.Log.Path = item.(*tview.InputField).GetText()
+	}
+	if item := w.form.GetFormItemByLabel("Log Level"); item != nil {
+		_, idx := item.(*tview.ButtonGroup).GetCurrentOption()
+		c.Log.Level = logLevels[idx]
+	}
+	if item := w.form.GetFormItemByLabel("Connection page"); item != nil {
+		c.ShowConnectionPage = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Vim mode"); item != nil {
+		c.UI.VimMode = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Enable mouse"); item != nil {
+		c.UI.Mouse = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Nerd Font icons"); item != nil {
+		nerdFont := item.(*tview.Checkbox).IsChecked()
+		if nerdFont != c.Styles.NerdFont {
+			c.Styles.NerdFont = nerdFont
+			_ = w.App.ApplyStyles(c.Styles.CurrentStyle, c.Styles.NerdFont)
+		}
+	}
 
-	c.Editor.Enabled = w.form.GetFormItemByLabel("Enable $EDITOR").(*tview.Checkbox).IsChecked()
-	if w.editorOptions != nil && w.editorOptions.IsVisible() {
-		editorCmd := w.form.GetFormItemByLabel("Set editor").(*tview.InputField).GetText()
+	if item := w.form.GetFormItemByLabel("Enable $EDITOR"); item != nil {
+		c.Editor.Enabled = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Set editor"); item != nil {
+		editorCmd := item.(*tview.InputField).GetText()
 		splitEditorCmd := strings.Split(editorCmd, "$")
 		if len(splitEditorCmd) > 1 {
 			c.Editor.Command = ""
@@ -321,29 +491,49 @@ func (w *Options) saveConfig() error {
 			c.Editor.Command = editorCmd
 		}
 	}
-	c.Log.Path = logFile
-	c.Log.Level = logLevel
-	c.ShowConnectionPage = w.form.GetFormItemByLabel("Connection page").(*tview.Checkbox).IsChecked()
-	c.UI.VimMode = w.form.GetFormItemByLabel("Vim mode").(*tview.Checkbox).IsChecked()
 
-	nerdFont := w.form.GetFormItemByLabel("Nerd Font icons").(*tview.Checkbox).IsChecked()
-	if nerdFont != c.Styles.NerdFont {
-		c.Styles.NerdFont = nerdFont
-		_ = w.App.SetStyle(c.Styles.CurrentStyle)
+	if item := w.form.GetFormItemByLabel("MCP enabled"); item != nil {
+		c.MCP.Enabled = item.(*tview.Checkbox).IsChecked()
 	}
-
-	c.MCP.Enabled = w.form.GetFormItemByLabel("MCP enabled").(*tview.Checkbox).IsChecked()
-	if w.mcpOptions != nil && w.mcpOptions.IsVisible() {
+	if item := w.form.GetFormItemByLabel("MCP port"); item != nil {
 		mcpPort := 9741
-		if _, err := fmt.Sscanf(w.form.GetFormItemByLabel("MCP port").(*tview.InputField).GetText(), "%d", &mcpPort); err != nil {
+		if _, err := fmt.Sscanf(item.(*tview.InputField).GetText(), "%d", &mcpPort); err != nil {
 			mcpPort = 9741
 		}
 		c.MCP.Port = mcpPort
-		c.MCP.AllowExecute = w.form.GetFormItemByLabel("Allow execute").(*tview.Checkbox).IsChecked()
-		c.MCP.AllowWrite = w.form.GetFormItemByLabel("Allow writes").(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Allow read"); item != nil {
+		c.MCP.AllowRead = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Allow write"); item != nil {
+		c.MCP.AllowWrite = item.(*tview.Checkbox).IsChecked()
+	}
+	if item := w.form.GetFormItemByLabel("Max rows"); item != nil {
+		maxRows := 100
+		if _, err := fmt.Sscanf(item.(*tview.InputField).GetText(), "%d", &maxRows); err != nil || maxRows <= 0 {
+			maxRows = 100
+		}
+		c.MCP.MaxRows = maxRows
 	}
 
-	return w.App.GetConfig().UpdateConfig()
+	if item := w.form.GetFormItemByLabel("Encryption method"); item != nil {
+		_, idx := item.(*tview.ButtonGroup).GetCurrentOption()
+		c.Security.Method = methodKeys[idx]
+	}
+}
+
+func (w *Options) saveConfig() error {
+	w.applyFormToConfig()
+	live := w.App.GetConfig()
+	live.CopyFrom(w.draftConfig)
+	return live.UpdateConfig()
+}
+
+func mcpMaxRows(cfg *config.Config) int {
+	if cfg.MCP.MaxRows > 0 {
+		return cfg.MCP.MaxRows
+	}
+	return 100
 }
 
 func getLogLevelIndex(currentLevel string, levels []string) int {
@@ -353,4 +543,13 @@ func getLogLevelIndex(currentLevel string, levels []string) int {
 		}
 	}
 	return 0
+}
+
+func securityMethodIndex(method string, keys []string) int {
+	for i, k := range keys {
+		if k == method {
+			return i
+		}
+	}
+	return 0 // default to keyring
 }

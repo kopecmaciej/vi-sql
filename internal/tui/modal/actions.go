@@ -81,29 +81,29 @@ func (a *ActionsModal) setStyle() {
 }
 
 func (a *ActionsModal) setKeybindings() {
+	k := a.App.GetKeys()
 	a.filter.SetChangedFunc(func(text string) {
 		a.filterEntries(text)
 		a.renderList()
 	})
 
-	a.filter.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		k := a.App.GetKeys()
+	a.filter.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case event.Key() == tcell.KeyDown || k.Contains(k.Navigation.FocusDown, event.Name()):
+		case event.Key() == tcell.KeyDown || k.Match(k.Navigation.FocusDown, event):
 			a.moveSelection(1)
 			return nil
-		case event.Key() == tcell.KeyUp || k.Contains(k.Navigation.FocusUp, event.Name()):
+		case event.Key() == tcell.KeyUp || k.Match(k.Navigation.FocusUp, event):
 			a.moveSelection(-1)
 			return nil
 		case event.Key() == tcell.KeyEnter:
 			a.executeSelected()
 			return nil
 		case event.Key() == tcell.KeyEscape:
-			a.App.Pages.RemovePage(ActionsModalId)
+			a.App.Pages.RemoveModalPage(ActionsModalId)
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (a *ActionsModal) moveSelection(delta int) {
@@ -127,7 +127,7 @@ func (a *ActionsModal) executeSelected() {
 		return
 	}
 	handler := a.filtered[row].Handler
-	a.App.Pages.RemovePage(ActionsModalId)
+	a.App.Pages.RemoveModalPage(ActionsModalId)
 	if handler != nil {
 		handler()
 	}
@@ -189,6 +189,5 @@ func (a *ActionsModal) Open(entries []ActionEntry) {
 			AddItem(nil, 0, 1, false), 0, 2, true).
 		AddItem(nil, 0, 1, false)
 
-	a.App.Pages.AddPage(ActionsModalId, wrapper, true, true)
-	a.App.SetFocusOnly(a.filter)
+	a.App.Pages.ShowModal(ActionsModalId, wrapper, a.filter, true, true)
 }

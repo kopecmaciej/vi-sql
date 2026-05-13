@@ -2,6 +2,7 @@ package page
 
 import (
 	"fmt"
+	"sort"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -11,6 +12,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/component"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -28,6 +30,7 @@ type Connection struct {
 	style *config.ConnectionStyle
 
 	onSubmit func()
+	onCancel func()
 }
 
 func NewConnection() *Connection {
@@ -93,47 +96,75 @@ func (c *Connection) setKeybindings() {
 	c.table.SetSelectionChangedFunc(func(row, col int) {
 		c.updatePreview(row)
 	})
-	c.table.SetSelectedFunc(func(row, col int) {
-		if row >= c.table.GetRowCount()-1 {
-			c.openAddForm()
-			return
-		}
-		c.setConnection()
-	})
-	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	c.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Add, event.Name()):
-			c.openAddForm()
+		case k.Match(k.Common.Select, event):
+			row, _ := c.table.GetSelection()
+			if row >= c.table.GetRowCount()-1 {
+				c.openDriverPicker()
+			} else {
+				c.setConnection()
+			}
 			return nil
-		case k.Contains(k.Common.Delete, event.Name()):
+		case k.Match(k.Common.Add, event):
+			c.openDriverPicker()
+			return nil
+		case k.Match(k.Common.Delete, event):
 			c.deleteCurrConnection()
 			return nil
-		case k.Contains(k.Common.Edit, event.Name()):
+		case k.Match(k.Common.Edit, event):
 			c.openEditForm()
+			return nil
+		case k.Match(k.Common.Close, event):
+			if c.onCancel != nil {
+				c.onCancel()
+			}
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
-func (c *Connection) openAddForm() {
-	form := NewConnectionForm(nil)
+func (c *Connection) openDriverPicker() {
+	picker := NewDriverPicker()
+	if err := picker.Init(c.App); err != nil {
+		modal.ShowError(c.App.Pages, "Failed to init driver picker", err)
+		return
+	}
+	picker.SetOnSelectFunc(func(driver string) {
+		c.App.Pages.RemoveModalPage(DriverPickerPageId)
+		c.openAddFormWithDriver(driver)
+	})
+	picker.SetOnCancelFunc(func() {
+		c.App.Pages.RemoveModalPage(DriverPickerPageId)
+		c.App.SetFocus(c.table)
+	})
+	picker.Render()
+	c.App.Pages.ShowModal(DriverPickerPageId, picker, picker, true, true)
+}
+
+func (c *Connection) openAddFormWithDriver(driver string) {
+	form := NewConnectionForm(nil, driver)
 	if err := form.Init(c.App); err != nil {
 		modal.ShowError(c.App.Pages, "Failed to init connection form", err)
 		return
 	}
 	form.SetOnSaveFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.Render()
 		c.table.Select(c.table.GetRowCount()-2, 0)
 		c.App.SetFocus(c.table)
 	})
 	form.SetOnCancelFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.App.SetFocus(c.table)
 	})
+	form.SetOnBackFunc(func() {
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
+		c.openDriverPicker()
+	})
 	form.Render()
-	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.Pages.ShowModal(ConnectionFormPageId, form, form.form, true, true)
 }
 
 func (c *Connection) openEditForm() {
@@ -152,23 +183,23 @@ func (c *Connection) openEditForm() {
 		return
 	}
 
-	form := NewConnectionForm(conn)
+	form := NewConnectionForm(conn, "")
 	if err := form.Init(c.App); err != nil {
 		modal.ShowError(c.App.Pages, "Failed to init connection form", err)
 		return
 	}
 	form.SetOnSaveFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.Render()
 		c.table.Select(row, 0)
 		c.App.SetFocus(c.table)
 	})
 	form.SetOnCancelFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.App.SetFocus(c.table)
 	})
 	form.Render()
-	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.Pages.ShowModal(ConnectionFormPageId, form, form.form, true, true)
 }
 
 func (c *Connection) Render() {
@@ -197,11 +228,32 @@ func (c *Connection) Render() {
 
 	if page, _ := c.App.Pages.GetFrontPage(); page == ConnectionPageId {
 		if c.table.GetRowCount() > 2 {
-			defer c.App.SetFocus(c.table)
+			defer c.App.SetFocusOnly(c.table)
 		} else {
-			defer c.openAddForm()
+			defer c.openDriverPicker()
 		}
 	}
+}
+
+// sortedConnections returns a copy of connections sorted by LastUsed descending
+// (most recently used first; never-used entries go to the bottom).
+func sortedConnections(conns []config.SQLConfig) []config.SQLConfig {
+	sorted := make([]config.SQLConfig, len(conns))
+	copy(sorted, conns)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		ti, tj := sorted[i].LastUsed, sorted[j].LastUsed
+		if ti.IsZero() && tj.IsZero() {
+			return false
+		}
+		if ti.IsZero() {
+			return false
+		}
+		if tj.IsZero() {
+			return true
+		}
+		return ti.After(tj)
+	})
+	return sorted
 }
 
 func (c *Connection) computeContentWidth() int {
@@ -220,7 +272,7 @@ func (c *Connection) computeContentWidth() int {
 		colWidths[i] = runes(h) + 2
 	}
 
-	conns := c.App.GetConfig().Connections
+	conns := sortedConnections(c.App.GetConfig().Connections)
 	for i, conn := range conns {
 		hostPort := "—"
 		if conn.Host != "" {
@@ -287,13 +339,17 @@ func (c *Connection) computeContentWidth() int {
 
 func (c *Connection) renderFooter() {
 	k := c.App.GetKeys()
-	c.footer.SetKeys([]config.Key{
+	keys := []config.Key{
 		k.Common.Select,
 		k.Common.Add,
 		k.Common.Edit,
 		k.Common.Delete,
 		k.Global.FullScreenHelp,
-	})
+	}
+	if c.onCancel != nil {
+		keys = append(keys, k.Common.Close)
+	}
+	c.footer.SetKeys(keys)
 }
 
 func (c *Connection) renderTable() {
@@ -308,16 +364,18 @@ func (c *Connection) renderTable() {
 	c.table.SetFixed(1, 0)
 	c.table.SetSelectable(true, false)
 
+	bg := styles.Global.BackgroundColor.Color()
+	headerStyle := tcell.StyleDefault.Foreground(headerFg).Background(contrastBg)
+
 	headers := []string{"#", "Name", "Host:Port", "Database", "Driver", "Last Used"}
 	for i, h := range headers {
 		c.table.SetCell(0, i, tview.NewTableCell(" "+h+" ").
 			SetSelectable(false).
-			SetTextColor(headerFg).
-			SetBackgroundColor(contrastBg).
+			SetStyle(headerStyle).
 			SetAlign(tview.AlignCenter))
 	}
 
-	for i, conn := range c.App.GetConfig().Connections {
+	for i, conn := range sortedConnections(c.App.GetConfig().Connections) {
 		hostPort := "—"
 		if conn.Host != "" {
 			hostPort = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
@@ -333,26 +391,26 @@ func (c *Connection) renderTable() {
 
 		row := i + 1
 		c.table.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf(" %d ", i+1)).
-			SetTextColor(dimColor).
+			SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg)).
 			SetAlign(tview.AlignRight))
 		c.table.SetCell(row, 1, tview.NewTableCell(" "+conn.Name+" ").
 			SetReference(conn.Name).
-			SetTextColor(textColor))
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)))
 		c.table.SetCell(row, 2, tview.NewTableCell(" "+hostPort+" ").
-			SetTextColor(secondaryColor).
+			SetStyle(tcell.StyleDefault.Foreground(secondaryColor).Background(bg)).
 			SetMaxWidth(32))
 		c.table.SetCell(row, 3, tview.NewTableCell(" "+database+" ").
-			SetTextColor(secondaryColor))
+			SetStyle(tcell.StyleDefault.Foreground(secondaryColor).Background(bg)))
 		c.table.SetCell(row, 4, tview.NewTableCell(" "+conn.GetDriver()+" ").
-			SetTextColor(textColor))
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)))
 		c.table.SetCell(row, 5, tview.NewTableCell(" "+lastUsed+" ").
-			SetTextColor(dimColor))
+			SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg)))
 	}
 
 	newRow := len(c.App.GetConfig().Connections) + 1
 	c.table.SetCell(newRow, 0, tview.NewTableCell(""))
 	c.table.SetCell(newRow, 1, tview.NewTableCell(" > Add").
-		SetTextColor(c.style.ListTextColor.Color()))
+		SetStyle(tcell.StyleDefault.Foreground(c.style.ListTextColor.Color()).Background(bg)))
 	for col := 2; col < len(headers); col++ {
 		c.table.SetCell(newRow, col, tview.NewTableCell(""))
 	}
@@ -395,10 +453,14 @@ func (c *Connection) deleteCurrConnection() {
 		return
 	}
 	connName := ref.(string)
+	conn, _ := c.App.GetConfig().GetConnectionByName(connName)
 	err := c.App.GetConfig().DeleteConnection(connName)
 	if err != nil {
 		modal.ShowError(c.App.Pages, "Failed to delete connection", err)
 		return
+	}
+	if conn != nil && conn.ID != "" {
+		_ = modal.PurgeConnectionHistory(conn.ID)
 	}
 
 	c.Render()
@@ -409,6 +471,10 @@ func (c *Connection) deleteCurrConnection() {
 
 func (c *Connection) SetOnSubmitFunc(onSubmit func()) {
 	c.onSubmit = onSubmit
+}
+
+func (c *Connection) SetOnCancelFunc(onCancel func()) {
+	c.onCancel = onCancel
 }
 
 func (c *Connection) updatePreview(row int) {
@@ -423,8 +489,17 @@ func (c *Connection) updatePreview(row int) {
 		c.preview.Clear()
 		return
 	}
-	conn, err := c.App.GetConfig().GetConnectionByName(ref.(string))
-	if err != nil || conn == nil {
+	// Preview uses the raw stored connection (not the decrypted variant from
+	// GetConnectionByName) so the encryption-state check below reads the value
+	// as it actually sits on disk.
+	var conn *config.SQLConfig
+	for i := range c.App.GetConfig().Connections {
+		if c.App.GetConfig().Connections[i].Name == ref.(string) {
+			conn = &c.App.GetConfig().Connections[i]
+			break
+		}
+	}
+	if conn == nil {
 		c.preview.SetTitle("")
 		c.preview.Clear()
 		return
@@ -442,20 +517,19 @@ func (c *Connection) updatePreview(row int) {
 	if conn.Timeout > 0 {
 		timeout = fmt.Sprintf("%ds", conn.Timeout)
 	}
-	database := conn.Database
-	if database == "" {
-		database = "—"
-	}
 	username := conn.Username
 	if username == "" {
 		username = "—"
 	}
 
+	bg := styles.Global.BackgroundColor.Color()
 	label := func(s string) *tview.TableCell {
-		return tview.NewTableCell(" " + s + " ").SetTextColor(dimColor)
+		return tview.NewTableCell(" " + s + " ").SetStyle(tcell.StyleDefault.Foreground(dimColor).Background(bg))
 	}
 	value := func(s string) *tview.TableCell {
-		return tview.NewTableCell(s + " ").SetTextColor(textColor).SetExpansion(1)
+		return tview.NewTableCell(s + " ").
+			SetStyle(tcell.StyleDefault.Foreground(textColor).Background(bg)).
+			SetExpansion(1)
 	}
 
 	dsn := conn.GetSafeDSN()
@@ -474,4 +548,25 @@ func (c *Connection) updatePreview(row int) {
 	c.preview.SetCell(2, 1, value(ssl))
 	c.preview.SetCell(3, 0, label("Timeout"))
 	c.preview.SetCell(3, 1, value(timeout))
+
+	errorColor := styles.Global.ErrorColor.Color()
+	warningColor := styles.Global.WarningColor.Color()
+	switch {
+	case conn.Password != "" && !util.IsEncrypted(conn.Password):
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
+			SetStyle(tcell.StyleDefault.Foreground(errorColor).Background(bg)))
+		c.preview.SetCell(4, 1, tview.NewTableCell(fmt.Sprintf("[%s]password stored unencrypted[-]", styles.Global.ErrorColor)).SetExpansion(1))
+	case !conn.IsPasswordReadable():
+		storedMethod := util.ParseMethodTag(conn.Password)
+		currentMethod := c.App.GetConfig().Security.Method
+		var msg string
+		if storedMethod != "" && storedMethod != currentMethod {
+			msg = fmt.Sprintf("[%s]password encrypted with %s (current method: %s) — re-enter to re-encrypt[-]", styles.Global.WarningColor, storedMethod, currentMethod)
+		} else {
+			msg = fmt.Sprintf("[%s]password unreadable — key mismatch, re-enter[-]", styles.Global.WarningColor)
+		}
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
+			SetStyle(tcell.StyleDefault.Foreground(warningColor).Background(bg)))
+		c.preview.SetCell(4, 1, tview.NewTableCell(msg).SetExpansion(1))
+	}
 }

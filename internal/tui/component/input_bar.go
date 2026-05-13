@@ -8,6 +8,8 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/sql/completion"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
@@ -16,22 +18,29 @@ type InputBar struct {
 	*core.BaseElement
 	*core.InputField
 
-	style          *config.InputBarStyle
-	enabled        bool
-	autocompleteOn bool
-	columnKeys     []string
-	schemas        []database.Schema
-	defaultText    string
-	acceptFunc     func(string)
-	rejectFunc     func()
+	enabled          bool
+	autocompleteOn   bool
+	columns          []completion.Column
+	schemas          []database.Schema
+	schemaIndex      *completion.SchemaIndex
+	defaultText      string
+	acceptFunc       func(string)
+	rejectFunc       func()
+	completionEngine *completion.Engine
+	// tokenCache is shared between syntax highlighting and autocomplete
+	tokenCache struct {
+		text   string
+		tokens []sqlpkg.Token
+	}
 }
 
 func NewInputBar(barId tview.Identifier, label string) *InputBar {
 	i := &InputBar{
-		BaseElement:    core.NewBaseElement(),
-		InputField:     core.NewInputField(),
-		enabled:        false,
-		autocompleteOn: false,
+		BaseElement:      core.NewBaseElement(),
+		InputField:       core.NewInputField(),
+		enabled:          false,
+		autocompleteOn:   false,
+		completionEngine: completion.NewDefaultEngine(),
 	}
 
 	i.InputField.SetLabel(" " + label + ": ")
@@ -61,11 +70,10 @@ func (i *InputBar) setLayout() {
 func (i *InputBar) setStyle() {
 	styles := i.App.GetStyles()
 	i.SetStyle(styles)
-	i.style = &styles.InputBar
 	i.SetLabelColor(styles.Global.SecondaryTextColor.Color())
 	i.SetFieldTextColor(styles.Global.TextColor.Color())
 
-	a := i.style.Autocomplete
+	a := styles.Autocomplete
 	background := a.BackgroundColor.Color()
 	main := tcell.StyleDefault.
 		Background(a.BackgroundColor.Color()).
@@ -79,28 +87,27 @@ func (i *InputBar) setStyle() {
 		Italic(true)
 
 	i.SetAutocompleteStyles(background, main, selected, second, false)
-	i.SetAutocompleteBorderColor(i.style.Autocomplete.BorderColor.Color())
+	i.SetAutocompleteBorderColor(a.BorderColor.Color())
+	i.InputField.SetAutocompleteMaxHeight(core.AutocompleteMaxItems)
 }
 
 func (i *InputBar) setKeybindings() {
 	k := i.App.GetKeys()
 
-	inputBarCapture := func(event *tcell.EventKey) *tcell.EventKey {
-		k := i.App.GetKeys()
-
+	inputBarCapture := k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
+		case k.Match(k.Common.Close, event):
 			if i.rejectFunc != nil {
 				i.Toggle("")
 				i.rejectFunc()
 			}
 			return nil
-		case k.Contains(k.Common.Confirm, event.Name()):
+		case k.Match(k.Common.Confirm, event):
 			if i.acceptFunc != nil {
 				i.acceptFunc(i.GetText())
 			}
 			return nil
-		case k.Contains(k.Common.Clear, event.Name()):
+		case k.Match(k.Common.Clear, event):
 			i.SetText("")
 			if i.defaultText != "" {
 				go i.SetWordAtCursor(i.defaultText)
@@ -108,7 +115,7 @@ func (i *InputBar) setKeybindings() {
 		}
 
 		return event
-	}
+	})
 
 	i.SetInputCapture(core.DropdownInputCapture(k, inputBarCapture))
 }
@@ -132,58 +139,76 @@ func (i *InputBar) DoneFuncHandler(accept func(string), reject func()) {
 }
 
 func (i *InputBar) EnableAutocomplete() {
+	var lastSymbols []completion.Symbol
+
 	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
 		cursorBytePos := len(i.GetTextBeforeCursor())
-		entries := database.BuildSQLAutocomplete(currentText, cursorBytePos, i.schemas, i.columnKeys, nil)
-		items := make([]tview.AutocompleteItem, len(entries))
-		for j, e := range entries {
-			items[j] = tview.AutocompleteItem{Main: e.Main, Secondary: e.Secondary}
+		if i.tokenCache.text != currentText {
+			i.tokenCache.text = currentText
+			i.tokenCache.tokens = sqlpkg.Tokenize(currentText)
 		}
-		return items
+		symbols := i.completionEngine.SuggestTokens(i.tokenCache.tokens, currentText, cursorBytePos, completion.Context{
+			Schemas: i.schemas,
+			Index:   i.schemaIndex,
+			ColumnFetcher: func(_, _ string) ([]completion.Column, error) {
+				return i.columns, nil
+			},
+		})
+		lastSymbols = symbols
+		return core.BuildAutocompleteItems(symbols, i.App.GetStyles())
 	})
 
 	i.SetAutocompletedFunc(func(text string, index, source int) bool {
 		if source == 0 {
 			return false
 		}
-		before := i.GetTextBeforeCursor()
-		after := i.GetText()[len(before):]
-		ctx := database.DetectContext(database.Tokenize(i.GetText()), len(before))
-		trimmed := strings.TrimSuffix(before, ctx.PartialWord)
-		i.SetText(trimmed + text + after)
-		i.SetCursorPosition(len(trimmed + text))
+		if index < 0 || index >= len(lastSymbols) {
+			return false
+		}
+		sym := lastSymbols[index]
+		full := i.GetText()
+		newText := full[:sym.Replace.Start] + sym.Name + full[sym.Replace.End:]
+		i.SetText(newText)
+		i.SetCursorPosition(sym.Replace.Start + len(sym.Name))
 		return true
 	})
 }
 
 // EnableColumnAutocomplete sets up column + keyword autocomplete for simple bars
-// (filter, sort). It shows column names immediately and also suggests the provided
-// keywords when the current word matches their prefix. No full SQL context detection.
+// (filter, sort). It shows column names (with type hints) immediately and also
+// suggests the provided keywords when the current word matches their prefix.
 func (i *InputBar) EnableColumnAutocomplete(keywords []string) {
+	var lastSymbols []completion.Symbol
+
 	i.SetAutocompleteFunc(func(currentText string) []tview.AutocompleteItem {
 		partial := strings.ToLower(currentText)
 		if idx := strings.LastIndexAny(partial, " ,"); idx >= 0 {
 			partial = partial[idx+1:]
 		}
-		var entries []tview.AutocompleteItem
-		for _, col := range i.columnKeys {
-			if partial == "" || strings.HasPrefix(strings.ToLower(col), partial) {
-				entries = append(entries, tview.AutocompleteItem{Main: col})
+		var syms []completion.Symbol
+		for _, col := range i.columns {
+			if partial == "" || strings.HasPrefix(strings.ToLower(col.Name), partial) {
+				syms = append(syms, completion.Symbol{Kind: completion.KindColumn, Name: col.Name, TypeHint: col.TypeHint, IsPK: col.IsPK})
 			}
 		}
 		for _, kw := range keywords {
 			if partial != "" && strings.HasPrefix(strings.ToLower(kw), partial) {
-				entries = append(entries, tview.AutocompleteItem{Main: kw})
+				syms = append(syms, completion.Symbol{Kind: completion.KindKeyword, Name: kw})
 			}
 		}
-		return entries
+		lastSymbols = syms
+		return core.BuildAutocompleteItems(syms, i.App.GetStyles())
 	})
 
 	i.SetAutocompletedFunc(func(text string, index, source int) bool {
 		if source == 0 {
 			return false
 		}
-		i.SetWordAtCursor(text)
+		if index < 0 || index >= len(lastSymbols) {
+			return false
+		}
+		name := core.QuoteCompletion(lastSymbols[index], i.App.GetQuoter())
+		i.SetWordAtCursor(name)
 		return true
 	})
 }
@@ -191,29 +216,24 @@ func (i *InputBar) EnableColumnAutocomplete(keywords []string) {
 // EnableHighlighting attaches a syntax-highlighting styleFunc to the underlying
 // TextArea. Call again (e.g. on StyleChanged) to update colors.
 func (i *InputBar) EnableHighlighting(style *config.SQLEditorStyle) {
-	type cache struct {
-		text   string
-		tokens []database.Token
-	}
-	var c cache
-
 	i.SetStyleFunc(func(byteOffset int) tcell.Style {
 		text := i.GetText()
-		if c.text != text {
-			c.text = text
-			c.tokens = database.Tokenize(text)
+		if i.tokenCache.text != text {
+			i.tokenCache.text = text
+			i.tokenCache.tokens = sqlpkg.Tokenize(text)
 		}
-		return core.SQLTokenStyle(c.tokens, byteOffset, style)
+		return core.SQLTokenStyle(i.tokenCache.tokens, byteOffset, style)
 	})
 }
 
 // SetSchemas updates the table-name list used by context-aware autocomplete.
 func (i *InputBar) SetSchemas(schemas []database.Schema) {
 	i.schemas = schemas
+	i.schemaIndex = completion.BuildSchemaIndex(schemas)
 }
 
-func (i *InputBar) LoadAutocompleteKeys(keys []string) {
-	i.columnKeys = keys
+func (i *InputBar) LoadAutocompleteColumns(cols []completion.Column) {
+	i.columns = cols
 }
 
 func (i *InputBar) Toggle(text string) {

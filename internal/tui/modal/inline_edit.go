@@ -13,7 +13,7 @@ const InlineEditModalId = "InlineEditModal"
 // Short values use an InputField; long or multi-line values use a TextArea.
 type InlineEditModal struct {
 	*core.BaseElement
-	*core.FormModal
+	Form *core.Form
 
 	fieldName      string
 	applyCallback  func(fieldName, newValue string) error
@@ -23,9 +23,8 @@ type InlineEditModal struct {
 func NewInlineEditModal() *InlineEditModal {
 	iem := &InlineEditModal{
 		BaseElement: core.NewBaseElement(),
-		FormModal:   core.NewFormModal(),
+		Form:        core.NewForm(),
 	}
-	iem.SetIdentifier(InlineEditModalId)
 	iem.SetAfterInitFunc(iem.init)
 	return iem
 }
@@ -39,15 +38,16 @@ func (iem *InlineEditModal) init() error {
 }
 
 func (iem *InlineEditModal) setLayout() {
-	iem.SetTitle(" Inline Edit ")
-	iem.SetBorder(true)
-	iem.SetTitleAlign(tview.AlignCenter)
+	iem.Form.SetIdentifier(InlineEditModalId)
+	iem.Form.SetBorder(true)
+	iem.Form.SetTitle(" Inline Edit ")
+	iem.Form.SetTitleAlign(tview.AlignCenter)
 	iem.Form.SetBorderPadding(2, 2, 2, 2)
 }
 
 func (iem *InlineEditModal) setStyle() {
 	styles := iem.App.GetStyles()
-	iem.SetStyle(styles)
+	iem.Form.SetStyle(styles)
 	fieldBg := styles.Global.ContrastBackgroundColor.Color()
 	fieldFg := styles.Global.TextColor.Color()
 	iem.Form.SetFieldTextColor(fieldFg)
@@ -66,26 +66,32 @@ func (iem *InlineEditModal) setStyle() {
 }
 
 func (iem *InlineEditModal) setKeybindings() {
-	iem.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEsc:
-			if iem.cancelCallback != nil {
-				iem.cancelCallback()
-			}
+	k := iem.App.GetKeys()
+	iem.Form.SetCancelFunc(func() {
+		if iem.cancelCallback != nil {
+			iem.cancelCallback()
+		}
+	})
+	iem.Form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch {
+		case k.Match(k.Common.Confirm, event):
+			iem.handleApply()
 			return nil
-		case tcell.KeyEnter:
-			focusedIdx, _ := iem.Form.GetFocusedItemIndex()
-			if focusedIdx == 0 {
-				iem.handleApply()
-				return nil
+		case event.Key() == tcell.KeyEnter:
+			// Enter confirms on single-line InputField; TextArea needs Confirm key.
+			if item := iem.Form.GetFormItem(0); item != nil {
+				if _, ok := item.(*tview.InputField); ok {
+					iem.handleApply()
+					return nil
+				}
 			}
 		}
 		return event
-	})
+	}))
 }
 
 func (iem *InlineEditModal) handleEvents() {
-	go iem.HandleEvents(iem.GetIdentifier(), func(event manager.EventMsg) {
+	go iem.HandleEvents(InlineEditModalId, func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
 			iem.setStyle()
@@ -153,20 +159,14 @@ func (iem *InlineEditModal) Render(fieldName, currentValue string) {
 		)
 	}
 
-	iem.Form.AddButton("Apply", func() { iem.handleApply() })
-	iem.Form.AddButton("Cancel", func() {
-		if iem.cancelCallback != nil {
-			iem.cancelCallback()
-		}
-	})
-
+	iem.Form.ApplyClipboard()
 	iem.Show()
 }
 
 func (iem *InlineEditModal) Show() {
-	iem.App.Pages.AddPage(InlineEditModalId, iem, true, true)
+	iem.App.Pages.ShowModal(InlineEditModalId, core.CenteredFlex(iem.Form, 1, 1), iem.Form, true, true)
 }
 
 func (iem *InlineEditModal) Hide() {
-	iem.App.Pages.RemovePage(InlineEditModalId)
+	iem.App.Pages.RemoveModalPage(InlineEditModalId)
 }

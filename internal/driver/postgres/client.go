@@ -1,0 +1,72 @@
+package postgres
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/util"
+)
+
+type Client struct {
+	Pool   *pgxpool.Pool
+	Config *config.SQLConfig
+}
+
+func NewClient(cfg *config.SQLConfig) *Client {
+	return &Client{
+		Config: cfg,
+	}
+}
+
+func (c *Client) Connect() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.Config.Timeout)*time.Second)
+	defer cancel()
+
+	dsn := c.Config.GetDecryptedDSN()
+	if c.Config.Password != "" && c.Config.Host != "" {
+		password := c.Config.Password
+		if util.IsEncrypted(password) {
+			if config.EncryptionKey == "" {
+				return fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
+			}
+			decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
+			if err != nil {
+				return err
+			}
+			password = decrypted
+		}
+		sslMode := c.Config.SSLMode
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		dsn = util.BuildPostgresDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode)
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("failed to parse DSN: %w", err)
+	}
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	if err != nil {
+		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
+	}
+
+	c.Pool = pool
+	return nil
+}
+
+func (c *Client) Close() {
+	if c.Pool != nil {
+		c.Pool.Close()
+	}
+}
+
+func (c *Client) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.Config.Timeout)*time.Second)
+	defer cancel()
+	return c.Pool.Ping(ctx)
+}

@@ -4,6 +4,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
@@ -11,7 +12,8 @@ const (
 	ErrorModalId = "Error"
 )
 
-func NewError(message string, err error) *tview.Modal {
+func newError(message string, err error) (*tview.Modal, string) {
+	plain := message
 	taggedMessage := "[White::b] " + message + " [::]"
 
 	if err != nil {
@@ -20,6 +22,7 @@ func NewError(message string, err error) *tview.Modal {
 			if len(errMsg) > 240 {
 				errMsg = errMsg[:240] + " ..."
 			}
+			plain += "\n" + errMsg
 			taggedMessage += "\n" + errMsg
 		}
 	}
@@ -30,64 +33,71 @@ func NewError(message string, err error) *tview.Modal {
 	errModal.SetTextColor(tcell.ColorRed)
 	errModal.SetText(taggedMessage)
 
-	return errModal
+	return errModal, plain
 }
 
 // ShowError shows a modal with an error message and logs it.
 func ShowError(page *core.Pages, message string, err error) {
 	log.Error().Err(err).Msg(message)
-	errModal := NewError(message, err)
-	errModal.AddButtons([]string{"Ok"})
+	errModal, plain := newError(message, err)
+	errModal.AddButtons([]string{"Close", "Copy"})
 
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		if buttonLabel == "Ok" {
-			page.RemovePage(ErrorModalId)
+		page.RemoveModalPage(ErrorModalId)
+		if buttonLabel == "Copy" {
+			util.Copy(plain)
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorAndSetFocus shows an error modal, logs it, and restores focus on dismiss.
 func ShowErrorAndSetFocus(page *core.Pages, message string, err error, setFocus func()) {
 	log.Error().Err(err).Msg(message)
-	errModal := NewError(message, err)
-	errModal.AddButtons([]string{"Ok"})
+	errModal, plain := newError(message, err)
+	errModal.AddButtons([]string{"Close", "Copy"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		if buttonLabel == "Ok" {
-			page.RemovePage(ErrorModalId)
-			setFocus()
+		page.RemoveModalPage(ErrorModalId)
+		if buttonLabel == "Copy" {
+			util.Copy(plain)
 		}
+		setFocus()
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorWithDone shows an error modal and calls onDone after the user dismisses it.
+// Esc dismisses without calling onDone.
 func ShowErrorWithDone(page *core.Pages, message string, err error, onDone func()) {
 	log.Error().Err(err).Msg(message)
-	errModal := NewError(message, err)
-	errModal.AddButtons([]string{"Ok"})
+	errModal, plain := newError(message, err)
+	errModal.AddButtons([]string{"Close", "Copy"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		if buttonLabel == "Ok" {
-			page.RemovePage(ErrorModalId)
-			if onDone != nil {
-				onDone()
-			}
+		page.RemoveModalPage(ErrorModalId)
+		if buttonLabel == "Copy" {
+			util.Copy(plain)
+		}
+		if buttonIndex != -1 && onDone != nil {
+			onDone()
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorWithRetry shows an error modal with Fix and Cancel buttons.
 // fixFunc is called when the user chooses Fix, allowing them to correct the mistake.
 func ShowErrorWithRetry(page *core.Pages, message string, err error, fixFunc func()) {
 	log.Error().Err(err).Msg(message)
-	errModal := NewError(message, err)
-	errModal.AddButtons([]string{"Fix", "Cancel"})
+	errModal, plain := newError(message, err)
+	errModal.AddButtons([]string{"Fix", "Copy", "Cancel"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		page.RemovePage(ErrorModalId)
-		if buttonLabel == "Fix" {
+		page.RemoveModalPage(ErrorModalId)
+		switch buttonLabel {
+		case "Copy":
+			util.Copy(plain)
+		case "Fix":
 			fixFunc()
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }

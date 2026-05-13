@@ -26,7 +26,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	w.Close()
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
 	require.NoError(t, err)
@@ -39,8 +39,8 @@ func TestValidateDirectNavigateFormat(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{"valid format", "public/users", false},
-		{"valid with dashes", "my-schema/my-table", false},
+		{"valid format", "public.users", false},
+		{"valid with dashes", "my-schema.my-table", false},
 		{"missing slash", "publicusers", true},
 		{"empty schema", "/users", true},
 		{"empty table", "public/", true},
@@ -134,9 +134,9 @@ func TestLogging_CreatesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	logPath := tmpDir + "/test.log"
 
-	f := logging(logPath, zerolog.InfoLevel)
+	f := logging(logPath, zerolog.InfoLevel, true)
 	require.NotNil(t, f)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	_, err := os.Stat(logPath)
 	assert.NoError(t, err, "log file should have been created")
@@ -149,9 +149,9 @@ func TestLogging_AppendsToExistingFile(t *testing.T) {
 	// Pre-create file with content.
 	require.NoError(t, os.WriteFile(logPath, []byte("previous\n"), 0644))
 
-	f := logging(logPath, zerolog.InfoLevel)
+	f := logging(logPath, zerolog.InfoLevel, true)
 	require.NotNil(t, f)
-	f.Close()
+	require.NoError(t, f.Close())
 
 	data, err := os.ReadFile(logPath)
 	require.NoError(t, err)
@@ -174,9 +174,10 @@ func TestRootCmdFlags_AllRegistered(t *testing.T) {
 		{"connection-page", "p"},
 		{"connection-name", "n"},
 		{"connection-list", "l"},
-		{"key-path", ""},
 		{"gen-key", ""},
 		{"jump", "j"},
+		{"reset-master-password", ""},
+		{"connect", ""},
 	}
 
 	for _, spec := range persistentFlags {
@@ -193,5 +194,29 @@ func TestRootCmdFlags_AllRegistered(t *testing.T) {
 		if spec.shorthand != "" {
 			assert.Equal(t, spec.shorthand, f.Shorthand, "flag --%s shorthand", spec.name)
 		}
+	}
+}
+
+func TestParseConnectFlag(t *testing.T) {
+	tests := []struct {
+		input    string
+		wantName string
+		wantDSN  string
+	}{
+		{"postgresql://user:pass@host/db", "", "postgresql://user:pass@host/db"},
+		{"mysql://root@localhost/shop", "", "mysql://root@localhost/shop"},
+		{"file:/home/user/data.db", "", "file:/home/user/data.db"},
+		{":memory:", "", ":memory:"},
+		{"myconn=postgresql://user:pass@host/db", "myconn", "postgresql://user:pass@host/db"},
+		{"prod=mysql://root@localhost/shop", "prod", "mysql://root@localhost/shop"},
+		{"dev=file:/home/user/data.db", "dev", "file:/home/user/data.db"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			name, dsn := parseConnectFlag(tt.input)
+			assert.Equal(t, tt.wantName, name)
+			assert.Equal(t, tt.wantDSN, dsn)
+		})
 	}
 }

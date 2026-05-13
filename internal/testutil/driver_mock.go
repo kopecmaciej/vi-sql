@@ -70,25 +70,25 @@ func (m *MockDriver) GetTableForeignKeys(ctx context.Context, schema, table stri
 	return args.Get(0).([]database.ForeignKeyInfo), args.Error(1)
 }
 
-func (m *MockDriver) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, error) {
+func (m *MockDriver) GetIncomingForeignKeys(ctx context.Context, schema, table string) ([]database.IncomingForeignKeyInfo, error) {
 	args := m.Called(ctx, schema, table)
-	return args.Get(0).(int64), args.Error(1)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]database.IncomingForeignKeyInfo), args.Error(1)
 }
 
-func (m *MockDriver) ListRows(ctx context.Context, state *database.TableState, where, orderBy string, columns []string, countCallback func(int64)) (string, []database.Row, error) {
-	args := m.Called(ctx, state, where, orderBy, columns, countCallback)
+func (m *MockDriver) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
+	args := m.Called(ctx, schema, table)
+	return args.Get(0).(int64), args.Bool(1), args.Error(2)
+}
+
+func (m *MockDriver) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
+	args := m.Called(ctx, state, where, orderBy)
 	if args.Get(1) == nil {
 		return args.String(0), nil, args.Error(2)
 	}
 	return args.String(0), args.Get(1).([]database.Row), args.Error(2)
-}
-
-func (m *MockDriver) GetRow(ctx context.Context, schema, table string, pk database.PrimaryKey) (database.Row, error) {
-	args := m.Called(ctx, schema, table, pk)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(database.Row), args.Error(1)
 }
 
 func (m *MockDriver) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
@@ -112,12 +112,21 @@ func (m *MockDriver) CommonDataTypes() []string {
 	return args.Get(0).([]string)
 }
 
+func (m *MockDriver) DefaultPKType() string {
+	return m.Called().String(0)
+}
+
 func (m *MockDriver) DefaultCreateTableDDL(schema, tableName string) string {
 	return m.Called(schema, tableName).String(0)
 }
 
 func (m *MockDriver) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
 	args := m.Called(ctx, schema, table)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockDriver) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
+	args := m.Called(ctx, schema, view)
 	return args.String(0), args.Error(1)
 }
 
@@ -157,8 +166,8 @@ func (m *MockDriver) DropIndex(ctx context.Context, schema, indexName string) er
 	return m.Called(ctx, schema, indexName).Error(0)
 }
 
-func (m *MockDriver) ListQueryRows(ctx context.Context, rawSQL string, limit, offset int64, countCallback func(int64)) (string, []database.Row, []database.ColumnInfo, error) {
-	args := m.Called(ctx, rawSQL, limit, offset, countCallback)
+func (m *MockDriver) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
+	args := m.Called(ctx, rawSQL, limit, offset)
 	rows, _ := args.Get(1).([]database.Row)
 	cols, _ := args.Get(2).([]database.ColumnInfo)
 	return args.String(0), rows, cols, args.Error(3)

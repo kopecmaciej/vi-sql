@@ -23,8 +23,9 @@ type SQLEditModal struct {
 	*core.BaseElement
 	*core.Flex
 
-	editor    *SQLQueryEditor
-	onExecute func(sql string)
+	editor     *SQLQueryEditor
+	modalTitle string
+	onExecute  func(sql string)
 }
 
 func NewSQLEditModal() *SQLEditModal {
@@ -33,7 +34,7 @@ func NewSQLEditModal() *SQLEditModal {
 	m := &SQLEditModal{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
-		editor:      NewSQLQueryEditor(),
+		editor:      NewSQLQueryEditor(string(id)),
 	}
 	m.SetIdentifier(id)
 	m.SetAfterInitFunc(m.init)
@@ -96,8 +97,16 @@ func (m *SQLEditModal) SetSchemas(schemas []database.Schema) {
 // The modal closes itself after execution or when Esc is pressed.
 func (m *SQLEditModal) Open(title, initialSQL string, onExecute func(sql string)) {
 	m.onExecute = onExecute
+	m.modalTitle = title
 
 	m.Flex.SetTitle(fmt.Sprintf(" %s ", title))
+	m.editor.SetOnModeChange(func(indicator string) {
+		if indicator == "" {
+			m.Flex.SetTitle(fmt.Sprintf(" %s ", m.modalTitle))
+		} else {
+			m.Flex.SetTitle(fmt.Sprintf(" %s %s ", m.modalTitle, indicator))
+		}
+	})
 
 	m.editor.SetOnExecute(func(sql string) {
 		m.close()
@@ -106,22 +115,15 @@ func (m *SQLEditModal) Open(title, initialSQL string, onExecute func(sql string)
 		}
 	})
 
-	m.editor.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEscape {
-			m.close()
-			return nil
-		}
-		return event
-	})
+	m.editor.SetOnCancel(m.close)
 
 	m.editor.SetText(initialSQL, true)
 	// false = do not resize to fill screen; Draw() controls the rect.
-	m.App.Pages.AddPage(SQLEditModalId, m, false, true)
-	m.App.SetFocusOnly(m.editor)
+	m.App.Pages.ShowModal(SQLEditModalId, m, m.editor, false, true)
 }
 
 func (m *SQLEditModal) close() {
-	m.App.Pages.RemovePage(SQLEditModalId)
+	m.App.Pages.RemoveModalPage(SQLEditModalId)
 }
 
 // Draw positions the modal at ~80% of the screen, centered.

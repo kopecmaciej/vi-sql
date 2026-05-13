@@ -9,6 +9,9 @@ global:
   titleColor: "#D79921"
   graphicsColor: "#D79921"
   dimColor: "#928374"
+  successColor: "#B8BB26"
+  errorColor: "#CC241D"
+  warningColor: "#FABD2F"
 connection:
   listTextColor: "#FABD2F"
   listSelectedTextColor: "#282828"
@@ -20,17 +23,13 @@ data:
   multiSelectedRowColor: "#504945"
 tabBar:
   activeTextColor: "#282828"
-inputBar:
-  autocomplete:
-    backgroundColor: "#3C3836"
-    textColor: "#EBDBB2"
-    activeBackgroundColor: "#D79921"
-    activeTextColor: "#282828"
-    secondaryTextColor: "#FABD2F"
-    borderColor: "#83A598"
-help:
-  scrollBarTrackColor: "#504945"
-  selectedBackgroundColor: "#D79921"
+autocomplete:
+  backgroundColor: "#3C3836"
+  textColor: "#EBDBB2"
+  activeBackgroundColor: "#5b5552"
+  activeTextColor: "#EBDBB2"
+  secondaryTextColor: "#FABD2F"
+  borderColor: "#83A598"
 others:
   leafIconColor: "#83A598"
   separatorColor: "#504945"

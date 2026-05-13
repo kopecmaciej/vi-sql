@@ -9,6 +9,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/vi-sql/internal/util"
+	"github.com/rs/zerolog/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -16,6 +17,7 @@ type (
 	Key struct {
 		Keys        []string `yaml:"keys,omitempty,flow"`
 		Runes       []string `yaml:"runes,omitempty,flow"`
+		Sequences   []string `yaml:"sequences,omitempty,flow"`
 		Description string   `yaml:"description"`
 	}
 
@@ -25,6 +27,7 @@ type (
 	}
 
 	KeyBindings struct {
+		sequenceState  `yaml:"-"`
 		Navigation     NavigationKeys     `yaml:"navigation"`
 		Common         CommonKeys         `yaml:"common"`
 		Global         GlobalKeys         `yaml:"global"`
@@ -58,6 +61,8 @@ type (
 		MoveDown           Key `yaml:"moveDown"`
 		MoveLeft           Key `yaml:"moveLeft"`
 		MoveRight          Key `yaml:"moveRight"`
+		GoTop              Key `yaml:"goTop"`
+		GoBottom           Key `yaml:"goBottom"`
 		FocusUp            Key `yaml:"focusUp"`
 		FocusDown          Key `yaml:"focusDown"`
 		FocusLeft          Key `yaml:"focusLeft"`
@@ -84,13 +89,17 @@ type (
 		FocusSchemaTree Key `yaml:"focusSchemaTree"`
 		OpenActions     Key `yaml:"openActions"`
 		ImportData      Key `yaml:"importData"`
+		GoToTable       Key `yaml:"goToTable"`
+		GoToView        Key `yaml:"goToView"`
 	}
 
 	SchemaKeys struct {
-		ExpandAll   Key `yaml:"expandAll"`
-		CollapseAll Key `yaml:"collapseAll"`
-		RenameTable Key `yaml:"renameTable"`
-		ExpandTable Key `yaml:"expandTable"`
+		ExpandAll     Key `yaml:"expandAll"`
+		CollapseAll   Key `yaml:"collapseAll"`
+		RenameTable   Key `yaml:"renameTable"`
+		ExpandTable   Key `yaml:"expandTable"`
+		OpenStructure Key `yaml:"openStructure"`
+		OpenIndexes   Key `yaml:"openIndexes"`
 	}
 
 	DataKeys struct {
@@ -98,11 +107,12 @@ type (
 		FullPagePeek       Key `yaml:"fullPagePeek"`
 		EditRow            Key `yaml:"editRow"`
 		DuplicateRow       Key `yaml:"duplicateRow"`
+		CopyCell           Key `yaml:"copyCell"`
 		CopyRow            Key `yaml:"copyRow"`
-		NextPage           Key `yaml:"nextPage"`
-		PreviousPage       Key `yaml:"previousPage"`
-		ToggleSortBar      Key `yaml:"toggleSortBar"`
-		SortByColumn       Key `yaml:"sortByColumn"`
+		CopyRowJSON        Key `yaml:"copyRowJSON"`
+		CopyRowCSV         Key `yaml:"copyRowCSV"`
+		ToggleOrderBar     Key `yaml:"toggleOrderBar"`
+		OrderByColumn      Key `yaml:"orderByColumn"`
 		HideColumn         Key `yaml:"hideColumn"`
 		ResetHiddenColumns Key `yaml:"resetHiddenColumns"`
 		MultipleSelect     Key `yaml:"multipleSelect"`
@@ -110,6 +120,7 @@ type (
 		ExplainQuery       Key `yaml:"explainQuery"`
 		ExportData         Key `yaml:"exportData"`
 		FollowForeignKey   Key `yaml:"followForeignKey"`
+		FindReferences     Key `yaml:"findReferences"`
 	}
 
 	ExplainViewerKeys struct {
@@ -118,12 +129,9 @@ type (
 
 	PeekerKeys struct {
 		CopyHighlight    Key `yaml:"copyHighlight"`
-		CopyValue        Key `yaml:"copyValue"`
 		ExpandRow        Key `yaml:"expandRow"`
 		OpenValueViewer  Key `yaml:"openValueViewer"`
 		ToggleFullScreen Key `yaml:"toggleFullScreen"`
-		MoveToTop        Key `yaml:"moveToTop"`
-		MoveToBottom     Key `yaml:"moveToBottom"`
 	}
 
 	HistoryKeys struct {
@@ -142,12 +150,21 @@ type (
 	}
 
 	SQLQueryEditorKeys struct {
-		Fullscreen Key `yaml:"fullscreen"`
-		// TODO: add ToggleEditor key here when TableMode gets its own SQL editor pane
+		Fullscreen  Key `yaml:"fullscreen"`
 		OpenHistory Key `yaml:"openHistory"`
 		TermEditor  Key `yaml:"termEditor"`
+		Prettify    Key `yaml:"prettify"`
 	}
 )
+
+// DataKeysSplit returns DataKeys divided for help display: queryMode keys work
+// in both QueryMode and TableMode; tableOnly are exclusive to TableMode.
+func (kb *KeyBindings) DataKeysSplit() (queryMode, tableOnly []Key) {
+	d := kb.Data
+	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyCell, d.CopyRow, d.CopyRowJSON, d.CopyRowCSV, d.MultipleSelect, d.ClearSelection, d.ExplainQuery, d.ExportData}
+	tableOnly = []Key{d.EditRow, d.DuplicateRow, d.ToggleOrderBar, d.OrderByColumn, d.HideColumn, d.ResetHiddenColumns, d.FollowForeignKey, d.FindReferences}
+	return
+}
 
 // DataKeysForQueryMode returns the subset of DataKeys that are meaningful in
 // QueryMode (read-only results table — no CRUD, no filter/sort bars).
@@ -155,11 +172,20 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	d := kb.Data
 	return []Key{
 		d.PeekRow, d.FullPagePeek,
-		kb.Common.Copy, d.CopyRow,
-		kb.Common.Refresh, d.NextPage, d.PreviousPage,
+		d.CopyCell, d.CopyRow, d.CopyRowJSON, d.CopyRowCSV,
+		kb.Common.Refresh,
+		d.MultipleSelect, d.ClearSelection,
 		d.ExplainQuery,
 		d.ExportData,
 	}
+}
+
+func (kb *KeyBindings) ReloadKeybidings(newKeys *KeyBindings) {
+	onPendingChanged := kb.OnPendingChanged
+	sequencesDisabled := kb.SequencesDisabled
+	*kb = *newKeys
+	kb.OnPendingChanged = onPendingChanged
+	kb.SequencesDisabled = sequencesDisabled
 }
 
 // keyGroupParents defines optional single-parent inheritance for key groups.
@@ -170,35 +196,48 @@ var keyGroupParents = map[string]string{} // eg: "ChildKeys": "ParentKeys"
 // the footer. Only the named fields are shown — this avoids displaying
 // irrelevant common keys (e.g. Confirm in the schema tree).
 var componentCommonKeys = map[string][]string{
-	"Data":           {"Add", "Edit", "Delete", "Copy", "Filter", "Refresh"},
-	"Schema":         {"Add", "Delete", "Copy", "Filter"},
-	"Peeker":         {"Copy", "Close"},
-	"Index":          {"Add", "Delete", "Confirm", "Close"},
-	"Structure":      {"Refresh", "Copy"},
-	"History":        {"Select", "Delete", "Close"},
-	"SQLQueryEditor": {"Confirm", "Clear", "Paste"},
-	"InputBar":       {"Confirm", "Clear", "Paste", "Close"},
-	"ServerInfo":     {"Close", "Refresh"},
-	"CreateTable":    {"Add", "Delete", "Copy", "Confirm", "Close"},
+	"Data":            {"Add", "Edit", "Delete", "Filter", "Refresh"},
+	"Schema":          {"Add", "Delete", "Copy", "Filter", "Refresh"},
+	"Peeker":          {"Copy", "Close"},
+	"Index":           {"Add", "Delete"},
+	"IndexAddForm":    {"Confirm", "Close"},
+	"Structure":       {"Refresh", "Copy"},
+	"History":         {"Select", "Delete", "Close"},
+	"SQLQueryEditor":  {"Confirm", "Clear", "Paste"},
+	"InputBar":        {"Confirm", "Clear", "Paste", "Close"},
+	"InlineEditModal": {"Confirm", "Close"},
+	"ServerInfo":      {"Close", "Refresh"},
+	"CreateTable":     {"Add", "Delete", "Copy", "Confirm", "Close"},
 }
 
-const keybindingsFileHeader = `# runes: literal characters, case-sensitive (e.g. [a], [A])
-# keys:  named/combo keys (e.g. [Enter], [Esc], [Tab], [Space], [Ctrl+Space])
-#        Ctrl+<letter>: case-insensitive in config, but no Ctrl+Shift — use lowercase (e.g. Ctrl+l)
-#        Ctrl+<word>:   use the full name with + separator (e.g. Ctrl+Space)
-#        Alt+<char>:    case-sensitive, both upper and lower work (e.g. Alt+a, Alt+A)
+const keybindingsFileHeaderVim = `# Profile: vim
+# runes:  literal characters, case-sensitive (e.g. [a], [A])
+# keys:   named/combo keys (e.g. [Enter], [Esc], [Tab], [Space], [Ctrl+Space])
+#         Ctrl+<letter>: case-insensitive in config, use lowercase (e.g. Ctrl+l)
+#         Alt+<char>:    case-sensitive, both upper and lower work (e.g. Alt+a)
+# sequences: multi-rune vim sequences (e.g. [gg, gd, yrj]) — only active when vim mode is on
 
 `
 
-func LoadKeybindings() (*KeyBindings, error) {
+const keybindingsFileHeaderNormal = `# Profile: normal
+# runes:  literal characters, case-sensitive (e.g. [a], [A])
+# keys:   named/combo keys (e.g. [Enter], [Esc], [Tab], [Space], [Ctrl+Space])
+#         Ctrl+<letter>: case-insensitive in config, use lowercase (e.g. Ctrl+l)
+#         Alt+<char>:    case-sensitive, both upper and lower work (e.g. Alt+a)
+
+`
+
+func LoadKeybindings(vimMode bool) (*KeyBindings, error) {
 	defaultKeybindings := &KeyBindings{}
-	defaultKeybindings.loadDefaults()
+	defaultKeybindings.loadDefaults(vimMode)
+	defaultKeybindings.vimMode = vimMode
 
 	if os.Getenv("ENV") == "vi-dev" {
+		defaultKeybindings.buildSequencePrefixes()
 		return defaultKeybindings, nil
 	}
 
-	keybindingsPath, err := getKeybindingsPath()
+	keybindingsPath, err := getKeybindingsPath(vimMode)
 	if err != nil {
 		return nil, err
 	}
@@ -207,10 +246,17 @@ func LoadKeybindings() (*KeyBindings, error) {
 		if err := writeKeybindingsWithHeader(defaultKeybindings, keybindingsPath); err != nil {
 			return nil, err
 		}
+		defaultKeybindings.buildSequencePrefixes()
 		return defaultKeybindings, nil
 	}
 
-	return util.LoadConfigFile(defaultKeybindings, keybindingsPath)
+	loaded, err := util.LoadConfigFile(defaultKeybindings, keybindingsPath)
+	if err != nil {
+		return nil, err
+	}
+	loaded.vimMode = vimMode
+	loaded.buildSequencePrefixes()
+	return loaded, nil
 }
 
 func writeKeybindingsWithHeader(kb *KeyBindings, path string) error {
@@ -218,7 +264,11 @@ func writeKeybindingsWithHeader(kb *KeyBindings, path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal keybindings: %w", err)
 	}
-	content := append([]byte(keybindingsFileHeader), data...)
+	header := keybindingsFileHeaderNormal
+	if kb.vimMode {
+		header = keybindingsFileHeaderVim
+	}
+	content := append([]byte(header), data...)
 	return os.WriteFile(path, content, FileMode)
 }
 
@@ -245,14 +295,16 @@ func (kb KeyBindings) GetAvailableKeys() []OrderedKeys {
 
 	for i := 0; i < v.NumField(); i++ {
 		field := v.Field(i)
+		if field.Kind() != reflect.Struct {
+			continue
+		}
 		fieldName := t.Field(i).Name
 
-		orderedKeys := OrderedKeys{
-			Element: fieldName,
-			Keys:    extractKeysFromStruct(field),
+		extracted := extractKeysFromStruct(field)
+		if len(extracted) == 0 {
+			continue
 		}
-
-		keys = append(keys, orderedKeys)
+		keys = append(keys, OrderedKeys{Element: fieldName, Keys: extracted})
 	}
 
 	return keys
@@ -326,8 +378,7 @@ func (kb *KeyBindings) ConvertStrKeyToTcellKey(key string) (tcell.Key, bool) {
 }
 
 // normalizeNamedKey converts tcell's EventKey.Name() to the canonical config
-// format. Returns the normalized string and whether it's a bare rune (no modifiers).
-// Handles quirks in tcell's Name() output: space arrives as "Rune[ ]", Alt/Ctrl
+// format. Handles quirks in tcell's Name() output: space arrives as "Rune[ ]", Alt/Ctrl
 // combos with runes arrive as "Alt+Rune[x]"/"Ctrl+Rune[x]" instead of "Alt+x"/"Ctrl+x".
 func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	if namedKey == "Rune[ ]" {
@@ -352,41 +403,72 @@ func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	return namedKey, false
 }
 
-// normalizeConfigKey converts a config key string to the canonical form used
-// for comparison against normalized tcell key names.
-func normalizeConfigKey(k string) string {
-	// Ctrl+letter: normalize to uppercase to match tcell's reporting.
-	if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
-		return "Ctrl+" + strings.ToUpper(string(k[5]))
+// Match checks whether EventKey and configKey after normalization are the same.
+// If there is pending key, matches accumulated prefix + incoming rune.
+// To maintain sequence state, must be used inside WrapInputCapture
+func (kb *KeyBindings) Match(configKey Key, ev *tcell.EventKey) bool {
+	if ev.Key() == tcell.KeyRune && kb.pending != "" {
+		seq := kb.pending + string(ev.Rune())
+		return slices.Contains(configKey.Sequences, seq)
 	}
-	// Accept "Ctrl-Word" (tcell internal KeyNames dash) as "Ctrl+Word".
-	if strings.HasPrefix(k, "Ctrl-") && len(k) > 6 {
-		return "Ctrl+" + k[5:]
-	}
-	return k
+	return kb.contains(configKey, ev.Name())
 }
 
-// Contains reports whether namedKey (as returned by tcell's EventKey.Name())
-// matches any key in configKey.
-func (kb *KeyBindings) Contains(configKey Key, namedKey string) bool {
-	normalized, isRune := normalizeNamedKey(namedKey)
+// contains cheks whether tcellNamedKey matches any Keys/Runes entry in configKey.
+func (kb *KeyBindings) contains(configKey Key, tcellNamedKey string) bool {
+	normalized, isRune := normalizeNamedKey(tcellNamedKey)
 
 	if isRune {
 		return slices.Contains(configKey.Runes, normalized)
 	}
 
 	for _, k := range configKey.Keys {
-		if normalizeConfigKey(k) == normalized {
+		if strings.HasPrefix(k, "Ctrl+") && len(k) == 6 {
+			k = "Ctrl+" + strings.ToUpper(string(k[5]))
+		}
+		if k == normalized {
 			return true
 		}
 	}
 	return false
 }
 
+// buildSequencePrefixes records all proper prefixes of every sequence so eg:
+// `yrc` will record 2 prefixes: `y` and `yr`. If sequence key shadow another,
+// `yr` -> `yrc` just logs warning, as it was user decision. VimMode only.
+func (kb *KeyBindings) buildSequencePrefixes() {
+	kb.sequencePrefixes = nil
+	if !kb.vimMode {
+		return
+	}
+	prefixes := make(map[string]struct{})
+	var completeSeqs []string
+	for _, group := range kb.GetAvailableKeys() {
+		for _, k := range group.Keys {
+			completeSeqs = append(completeSeqs, k.Sequences...)
+			for _, seq := range k.Sequences {
+				runes := []rune(seq)
+				for i := 1; i < len(runes); i++ {
+					prefixes[string(runes[:i])] = struct{}{}
+				}
+			}
+		}
+	}
+	for _, seq := range completeSeqs {
+		if _, ok := prefixes[seq]; ok {
+			log.Warn().Str("sequence", seq).Msg("keybinding sequence is shadowed by a longer sequence")
+		}
+	}
+	kb.sequencePrefixes = prefixes
+}
+
 func (k *Key) String() string {
 	var parts []string
 	parts = append(parts, k.Keys...)
 	parts = append(parts, k.Runes...)
+	for _, seq := range k.Sequences {
+		parts = append(parts, "<"+seq+">")
+	}
 	return strings.Join(parts, ", ")
 }
 
@@ -424,18 +506,20 @@ func setKeyAtIdx(val reflect.Value, idx int, key Key, count *int) bool {
 }
 
 func (kb *KeyBindings) SaveKeybindings() error {
-	path, err := getKeybindingsPath()
+	path, err := getKeybindingsPath(kb.vimMode)
 	if err != nil {
 		return err
 	}
 	return writeKeybindingsWithHeader(kb, path)
 }
 
-func getKeybindingsPath() (string, error) {
+func getKeybindingsPath(vimMode bool) (string, error) {
 	configDir, err := util.GetConfigDir()
 	if err != nil {
 		return "", err
 	}
-
-	return configDir + "/keybindings.yaml", nil
+	if vimMode {
+		return configDir + "/keybindings-vim.yaml", nil
+	}
+	return configDir + "/keybindings-normal.yaml", nil
 }

@@ -68,9 +68,7 @@ func (p *Peeker) handleEvents() {
 }
 
 func (p *Peeker) setLayout() {
-	p.SetBorder(true)
-	p.SetTitle(" Row Details ")
-	p.SetTitleAlign(tview.AlignLeft)
+	p.ViewModal.SetFrameTitle(" Row Details ")
 
 	p.ViewModal.SetCentered(true)
 	p.ViewModal.AddButtons([]string{"Close"})
@@ -89,43 +87,44 @@ func (p *Peeker) setStyle() {
 
 func (p *Peeker) setKeybindings() {
 	k := p.App.GetKeys()
-	p.ViewModal.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	p.ViewModal.SetKeys(k)
+	p.ViewModal.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Peeker.MoveToTop, event.Name()):
+		case k.Match(k.Navigation.GoTop, event):
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Peeker.MoveToBottom, event.Name()):
+		case k.Match(k.Navigation.GoBottom, event):
 			p.ViewModal.MoveToBottom()
 			return nil
-		case k.Contains(k.Peeker.CopyHighlight, event.Name()):
+		case k.Match(k.Peeker.CopyHighlight, event):
 			p.ViewModal.CopySelectedLine(util.Copy, "full")
 			return nil
-		case k.Contains(k.Common.Copy, event.Name()):
+		case k.Match(k.Common.Copy, event):
 			p.ViewModal.CopySelectedLine(util.Copy, "value")
 			return nil
-		case k.Contains(k.Peeker.ExpandRow, event.Name()):
+		case k.Match(k.Peeker.ExpandRow, event):
 			p.ViewModal.ToggleExpand()
 			return nil
-		case k.Contains(k.Peeker.OpenValueViewer, event.Name()):
+		case k.Match(k.Peeker.OpenValueViewer, event):
 			p.openValueViewer()
 			return nil
-		case k.Contains(k.Peeker.ToggleFullScreen, event.Name()):
+		case k.Match(k.Peeker.ToggleFullScreen, event):
 			p.ViewModal.SetFullScreen(!p.ViewModal.IsFullScreen())
 			p.ViewModal.MoveToTop()
 			return nil
-		case k.Contains(k.Common.Close, event.Name()):
-			p.App.Pages.RemovePage(p.GetIdentifier())
+		case k.Match(k.Common.Close, event):
+			p.App.Pages.RemoveModalPage(p.GetIdentifier())
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (p *Peeker) SetDoneFunc(doneFunc func()) {
 	p.doneFunc = doneFunc
 }
 
-const valueViewerPageId = "ValueViewer"
+const valueViewerPageSuffix = "-viewer"
 
 // openValueViewer opens a full-screen scrollable viewer for the currently
 // selected row's value. If the row has a PrettyValue (JSON/XML) it is shown
@@ -145,20 +144,48 @@ func (p *Peeker) openValueViewer() {
 	}
 
 	title := rl.Key + " (" + rl.Type + ")"
+	viewerPageId := tview.Identifier(string(p.GetIdentifier()) + valueViewerPageSuffix)
 
 	styles := p.App.GetStyles()
-	viewer := primitives.NewValueViewer()
+	k := p.App.GetKeys()
+	viewer := core.NewTextView()
+	viewer.SetScrollable(true)
+	viewer.SetWrap(true)
+	viewer.SetBorderPadding(0, 0, 1, 1)
 	viewer.SetBorder(true)
+	viewer.SetTitle(" " + title + " ")
+	viewer.SetTitleAlign(tview.AlignLeft)
 	viewer.SetBackgroundColor(styles.Global.BackgroundColor.Color())
 	viewer.SetBorderColor(styles.Global.BorderColor.Color())
 	viewer.SetTitleColor(styles.Global.TitleColor.Color())
 	viewer.SetTextColor(styles.Global.TextColor.Color())
-	viewer.SetContent(title, content)
-	viewer.SetDoneFunc(func() {
-		p.App.Pages.RemovePage(valueViewerPageId)
-	})
+	viewer.SetText(content)
+	viewer.ScrollToBeginning()
+	viewer.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		row, col := viewer.GetScrollOffset()
+		switch {
+		case k.Match(k.Common.Close, event):
+			p.App.Pages.RemoveModalPage(viewerPageId)
+			return nil
+		case k.Match(k.Navigation.GoTop, event):
+			viewer.ScrollToBeginning()
+			return nil
+		case k.Match(k.Navigation.GoBottom, event):
+			viewer.ScrollToEnd()
+			return nil
+		case k.Match(k.Navigation.MoveUp, event):
+			if row > 0 {
+				viewer.ScrollTo(row-1, col)
+			}
+			return nil
+		case k.Match(k.Navigation.MoveDown, event):
+			viewer.ScrollTo(row+1, col)
+			return nil
+		}
+		return event
+	}))
 
-	p.App.Pages.AddPage(valueViewerPageId, viewer, true, true)
+	p.App.Pages.ShowModal(viewerPageId, viewer, viewer, true, true)
 }
 
 // prettyFormatValue returns a human-readable multi-line representation of val
@@ -204,21 +231,27 @@ func (p *Peeker) Render(row database.Row, columns []database.ColumnInfo) {
 	lines := make([]primitives.RowLine, 0, len(columns))
 	for _, col := range columns {
 		val := database.StringifyValue(row[col.Name])
+		typ := col.DataType
+		if col.IsPK {
+			typ += " (PK)"
+		}
+		if col.IsFK {
+			typ += " (FK)"
+		}
 		lines = append(lines, primitives.RowLine{
 			Key:         col.Name,
-			Type:        col.DataType,
+			Type:        typ,
 			Value:       val,
-			IsPK:        col.IsPK,
 			PrettyValue: prettyFormatValue(val, col.DataType),
 		})
 	}
 
 	p.ViewModal.SetRows(lines)
 
-	p.App.Pages.AddPage(p.GetIdentifier(), p.ViewModal, true, true)
+	p.App.Pages.ShowModal(p.GetIdentifier(), p.ViewModal, p.ViewModal, true, true)
 	p.ViewModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		if buttonLabel == "Close" || buttonLabel == "" {
-			p.App.Pages.RemovePage(p.GetIdentifier())
+			p.App.Pages.RemoveModalPage(p.GetIdentifier())
 		}
 	})
 }

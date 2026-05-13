@@ -1,36 +1,35 @@
 global:
   backgroundColor: "#030903"
-  contrastBackgroundColor: "#121A12"
+  contrastBackgroundColor: "#1B261B"
   moreContrastBackgroundColor: "#1A6B32"
   textColor: "#B9F6CA"
   secondaryTextColor: "#FF8F00"
   borderColor: "#2E7D46"
-  focusColor: "#00E676"
+  focusColor: "#4ADE80"
   titleColor: "#1A6B32"
   graphicsColor: "#1A6B32"
   dimColor: "#2E7D46"
+  successColor: "#69FF47"
+  errorColor: "#DA3312"
+  warningColor: "#FF8F00"
 connection:
   listTextColor: "#FF8F00"
   listSelectedTextColor: "#FF8F00"
   listSelectedBackgroundColor: "#1A6B32"
-  listSecondaryTextColor: "#00E676"
+  listSecondaryTextColor: "#49935E"
 data:
-  cellTextColor: "#00E676"
+  cellTextColor: "#49935E"
   selectedRowColor: "#69FF47"
   multiSelectedRowColor: "#145A2A"
 tabBar:
   activeTextColor: "#FF8F00"
-inputBar:
-  autocomplete:
-    backgroundColor: "#121A12"
-    textColor: "#B9F6CA"
-    activeBackgroundColor: "#1A6B32"
-    activeTextColor: "#030903"
-    secondaryTextColor: "#FF8F00"
-    borderColor: "#00E676"
-help:
-  scrollBarTrackColor: "#1A3A1A"
-  selectedBackgroundColor: "#FDE68A"
+autocomplete:
+  backgroundColor: "#061306"
+  textColor: "#B9F6CA"
+  activeBackgroundColor: "#0f2e0f"
+  activeTextColor: "#B9F6CA"
+  secondaryTextColor: "#FF8F00"
+  borderColor: "#49935E"
 others:
   leafIconColor: "#1A6B32"
   separatorColor: "#1A3A1A"

@@ -2,15 +2,16 @@ package component
 
 import (
 	"fmt"
-	"slices"
 	"strings"
-	"sync/atomic"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/sql/completion"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/util"
@@ -19,37 +20,45 @@ import (
 
 const SQLQueryEditorId = "SQLQueryEditor"
 
-var sqlQueryEditorCounter int32
-
 // SQLQueryEditor is an in-TUI multi-line SQL editor backed by a tview.TextArea.
 // It supports syntax highlighting via SetStyleFunc and context-aware autocomplete.
 type SQLQueryEditor struct {
 	*core.BaseElement
 	*core.TextArea
 
-	vim            *vimHandler
-	style          *config.SQLEditorStyle
-	schemas        []database.Schema
-	columns        []string
-	columnCache    map[string][]string // key: "schema.table" or "table"
-	columnFetcher  func(schema, table string) ([]string, error)
-	history        *modal.History
-	onExecute      func(sql string)
-	onFullscreen   func()
-	onFocusDown    func()
-	onOpenInEditor func()
-	onCancel       func()
+	vim              *vimHandler
+	style            *config.SQLEditorStyle
+	schemas          []database.Schema
+	schemaIndex      *completion.SchemaIndex
+	columnCache      map[string][]completion.Column // key: "schema.table" or "table"
+	columnFetcher    func(schema, table string) ([]completion.Column, error)
+	completionEngine *completion.Engine
+	history          *modal.History
+	onExecute        func(sql string)
+	onFullscreen     func()
+	onFocusDown      func()
+	onOpenInEditor   func()
+	onCancel         func()
+	onModeChange     func(indicator string)
+	yankHighlight    struct {
+		start, end int
+		generation uint64 // guards clearing goroutine from clearing too early
+	}
+	// tokenCache is shared between syntax highlighting and autocomplete
+	tokenCache struct {
+		text   string
+		tokens []sqlpkg.Token
+	}
 }
 
-func NewSQLQueryEditor() *SQLQueryEditor {
-	n := atomic.AddInt32(&sqlQueryEditorCounter, 1)
-	id := tview.Identifier(fmt.Sprintf("%s-%d", SQLQueryEditorId, n))
+func NewSQLQueryEditor(ownerID string) *SQLQueryEditor {
 	e := &SQLQueryEditor{
-		BaseElement: core.NewBaseElement(),
-		TextArea:    core.NewTextArea(),
-		columnCache: make(map[string][]string),
+		BaseElement:      core.NewBaseElement(),
+		TextArea:         core.NewTextArea(),
+		columnCache:      make(map[string][]completion.Column),
+		completionEngine: completion.NewDefaultEngine(),
 	}
-	e.SetIdentifier(id)
+	e.SetIdentifier(tview.Identifier(ownerID + EditorSuffix))
 	e.SetAfterInitFunc(e.init)
 	return e
 }
@@ -74,6 +83,9 @@ func (e *SQLQueryEditor) initHistory() {
 		e.history = nil
 		return
 	}
+	if conn := e.App.GetConfig().GetCurrentConnection(); conn != nil {
+		e.history.SetConnectionID(conn.ID)
+	}
 	e.history.SetOnAccept(func(query string) {
 		e.SetText(query, true)
 	})
@@ -85,16 +97,53 @@ func (e *SQLQueryEditor) initHistory() {
 func (e *SQLQueryEditor) refreshTitle() {
 	if e.vim == nil {
 		e.TextArea.SetTitle(" SQL Editor ")
+		if e.onModeChange != nil {
+			e.onModeChange("")
+		}
 		return
 	}
 	s := e.style
 	switch e.vim.mode {
 	case vimNormal:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]NORMAL[-] ", s.KeywordColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Normal[-] ", s.KeywordColor))
+		if e.onModeChange != nil {
+			e.onModeChange(fmt.Sprintf("[%s]Normal[-]", s.KeywordColor))
+		}
 	case vimVisual:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]VISUAL[-] ", s.NumberColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Visual[-] ", s.NumberColor))
+		if e.onModeChange != nil {
+			e.onModeChange(fmt.Sprintf("[%s]Visual[-]", s.NumberColor))
+		}
+	case vimVisualLine:
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]V-Line[-] ", s.NumberColor))
+		if e.onModeChange != nil {
+			e.onModeChange(fmt.Sprintf("[%s]V-Line[-]", s.NumberColor))
+		}
 	default:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]INSERT[-] ", s.OperatorColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Insert[-] ", s.OperatorColor))
+		if e.onModeChange != nil {
+			e.onModeChange(fmt.Sprintf("[%s]Insert[-]", s.OperatorColor))
+		}
+	}
+}
+
+// SetOnModeChange registers a callback invoked on every vim mode transition (Normal/Insert/...).
+func (e *SQLQueryEditor) SetOnModeChange(f func(indicator string)) {
+	e.onModeChange = f
+	e.refreshTitle()
+}
+
+func (e *SQLQueryEditor) IsInsertMode() bool {
+	return e.vim == nil || e.vim.mode == vimInsert
+}
+
+func (e *SQLQueryEditor) IsVisualMode() bool {
+	return e.vim != nil && (e.vim.mode == vimVisual || e.vim.mode == vimVisualLine)
+}
+
+func (e *SQLQueryEditor) EnterNormalMode() {
+	if e.vim != nil {
+		e.vim.transitionTo(vimNormal)
 	}
 }
 
@@ -110,7 +159,11 @@ func (e *SQLQueryEditor) setStyle() {
 		Foreground(styles.Global.BorderColor.Color()).
 		Background(styles.Global.BackgroundColor.Color()))
 
-	a := styles.InputBar.Autocomplete
+	e.TextArea.SetSelectedStyle(tcell.StyleDefault.
+		Background(styles.Global.TextColor.Color()).
+		Foreground(styles.Global.BackgroundColor.Color()))
+
+	a := styles.Autocomplete
 	acBackground := a.BackgroundColor.Color()
 	acMain := tcell.StyleDefault.
 		Background(acBackground).
@@ -120,174 +173,83 @@ func (e *SQLQueryEditor) setStyle() {
 		Foreground(a.ActiveTextColor.Color())
 	e.TextArea.SetAutocompleteStyles(acBackground, acMain, acSelected)
 	e.TextArea.SetAutocompleteBorderColor(a.BorderColor.Color())
+	e.TextArea.SetAutocompleteMaxHeight(core.AutocompleteMaxItems)
 }
 
 func (e *SQLQueryEditor) setHighlighting() {
-	type cache struct {
-		text   string
-		tokens []database.Token
-	}
-	var c cache
-
 	e.SetStyleFunc(func(byteOffset int) tcell.Style {
 		text := e.GetText()
-		if c.text != text {
-			c.text = text
-			c.tokens = database.Tokenize(text)
+		if e.tokenCache.text != text {
+			e.tokenCache.text = text
+			e.tokenCache.tokens = sqlpkg.Tokenize(text)
 		}
-		return core.SQLTokenStyle(c.tokens, byteOffset, e.style)
+		base := core.SQLTokenStyle(e.tokenCache.tokens, byteOffset, e.style)
+		hStyle := e.App.GetStyles().Global.MoreContrastBackgroundColor.Color()
+		return yankOverlayStyle(base, hStyle, e.yankHighlight.start, e.yankHighlight.end, byteOffset)
 	})
 }
 
-// buildAliasMap extracts alias→table mappings from FROM/JOIN clauses in text.
-func (e *SQLQueryEditor) buildAliasMap(text string) map[string]string {
-	refs := database.ExtractFromTableRefs(text)
-	aliases := make(map[string]string, len(refs))
-	for _, ref := range refs {
-		if ref.Alias != "" {
-			aliases[strings.ToLower(ref.Alias)] = ref.Table
-		}
+// yankOverlayStyle returns base with its background replaced by bg when offset
+// falls in [start, end). Returns base unchanged otherwise.
+func yankOverlayStyle(base tcell.Style, bg tcell.Color, start, end, offset int) tcell.Style {
+	if start < end && offset >= start && offset < end {
+		return base.Background(bg)
 	}
-	return aliases
+	return base
 }
 
-// resolveColumnsForQuery merges columns from all tables referenced in the FROM/JOIN
-// clauses of text, resolving aliases where needed.
-func (e *SQLQueryEditor) resolveColumnsForQuery(text string) []string {
-	refs := database.ExtractFromTableRefs(text)
-	if len(refs) == 0 {
-		return e.columns
-	}
-
-	seen := make(map[string]bool)
-	var merged []string
-
-	for _, ref := range refs {
-		schema := ref.Schema
-		table := ref.Table
-
-		// Resolve schema if missing
-		if schema == "" {
-			for _, s := range e.schemas {
-				for _, t := range s.Tables {
-					if strings.EqualFold(t, table) {
-						schema = s.Schema
-						break
-					}
-				}
-				if schema != "" {
-					break
-				}
+// BeginYankHighlight highlights [start, end) for 350 ms, then clears.
+// The highlight is applied via the styleFunc so cursor position is untouched.
+func (e *SQLQueryEditor) BeginYankHighlight(start, end int) {
+	e.yankHighlight.generation++
+	e.yankHighlight.start = start
+	e.yankHighlight.end = end
+	generation := e.yankHighlight.generation
+	go func() {
+		time.Sleep(350 * time.Millisecond)
+		e.App.QueueUpdateDraw(func() {
+			if e.yankHighlight.generation == generation {
+				e.yankHighlight.start = 0
+				e.yankHighlight.end = 0
 			}
-		}
-
-		key := schema + "." + table
-		cols, ok := e.columnCache[key]
-		if !ok && key == "."+table {
-			cols, ok = e.columnCache[table]
-		}
-		if !ok && e.columnFetcher != nil {
-			fetched, err := e.columnFetcher(schema, table)
-			if err == nil {
-				cols = fetched
-				if key != "."+table {
-					e.columnCache[key] = cols
-				}
-				e.columnCache[table] = cols
-			}
-		}
-
-		for _, col := range cols {
-			if !seen[col] {
-				seen[col] = true
-				merged = append(merged, col)
-			}
-		}
-	}
-
-	if len(merged) == 0 {
-		return e.columns
-	}
-	return merged
-}
-
-// resolveColumnsForTable returns columns for a specific table or alias (for CtxAfterDot).
-func (e *SQLQueryEditor) resolveColumnsForTable(tableName string, aliases map[string]string) []string {
-	// Resolve alias to real table name first
-	if real, ok := aliases[strings.ToLower(tableName)]; ok {
-		tableName = real
-	}
-	// Try qualified keys first
-	for _, s := range e.schemas {
-		for _, t := range s.Tables {
-			if strings.EqualFold(t, tableName) {
-				key := s.Schema + "." + t
-				if cols, ok := e.columnCache[key]; ok {
-					return cols
-				}
-				if e.columnFetcher != nil {
-					cols, err := e.columnFetcher(s.Schema, t)
-					if err == nil {
-						e.columnCache[key] = cols
-						e.columnCache[t] = cols
-						return cols
-					}
-				}
-			}
-		}
-	}
-	// Fall back to unqualified cache
-	if cols, ok := e.columnCache[tableName]; ok {
-		return cols
-	}
-	return e.columns
+		})
+	}()
 }
 
 func (e *SQLQueryEditor) setAutocomplete() {
+	var lastSymbols []completion.Symbol
+
 	e.TextArea.SetAutocompleteFunc(func(text string, cursorBytePos int) []tview.AutocompleteItem {
+		if !e.IsInsertMode() {
+			return nil
+		}
 		if cursorBytePos > 0 && strings.HasSuffix(strings.TrimSpace(text[:cursorBytePos]), ";") {
 			return nil
 		}
-
-		tokens := database.Tokenize(text)
-		ctx := database.DetectContext(tokens, cursorBytePos)
-		aliases := e.buildAliasMap(text)
-		variables := database.ExtractCTENames(text)
-
-		var cols []string
-		switch ctx.Type {
-		case database.CtxAfterDot:
-			isSchema := slices.ContainsFunc(e.schemas, func(s database.Schema) bool {
-				return strings.EqualFold(ctx.TableName, s.Schema)
-			})
-			if !isSchema && ctx.TableName != "" {
-				cols = e.resolveColumnsForTable(ctx.TableName, aliases)
-			} else {
-				cols = e.columns
-			}
-		case database.CtxAfterSelect, database.CtxAfterWhere, database.CtxAfterOn,
-			database.CtxAfterOrderBy, database.CtxAfterGroupBy, database.CtxAfterSet:
-			cols = e.resolveColumnsForQuery(text)
-		default:
-			cols = e.columns
+		if e.tokenCache.text != text {
+			e.tokenCache.text = text
+			e.tokenCache.tokens = sqlpkg.Tokenize(text)
 		}
-
-		entries := database.BuildSQLAutocomplete(text, cursorBytePos, e.schemas, cols, variables)
-		items := make([]tview.AutocompleteItem, len(entries))
-		for i, en := range entries {
-			items[i] = tview.AutocompleteItem{Main: en.Main, Secondary: en.Secondary}
-		}
-		return items
+		symbols := e.completionEngine.SuggestTokens(e.tokenCache.tokens, text, cursorBytePos, completion.Context{
+			Schemas:       e.schemas,
+			Index:         e.schemaIndex,
+			ColumnFetcher: e.columnFetcher,
+			ColumnCache:   e.columnCache,
+		})
+		lastSymbols = symbols
+		return core.BuildAutocompleteItems(symbols, e.App.GetStyles())
 	})
 
 	e.TextArea.SetAutocompletedFunc(func(text string, index int, source int) bool {
 		if source == tview.AutocompletedNavigate {
 			return false
 		}
-		before := e.GetTextBeforeCursor()
-		ctx := database.DetectContext(database.Tokenize(e.GetText()), len(before))
-		startPos := len(before) - len(ctx.PartialWord)
-		e.Replace(startPos, len(before), text)
+		if index < 0 || index >= len(lastSymbols) {
+			return false
+		}
+		sym := lastSymbols[index]
+		name := core.QuoteCompletion(sym, e.App.GetQuoter())
+		e.Replace(sym.Replace.Start, sym.Replace.End, name)
 		return true
 	})
 }
@@ -295,34 +257,44 @@ func (e *SQLQueryEditor) setAutocomplete() {
 func (e *SQLQueryEditor) handleEvents() {
 	go e.HandleEvents(e.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
+		case manager.FocusChanged:
+			if e.vim != nil {
+				if id, ok := event.Message.Data.(tview.Identifier); ok && id != e.GetIdentifier() {
+					e.vim.transitionTo(vimNormal)
+				}
+			}
 		case manager.StyleChanged:
 			e.style = &e.App.GetStyles().SQLEditor
 			e.setStyle()
 			e.setHighlighting()
+		case manager.ConfigChanged:
+			vimMode := e.App.GetConfig().UI.VimMode
+			if vimMode && e.vim == nil {
+				e.vim = newVimHandler(e)
+			} else if !vimMode && e.vim != nil {
+				e.vim = nil
+			}
+			go e.App.QueueUpdateDraw(e.refreshTitle)
 		}
 	})
 }
 
 func (e *SQLQueryEditor) SetSchemas(schemas []database.Schema) {
 	e.schemas = schemas
+	e.schemaIndex = completion.BuildSchemaIndex(schemas)
 }
 
-func (e *SQLQueryEditor) SetColumns(columns []string) {
-	e.columns = columns
-}
-
-// SetColumnsForTable caches columns for a specific schema.table and sets them
-// as the fallback column list.
-func (e *SQLQueryEditor) SetColumnsForTable(schema, table string, columns []string) {
+// SetColumnsForTable pre-populates the column cache for a specific table so
+// that autocomplete works without a network round-trip for that table.
+func (e *SQLQueryEditor) SetColumnsForTable(schema, table string, columns []completion.Column) {
 	key := schema + "." + table
 	e.columnCache[key] = columns
 	e.columnCache[table] = columns
-	e.columns = columns
 }
 
 // SetColumnFetcher provides a function to fetch columns on demand for tables
 // referenced in the SQL editor that haven't been cached yet.
-func (e *SQLQueryEditor) SetColumnFetcher(fn func(schema, table string) ([]string, error)) {
+func (e *SQLQueryEditor) SetColumnFetcher(fn func(schema, table string) ([]completion.Column, error)) {
 	e.columnFetcher = fn
 }
 
@@ -364,97 +336,102 @@ func (e *SQLQueryEditor) SetOnCancel(fn func()) {
 // else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return e.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		// Vim mode intercept — runs before all other key handling.
-		// Non-rune keys (Ctrl+Enter, arrows, etc.) fall through unchanged,
-		// so execute, paste, history, and autocomplete bindings are unaffected.
-		if e.vim != nil && e.vim.Handle(event, setFocus) {
-			return
-		}
-
 		k := e.App.GetKeys()
 
-		execute := func() {
-			if e.onExecute != nil {
-				sql := strings.TrimRight(strings.TrimSpace(e.GetText()), ";")
-				if sql != "" {
-					e.onExecute(sql)
-				}
-			}
-		}
-
 		switch {
-		case k.Contains(k.Common.Confirm, event.Name()):
-			execute()
+		case k.Match(k.Common.Confirm, event):
+			e.Execute()
 			return
-		case k.Contains(k.Navigation.FocusDown, event.Name()):
+		case k.Match(k.Navigation.FocusDown, event):
 			if !e.TextArea.IsAutocompleteVisible() {
 				if e.onFocusDown != nil {
 					e.onFocusDown()
 				}
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteDown, event.Name()):
+		case k.Match(k.Navigation.AutocompleteDown, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteUp, event.Name()):
+		case k.Match(k.Navigation.AutocompleteUp, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyUp, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Navigation.AutocompleteAccept, event.Name()):
+		case k.Match(k.Navigation.AutocompleteAccept, event):
 			if e.TextArea.IsAutocompleteVisible() {
 				e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone), setFocus)
 				return
 			}
-		case k.Contains(k.Common.Paste, event.Name()):
+		case k.Match(k.Common.Paste, event):
 			if text := util.Paste(); text != "" {
 				cursorPos := len(e.GetTextBeforeCursor())
 				e.Replace(cursorPos, cursorPos, text)
 			}
 			return
-		case k.Contains(k.SQLQueryEditor.Fullscreen, event.Name()):
+		case k.Match(k.SQLQueryEditor.Fullscreen, event):
 			if e.onFullscreen != nil {
 				e.onFullscreen()
 			}
 			return
-		case k.Contains(k.Common.Clear, event.Name()):
-			e.SetText("", true)
+		case k.Match(k.Common.Clear, event):
+			e.Replace(0, len(e.GetText()), "")
 			return
-		case k.Contains(k.SQLQueryEditor.OpenHistory, event.Name()):
+		case k.Match(k.SQLQueryEditor.Prettify, event):
+			// TODO: fix: If no reder occurs we need to reset `sequenceState` manually
+			k.Reset()
+			e.Prettify()
+			return
+		case k.Match(k.SQLQueryEditor.OpenHistory, event):
 			if e.history != nil {
 				e.history.Render()
 			}
 			return
-		case k.Contains(k.SQLQueryEditor.TermEditor, event.Name()):
+		case k.Match(k.SQLQueryEditor.TermEditor, event):
 			if e.onOpenInEditor != nil {
 				e.onOpenInEditor()
 			}
 			return
-		case event.Key() == tcell.KeyEscape && !e.TextArea.IsAutocompleteVisible() && e.onCancel != nil:
+		// Esc in vim insert/visual mode must fall through to the vim intercept
+		// below (mode transition), not cancel out of the editor.
+		case event.Key() == tcell.KeyEscape && !e.TextArea.IsAutocompleteVisible() && e.onCancel != nil &&
+			(e.vim == nil || e.vim.mode == vimNormal):
 			e.onCancel()
+			return
+		case event.Key() == tcell.KeyRune && event.Rune() == '(' && e.IsInsertMode():
+			cursorPos := len(e.GetTextBeforeCursor())
+			e.Replace(cursorPos, cursorPos, "()")
+			e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), setFocus)
+			return
+		}
+
+		// Vim mode intercept — after configured bindings (so they take priority),
+		// before raw TextArea input. Non-rune keys mostly fall through unchanged.
+		if e.vim != nil && e.vim.Handle(event, setFocus) {
 			return
 		}
 		e.TextArea.InputHandler()(event, setFocus)
 	})
 }
 
-// SaveQueryToHistory persists sql to the history file after a successful execution.
-// No-op if history is not initialized.
-func (e *SQLQueryEditor) SaveQueryToHistory(sql string) {
+func (e *SQLQueryEditor) SaveQueryToHistory(sql string, d time.Duration) {
 	if e.history != nil {
-		if err := e.history.SaveToHistory(sql); err != nil {
+		if err := e.history.SaveToHistory(sql, d); err != nil {
 			log.Error().Err(err).Msg("Failed to save to history")
 		}
 	}
 }
 
-// OpenHistory renders the SQL history modal.
 func (e *SQLQueryEditor) OpenHistory() {
 	if e.history != nil {
 		e.history.Render()
 	}
+}
+
+func (e *SQLQueryEditor) Prettify() {
+	text := e.GetText()
+	e.Replace(0, len(text), sqlpkg.Format(text))
 }
 
 // OpenHistoryWithCallback renders the SQL history modal and temporarily

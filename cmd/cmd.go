@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"os"
 	runtimeDebug "runtime/debug"
 	"strings"
@@ -9,8 +10,14 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/build"
 	"github.com/kopecmaciej/vi-sql/internal/config"
-	_ "github.com/kopecmaciej/vi-sql/internal/postgres"
-	_ "github.com/kopecmaciej/vi-sql/internal/sqlite"
+	"github.com/kopecmaciej/vi-sql/internal/database"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/cockroachdb"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/mariadb"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/oracle"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlite"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlserver"
 	"github.com/kopecmaciej/vi-sql/internal/tui"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog"
@@ -20,65 +27,53 @@ import (
 )
 
 var (
-	cfgFile           string
-	showVersion       bool
-	debug             bool
-	optionsPage       bool
-	connectionPage    bool
-	connectionName    string
-	listConnections   bool
-	encryptionKeyPath string
-	jumpInto          string
-	vimMode           bool
-	rootCmd           = &cobra.Command{
+	cfgFile             string
+	debug               bool
+	optionsPage         bool
+	connectionPage      bool
+	connectionName      string
+	listConnections     bool
+	jumpInto            string
+	resetMasterPassword bool
+	connectDSN          string
+	rootCmd             = &cobra.Command{
 		Use:   "vi-sql",
 		Short: "SQL TUI client",
-		Long:  `A Terminal User Interface (TUI) client for SQL databases (PostgreSQL)`,
+		Long:  `A Terminal User Interface (TUI) client for SQL databases`,
 		Run:   runApp,
 	}
 )
 
 func Execute() error {
-	err := rootCmd.Execute()
-	if err != nil {
-		return err
-	}
-	return nil
+	return rootCmd.Execute()
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file (default is $HOME/.config/vi-sql/config.yaml)")
-	rootCmd.Flags().BoolVarP(&showVersion, "version", "v", false, "Show version")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "config file or directory (use --paths to see default location)")
+	rootCmd.Flags().BoolP("version", "v", false, "Show version")
+	rootCmd.Flags().Bool("paths", false, "Show paths to config files and log")
 	rootCmd.Flags().BoolVarP(&debug, "debug", "d", false, "Enable debug mode")
 	rootCmd.Flags().BoolVarP(&optionsPage, "options-page", "o", false, "Show options page on startup")
 	rootCmd.Flags().BoolVarP(&connectionPage, "connection-page", "p", false, "Show connection page on startup")
 	rootCmd.Flags().StringVarP(&connectionName, "connection-name", "n", "", "Connect to a specific connection by name")
 	rootCmd.Flags().BoolVarP(&listConnections, "connection-list", "l", false, "List all available connections")
-	rootCmd.Flags().StringVar(&encryptionKeyPath, "key-path", "", "Path to the encryption key file")
-	rootCmd.Flags().Bool("gen-key", false, "Generate valid encryption key")
-	rootCmd.Flags().StringVarP(&jumpInto, "jump", "j", "", "Jump directly to schema/table (format: schema-name/table-name)")
-	rootCmd.Flags().BoolVar(&vimMode, "vim-mode", false, "Enable vim mode in SQL editor")
+	rootCmd.Flags().Bool("gen-key", false, "Generate a random encryption key for use with VI_SQL_SECRET_KEY")
+	rootCmd.Flags().StringVarP(&jumpInto, "jump", "j", "", "Jump directly to given table (format: schema-name.table-name)")
+	rootCmd.Flags().BoolVar(&resetMasterPassword, "reset-master-password", false, "Reset master password (clears wrapped key and erases encrypted connection passwords)")
+	rootCmd.Flags().StringVar(&connectDSN, "connect", "", "Connect directly using a DSN (e.g. postgresql://user:pass@host/db, file:/home/user/sqlite.db)")
 }
 
 func runApp(cmd *cobra.Command, args []string) {
-	if showVersion {
-		greenColor := "\033[32m"
-		resetColor := "\033[0m"
-		fmt.Printf("%s\n", greenColor)
-		fmt.Print(`
-╔═══════════════════════════════════════╗
-║  ██╗   ██╗██╗ ███████╗ ██████╗ ██╗    ║
-║  ██║   ██║██║ ██╔════╝██╔═══██╗██║    ║
-║  ██║   ██║██║ ███████╗██║   ██║██║    ║
-║  ╚██╗ ██╔╝██║ ╚════██║██║▄▄ ██║██║    ║
-║   ╚████╔╝ ██║ ███████║╚██████╔╝███████║
-║    ╚═══╝  ╚═╝ ╚══════╝ ╚══▀▀═╝ ╚══════║
-╚═══════════════════════════════════════╝
-`)
-		fmt.Printf("Version %s%s\n", build.Version, resetColor)
+	if ok, _ := cmd.Flags().GetBool("version"); ok {
+		printVersion()
+		os.Exit(0)
+	}
+	if ok, _ := cmd.Flags().GetBool("paths"); ok {
+		printPaths()
 		os.Exit(0)
 	}
 
+	cfgFile = util.ResolveConfigPath(cfgFile)
 	if err := util.ValidateConfigPath(cfgFile); err != nil {
 		fatalf("%v", err)
 	}
@@ -86,6 +81,11 @@ func runApp(cmd *cobra.Command, args []string) {
 	cfg, err := config.LoadConfigWithVersion(build.Version, cfgFile)
 	if err != nil {
 		fatalf("loading config: %v", err)
+	}
+
+	if cfg.FirstLaunch {
+		cfg.ShowOptionsPage = true
+		cfg.ShowConnectionPage = true
 	}
 
 	cmd.Flags().Visit(func(f *pflag.Flag) {
@@ -113,18 +113,6 @@ func runApp(cmd *cobra.Command, args []string) {
 		case "gen-key":
 			util.PrintEncryptionKeyInstructions()
 			os.Exit(0)
-		case "key-path":
-			if encryptionKeyPath != "" {
-				if _, err := os.ReadFile(encryptionKeyPath); err != nil {
-					fatalf("reading encryption key from %s: %v", encryptionKeyPath, err)
-				}
-				cfg.EncryptionKeyPath = &encryptionKeyPath
-				if err := cfg.UpdateConfig(); err != nil {
-					fatalf("saving path to config file: %v", err)
-				}
-				fmt.Println("Encryption key file path saved successfully")
-			}
-			os.Exit(0)
 		case "jump":
 			if jumpInto != "" {
 				if err := validateDirectNavigateFormat(jumpInto); err != nil {
@@ -136,27 +124,47 @@ func runApp(cmd *cobra.Command, args []string) {
 			} else {
 				fatalf("jump value cannot be empty")
 			}
-		case "vim-mode":
-			cfg.UI.VimMode = vimMode
+		case "reset-master-password":
+			runResetMasterPassword(cfg)
+			os.Exit(0)
+		case "connect":
+			name, dsn := parseConnectFlag(connectDSN)
+			conn, err := database.BuildConfigFromDSN(name, dsn)
+			if err != nil {
+				fatalf("invalid DSN: %v", err)
+			}
+			if existing, _ := cfg.GetConnectionByName(conn.Name); existing != nil {
+				if existing.GetSafeDSN() != conn.GetSafeDSN() {
+					fatalf("connection %q already exists with a different DSN; use name=dsn to connect under a different name", conn.Name)
+				}
+			}
+			cfg.PendingConnect = conn.Name + "=" + dsn
+			cfg.ShowConnectionPage = false
 		}
 	})
 
-	if err := cfg.LoadEncryptionKey(); err != nil {
-		fatalf("loading encryption key: %v", err)
-	}
-
 	logLevel := zerolog.InfoLevel
-	if debug {
+	if l, err := zerolog.ParseLevel(cfg.Log.Level); err == nil {
+		logLevel = l
+	}
+	// --debug upgrades verbosity but won't downgrade from trace
+	if debug && zerolog.DebugLevel < logLevel {
 		logLevel = zerolog.DebugLevel
 	}
 
-	logFile := logging(cfg.Log.Path, logLevel)
+	logFile := logging(cfg.Log.Path, logLevel, cfg.Log.PrettyPrint)
 	defer func() {
 		err := logFile.Close()
 		if err != nil {
 			fmt.Printf("\nError closing log file %s, error: %s", cfg.Log.Path, err)
 		}
 	}()
+	// Master-mode loading is deferred so the user is prompted via an in-app modal.
+	if cfg.Security.Method != config.SecurityMethodMaster {
+		if err := cfg.LoadEncryptionKey(); err != nil {
+			fatalf("loading encryption key: %v", err)
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error().
@@ -221,7 +229,7 @@ func listAvailableConnections(cfg *config.Config) {
 	fmt.Println("\n* Current connection")
 }
 
-func logging(path string, logLevel zerolog.Level) *os.File {
+func logging(path string, logLevel zerolog.Level, prettyPrint bool) *os.File {
 	logFile, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -235,7 +243,11 @@ func logging(path string, logLevel zerolog.Level) *os.File {
 	}
 
 	zerolog.SetGlobalLevel(logLevel)
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: logFile}).With().Caller().Logger()
+	if prettyPrint {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: logFile}).With().Caller().Logger()
+	} else {
+		log.Logger = zerolog.New(logFile).With().Timestamp().Caller().Logger()
+	}
 
 	return logFile
 }
@@ -245,10 +257,64 @@ func fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
+func runResetMasterPassword(cfg *config.Config) {
+	if !cfg.IsMasterConfigured() {
+		fmt.Println("Master password is not configured — nothing to reset.")
+		return
+	}
+
+	masterCount := 0
+	for _, conn := range cfg.Connections {
+		if util.ParseMethodTag(conn.Password) == config.SecurityMethodMaster {
+			masterCount++
+		}
+	}
+
+	fmt.Printf("Reset master password? This clears the wrapped key.\n")
+	fmt.Printf("%d master-encrypted connection password(s) will be erased; host/user/db are kept. Passwords stored under other methods (keyring, env) are unaffected.\n", masterCount)
+	fmt.Print("Type 'y' or 'yes' to confirm: ")
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	switch strings.ToLower(strings.TrimSpace(answer)) {
+	case "y", "yes":
+	default:
+		fmt.Println("Aborted.")
+		return
+	}
+
+	if err := cfg.ApplyMasterReset(); err != nil {
+		fatalf("resetting master password: %v", err)
+	}
+	fmt.Println("Master password reset. Run vi-sql to set a new one.")
+}
+
+func printPaths() {
+	configDir, err := util.GetConfigDir()
+	if err != nil {
+		fatalf("resolving config directory: %v", err)
+	}
+	fmt.Printf("Config:      %s/config.yaml\n", configDir)
+	fmt.Printf("Keybindings: %s/keybindings-vim.yaml\n", configDir)
+	fmt.Printf("             %s/keybindings-normal.yaml\n", configDir)
+	fmt.Printf("Styles:      %s/styles/\n", configDir)
+	fmt.Printf("Icons:       %s/icons.yaml\n", configDir)
+	fmt.Printf("Log:         %s\n", config.LogPath)
+}
+
+// parseConnectFlag splits a --connect value (name=dsn) into a DSN and optional name.
+func parseConnectFlag(s string) (name, dsn string) {
+	eqIdx := strings.IndexByte(s, '=')
+	schemeIdx := strings.Index(strings.ToLower(s), "://")
+	if eqIdx > 0 && (schemeIdx < 0 || eqIdx < schemeIdx) {
+		return s[:eqIdx], s[eqIdx+1:]
+	}
+	return "", s
+}
+
 func validateDirectNavigateFormat(format string) error {
-	parts := strings.Split(format, "/")
+	parts := strings.Split(format, ".")
 	if len(parts) != 2 {
-		return fmt.Errorf("format should be schema-name/table-name")
+		return fmt.Errorf("format should be schema-name.table-name")
 	}
 	if len(parts[0]) == 0 || len(parts[1]) == 0 {
 		return fmt.Errorf("both schema-name and table-name are required")

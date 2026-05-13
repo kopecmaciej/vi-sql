@@ -19,15 +19,14 @@ type (
 	Style string
 
 	Styles struct {
-		Global     GlobalStyles    `yaml:"global"`
-		Icons      IconStyle       `yaml:"-"` // loaded from icons.yaml, not from theme YAML
-		Connection ConnectionStyle `yaml:"connection"`
-		Data       DataStyle       `yaml:"data"`
-		TabBar     TabBarStyle     `yaml:"tabBar"`
-		InputBar   InputBarStyle   `yaml:"inputBar"`
-		Help       HelpStyle       `yaml:"help"`
-		Others     OthersStyle     `yaml:"others"`
-		SQLEditor  SQLEditorStyle  `yaml:"sqlEditor"`
+		Global       GlobalStyles      `yaml:"global"`
+		Icons        IconStyle         `yaml:"-"` // loaded from icons.yaml, not from theme YAML
+		Connection   ConnectionStyle   `yaml:"connection"`
+		Data         DataStyle         `yaml:"data"`
+		TabBar       TabBarStyle       `yaml:"tabBar"`
+		Autocomplete AutocompleteStyle `yaml:"autocomplete"`
+		Others       OthersStyle       `yaml:"others"`
+		SQLEditor    SQLEditorStyle    `yaml:"sqlEditor"`
 	}
 
 	GlobalStyles struct {
@@ -41,6 +40,9 @@ type (
 		TitleColor                  Style `yaml:"titleColor"`
 		GraphicsColor               Style `yaml:"graphicsColor"`
 		DimColor                    Style `yaml:"dimColor"`
+		SuccessColor                Style `yaml:"successColor"`
+		ErrorColor                  Style `yaml:"errorColor"`
+		WarningColor                Style `yaml:"warningColor"`
 	}
 
 	ConnectionStyle struct {
@@ -62,10 +64,6 @@ type (
 		ActiveTextColor Style `yaml:"activeTextColor"`
 	}
 
-	InputBarStyle struct {
-		Autocomplete AutocompleteStyle `yaml:"autocomplete"`
-	}
-
 	AutocompleteStyle struct {
 		BackgroundColor       Style `yaml:"backgroundColor"`
 		TextColor             Style `yaml:"textColor"`
@@ -73,11 +71,6 @@ type (
 		ActiveTextColor       Style `yaml:"activeTextColor"`
 		SecondaryTextColor    Style `yaml:"secondaryTextColor"`
 		BorderColor           Style `yaml:"borderColor"`
-	}
-
-	HelpStyle struct {
-		ScrollBarTrackColor     Style `yaml:"scrollBarTrackColor"`
-		SelectedBackgroundColor Style `yaml:"selectedBackgroundColor"`
 	}
 
 	OthersStyle struct {
@@ -111,6 +104,9 @@ func (s *Styles) loadDefaults() {
 		TitleColor:                  "#2563EB",
 		GraphicsColor:               "#2563EB",
 		DimColor:                    "#64748B",
+		SuccessColor:                "#4ADE80",
+		ErrorColor:                  "#F87171",
+		WarningColor:                "#FACC15",
 	}
 
 	s.Connection = ConnectionStyle{
@@ -132,20 +128,13 @@ func (s *Styles) loadDefaults() {
 		ActiveTextColor: "#FDE68A",
 	}
 
-	s.InputBar = InputBarStyle{
-		Autocomplete: AutocompleteStyle{
-			BackgroundColor:       "#1E293B",
-			TextColor:             "#E2E8F0",
-			ActiveBackgroundColor: "#2563EB",
-			ActiveTextColor:       "#0F172A",
-			SecondaryTextColor:    "#FDE68A",
-			BorderColor:           "#60A5FA",
-		},
-	}
-
-	s.Help = HelpStyle{
-		ScrollBarTrackColor:     "#4A5568",
-		SelectedBackgroundColor: "#FDE68A",
+	s.Autocomplete = AutocompleteStyle{
+		BackgroundColor:       "#1E293B",
+		TextColor:             "#E2E8F0",
+		ActiveBackgroundColor: "#60A5FA",
+		ActiveTextColor:       "#0F172A",
+		SecondaryTextColor:    "#FDE68A",
+		BorderColor:           "#60A5FA",
 	}
 
 	s.Others = OthersStyle{

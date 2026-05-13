@@ -59,20 +59,20 @@ func (s *ServerInfoModal) setStyle() {
 }
 
 func (s *ServerInfoModal) setKeybindings() {
-	s.content.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		keys := s.App.GetKeys()
+	keys := s.App.GetKeys()
+	s.content.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case keys.Contains(keys.Common.Close, event.Name()):
-			s.App.Pages.RemovePage(ServerInfoModalId)
+		case keys.Match(keys.Common.Close, event):
+			s.App.Pages.RemoveModalPage(ServerInfoModalId)
 			return nil
-		case keys.Contains(keys.Common.Refresh, event.Name()):
+		case keys.Match(keys.Common.Refresh, event):
 			if s.refreshFn != nil {
 				s.refreshFn()
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 }
 
 func (s *ServerInfoModal) handleEvents() {
@@ -100,8 +100,7 @@ func (s *ServerInfoModal) Open(info *database.ServerInfo, refreshFn func()) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	s.App.Pages.AddPage(ServerInfoModalId, wrapper, true, true)
-	s.App.SetFocusOnly(s)
+	s.App.Pages.ShowModal(ServerInfoModalId, wrapper, s, true, true)
 }
 
 func (s *ServerInfoModal) buildContent(info *database.ServerInfo) string {
@@ -121,6 +120,11 @@ func (s *ServerInfoModal) buildContent(info *database.ServerInfo) string {
 	// System Metrics
 	fmt.Fprintf(&sb, "[%s]─ SYSTEM METRICS %s[-]\n", label, strings.Repeat("─", sectionLine))
 	fmt.Fprintf(&sb, "  [%s]Version[-]      [%s]%s[-]\n", dim, text, info.Version)
+	if info.TLS != "" {
+		fmt.Fprintf(&sb, "  [%s]TLS[-]          [%s]%s[-]\n", dim, accent, info.TLS)
+	} else {
+		fmt.Fprintf(&sb, "  [%s]TLS[-]          [%s]none[-]\n", dim, dim)
+	}
 	if info.Uptime != "" {
 		fmt.Fprintf(&sb, "  [%s]Uptime[-]       [%s]%s[-]\n", dim, text, info.Uptime)
 	}

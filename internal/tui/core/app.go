@@ -1,29 +1,33 @@
 package core
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
 type App struct {
 	*tview.Application
 
-	Pages              *Pages
-	driver             database.Driver
-	formatter          database.ValueFormatter
-	manager            *manager.ElementManager
-	styles             *config.Styles
-	config             *config.Config
-	keys               *config.KeyBindings
-	focusSnapshot      tview.Primitive
-	mcpEnabled         bool
-	openStyleModal     func()
-	openConnectionPage func()
-	openOptionsPage    func()
-	toggleMCP          func()
+	Pages                *Pages
+	driver               database.Driver
+	formatter            database.ValueFormatter
+	manager              *manager.ElementManager
+	styles               *config.Styles
+	config               *config.Config
+	keys                 *config.KeyBindings
+	focusStack           []tview.Primitive
+	lastFocusedPrimitive tview.Primitive
+	mcpEnabled           bool
+	cursorStyle          tcell.CursorStyle
+	openStyleModal       func()
+	openConnectionPage   func()
+	openOptionsPage      func()
+	toggleMCP            func()
 }
 
 func (a *App) SetOpenStyleModalFunc(fn func()) { a.openStyleModal = fn }
@@ -68,7 +72,7 @@ func NewApp(appConfig *config.Config) *App {
 		log.Fatal().Err(err).Msg("Failed to load styles")
 	}
 	styles.LoadMainStyles()
-	keyBindings, err := config.LoadKeybindings()
+	keyBindings, err := config.LoadKeybindings(appConfig.UI.VimMode)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to load keybindings")
 	}
@@ -81,36 +85,61 @@ func NewApp(appConfig *config.Config) *App {
 		keys:        keyBindings,
 	}
 
+	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		screen.SetCursorStyle(app.cursorStyle)
+		return false
+	})
+
+	keyBindings.OnPendingChanged = func(s string) {
+		app.manager.Broadcast(manager.NewSequencePendingChangedMsg(s))
+	}
+
 	app.Pages = NewPages(app.manager, app)
 	app.Pages.SetStyle(styles)
 
 	return app
 }
 
-func (a *App) SetStyle(styleName string) error {
-	a.config.Styles.CurrentStyle = styleName
-	err := a.config.UpdateConfig()
+func (a *App) ReloadKeybindings() error {
+	newKeys, err := config.LoadKeybindings(a.config.UI.VimMode)
 	if err != nil {
 		return err
 	}
-
-	a.styles, err = config.LoadStyles(a.config.Styles.CurrentStyle, a.config.Styles.NerdFont)
-	if err != nil {
-		return err
-	}
-	a.styles.LoadMainStyles()
-	a.Pages.SetStyle(a.styles)
-	a.manager.Broadcast(manager.NewStyleChangedMsg())
-
+	a.keys.ReloadKeybidings(newKeys)
+	a.keys.Reset()
 	return nil
 }
 
+func (a *App) SetStyle(styleName string) error {
+	a.config.Styles.CurrentStyle = styleName
+	if err := a.config.UpdateConfig(); err != nil {
+		return err
+	}
+	return a.ApplyStyles(styleName, a.config.Styles.NerdFont)
+}
+
+// ApplyStyles loads and applies a style without persisting the config.
+func (a *App) ApplyStyles(styleName string, useNerdFont bool) error {
+	styles, err := config.LoadStyles(styleName, useNerdFont)
+	if err != nil {
+		return err
+	}
+	a.styles = styles
+	a.styles.LoadMainStyles()
+	a.Pages.SetStyle(a.styles)
+	a.manager.Broadcast(manager.NewStyleChangedMsg())
+	return nil
+}
+
+func (a *App) SetCursorStyle(style tcell.CursorStyle) {
+	a.cursorStyle = style
+}
+
 func (a *App) SnapshotFocus() {
-	a.focusSnapshot = a.GetFocus()
+	a.focusStack = append(a.focusStack, a.lastFocusedPrimitive)
 }
 
 func (a *App) SetFocus(p tview.Primitive) {
-	a.focusSnapshot = a.GetFocus()
 	a.Application.SetFocus(p)
 	a.FocusChanged(p)
 }
@@ -121,14 +150,22 @@ func (a *App) SetFocusOnly(p tview.Primitive) {
 }
 
 func (a *App) RestoreFocus() {
-	if a.focusSnapshot != nil {
-		a.SetFocus(a.focusSnapshot)
-		a.focusSnapshot = nil
+	if len(a.focusStack) == 0 {
+		return
 	}
+	prev := a.focusStack[len(a.focusStack)-1]
+	a.focusStack = a.focusStack[:len(a.focusStack)-1]
+	if prev == nil {
+		return
+	}
+	a.Application.SetFocus(prev)
+	a.FocusChanged(prev)
 }
 
 func (a *App) FocusChanged(p tview.Primitive) {
+	a.keys.Reset()
 	a.manager.Broadcast(manager.NewFocusChangedMsg(p.GetIdentifier()))
+	a.lastFocusedPrimitive = p
 }
 
 func (a *App) GetDriver() database.Driver {
@@ -145,6 +182,19 @@ func (a *App) GetFormatter() database.ValueFormatter {
 
 func (a *App) SetFormatter(formatter database.ValueFormatter) {
 	a.formatter = formatter
+}
+
+// GetQuoter returns the identifier quoter for the currently connected driver.
+// Falls back to ANSI quoting when no connection is active.
+func (a *App) GetQuoter() util.Quoter {
+	if a.config != nil {
+		if conn := a.config.GetCurrentConnection(); conn != nil {
+			if def, ok := database.GetConnector(conn.GetDriver()); ok {
+				return def.Quoter
+			}
+		}
+	}
+	return util.ANSIQuoter
 }
 
 func (a *App) GetManager() *manager.ElementManager {

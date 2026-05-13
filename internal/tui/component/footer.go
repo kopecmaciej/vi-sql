@@ -3,6 +3,7 @@ package component
 import (
 	"strings"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/rs/zerolog/log"
 
@@ -25,12 +26,13 @@ type (
 		*core.BaseElement
 		*core.Table
 
-		keys           []config.Key
-		currentFocus   tview.Identifier
-		expanded       bool
-		centered       bool
-		pinnedKeys     []config.Key
-		onHeightChange func()
+		keys            []config.Key
+		currentFocus    tview.Identifier
+		expanded        bool
+		centered        bool
+		pinnedKeys      []config.Key
+		sequencePending string
+		onHeightChange  func()
 	}
 )
 
@@ -74,46 +76,80 @@ func (f *Footer) SetOnHeightChange(fn func()) {
 	f.onHeightChange = fn
 }
 
-// Toggle flips the expanded state and returns the new required height.
 func (f *Footer) Toggle() int {
+	const collapsedHeight = 2 // 1 row + bottom padding
+	_, _, width, _ := f.Table.GetInnerRect()
+	pairs := f.collectPairs()
+	_, numRows := f.expandedLayout(width, pairs)
+	if numRows <= 1 {
+		return collapsedHeight
+	}
 	f.expanded = !f.expanded
 	if f.expanded {
-		return f.ExpandedHeight()
+		return numRows + 1
 	}
-	return 2 // 1 row + padding
+	return collapsedHeight
 }
 
 func (f *Footer) collectPairs() []info {
 	keys, _ := f.UpdateKeys()
 	pairs := make([]info, 0, len(keys))
 	for _, key := range keys {
-		pairs = append(pairs, info{formatKeyString(key), key.Description})
+		if label := formatKeyString(key); label != "" {
+			pairs = append(pairs, info{label, key.Description})
+		}
 	}
 	return pairs
 }
 
+// expandedLayout lays pairs column-major and finds the maximum number of columns that fit.
+// tview adds +1 char between every table column, so each pair column costs (maxKeyW+1)+(maxValW+1).
 func (f *Footer) expandedLayout(width int, pairs []info) (numGroups, numRows int) {
 	if width <= 0 {
 		width = 80
 	}
-	if len(pairs) == 0 {
+	n := len(pairs)
+	if n == 0 {
 		return 1, 0
 	}
-	// Target 2 rows; each group takes ~30 chars (key + value + separator).
-	maxGroups := width / 30
-	if maxGroups < 1 {
-		maxGroups = 1
+
+	keyW := make([]int, n)
+	valW := make([]int, n)
+	for i, p := range pairs {
+		keyW[i] = tview.TaggedStringWidth(p.label)
+		valW[i] = tview.TaggedStringWidth(p.value) + 1 // +1 for trailing space in valueCell
 	}
-	desiredGroups := (len(pairs) + 1) / 2 // ceil(n/2) → 2 rows
-	numGroups = desiredGroups
-	if numGroups > maxGroups {
-		numGroups = maxGroups
+
+	for G := n; G >= 1; G-- {
+		R := (n + G - 1) / G // rows = ceil(n/G)
+		used := 0
+		for g := 0; g < G; g++ {
+			start := g * R
+			if start >= n {
+				break
+			}
+			end := start + R
+			if end > n {
+				end = n
+			}
+			maxKey, maxVal := 0, 0
+			for i := start; i < end; i++ {
+				if keyW[i] > maxKey {
+					maxKey = keyW[i]
+				}
+				if valW[i] > maxVal {
+					maxVal = valW[i]
+				}
+			}
+			used += (maxKey + 1) + (maxVal + 1)
+		}
+		if used <= width {
+			return G, R
+		}
 	}
-	numRows = (len(pairs) + numGroups - 1) / numGroups
-	return numGroups, numRows
+	return 1, n
 }
 
-// ExpandedHeight returns the rows the footer needs when expanded.
 func (f *Footer) ExpandedHeight() int {
 	_, _, width, _ := f.Table.GetInnerRect()
 	pairs := f.collectPairs()
@@ -129,17 +165,13 @@ func (f *Footer) renderExpanded() {
 	}
 
 	_, _, width, _ := f.Table.GetInnerRect()
-	numGroups, numRows := f.expandedLayout(width, pairs)
+	_, numRows := f.expandedLayout(width, pairs)
 
 	for i, p := range pairs {
 		row := i % numRows
-		group := i / numRows
-		col := group * 2
+		col := (i / numRows) * 2
 		f.Table.SetCell(row, col, f.keyCell(p.label))
 		f.Table.SetCell(row, col+1, f.valueCell(p.value))
-		if group < numGroups-1 {
-			f.Table.SetCell(row, col+2, tview.NewTableCell(""))
-		}
 	}
 }
 
@@ -162,15 +194,22 @@ func (f *Footer) Render() {
 		f.Table.SetCell(0, 0, tview.NewTableCell("").SetExpansion(1))
 		col := 1
 		for _, key := range k {
-			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
-			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
-			col += 2
+			if label := formatKeyString(key); label != "" {
+				f.Table.SetCell(0, col, f.keyCell(label))
+				f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+				col += 2
+			}
 		}
 		f.Table.SetCell(0, col, tview.NewTableCell("").SetExpansion(1))
 		return
 	}
 
 	col := 0
+	if f.App.GetConfig().UI.VimMode {
+		f.Table.SetCell(0, col, f.sequencePendingCell(f.sequencePending))
+		col++
+	}
+
 	for _, key := range f.pinnedKeys {
 		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
 		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
@@ -178,38 +217,65 @@ func (f *Footer) Render() {
 	}
 
 	for _, key := range k {
-		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
-		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
-		col += 2
+		if label := formatKeyString(key); label != "" {
+			f.Table.SetCell(0, col, f.keyCell(label))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
 	}
+
 }
 
 func (f *Footer) handleEvents() {
-	go f.HandleEvents(FooterId, func(event manager.EventMsg) {
+	go f.HandleEvents(f.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.FocusChanged:
 			f.currentFocus = tview.Identifier(event.Message.Data.(tview.Identifier))
-			if f.expanded && f.onHeightChange != nil {
-				f.onHeightChange()
-			}
-			f.Render()
+			go f.App.QueueUpdateDraw(func() {
+				if f.expanded && f.onHeightChange != nil {
+					f.onHeightChange()
+				}
+				f.Render()
+			})
 		case manager.StyleChanged:
-			f.setStyle()
-			f.Render()
+			go f.App.QueueUpdateDraw(func() {
+				f.setStyle()
+				f.Render()
+			})
+		case manager.SequencePendingChanged:
+			f.sequencePending = event.Message.Data.(string)
+			go f.App.QueueUpdateDraw(f.Render)
+		case manager.ConfigChanged:
+			go f.App.QueueUpdateDraw(f.Render)
 		}
 	})
 }
 
 func (f *Footer) keyCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text)
-	cell.SetTextColor(f.App.GetStyles().Global.SecondaryTextColor.Color())
-	return cell
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text).SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.SecondaryTextColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
 }
 
 func (f *Footer) valueCell(text string) *tview.TableCell {
-	cell := tview.NewTableCell(text + " ")
-	cell.SetTextColor(f.App.GetStyles().Global.TitleColor.Color())
-	return cell
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text + " ").SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.TitleColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
+}
+
+// sequencePendingCell renders the pending sequence prefix (e.g. "yr")
+func (f *Footer) sequencePendingCell(prefix string) *tview.TableCell {
+	text := prefix
+	if prefix == "" {
+		text = " "
+	}
+	styles := f.App.GetStyles()
+	return tview.NewTableCell(text).SetStyle(tcell.StyleDefault.
+		Foreground(styles.Global.TitleColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()).
+		Attributes(tcell.AttrBold))
 }
 
 // SetKeys sets static keybinding hints, bypassing the focus-based lookup.
@@ -248,21 +314,19 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	focus := string(f.currentFocus)
 
 	// QueryMode results table: show only read-only keys from DataKeys.
-	if strings.HasSuffix(focus, "-results") {
+	if strings.HasSuffix(focus, ResultsSuffix) {
 		keys := f.App.GetKeys().DataKeysForQueryMode()
 		f.keys = keys
 		return keys, nil
 	}
 
 	switch {
-	case strings.HasSuffix(focus, "-filter") || strings.HasSuffix(focus, "-sort"):
+	case strings.HasSuffix(focus, FilterBarSuffix) || strings.HasSuffix(focus, OrderBarSuffix):
 		focus = "InputBar"
-	case focus == "FilterBar" || focus == "SortBar":
-		focus = "InputBar"
-	case strings.HasPrefix(focus, "QueryTab-"):
-		focus = "Data"
-	case strings.HasPrefix(focus, SQLQueryEditorId+"-"):
+	case strings.HasSuffix(focus, EditorSuffix):
 		focus = SQLQueryEditorId
+	case strings.HasPrefix(focus, "QueryTab-"):
+		focus = DataId
 	case strings.HasPrefix(focus, PeekerId+"-"):
 		focus = string(PeekerId)
 	case strings.HasPrefix(focus, ExplainViewerId+"-"):
@@ -279,9 +343,16 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		return nil, err
 	}
 
+	k := f.App.GetKeys()
+	editorEnabled := f.App.GetConfig().Editor.Enabled
 	var keys []config.Key
 	for _, ok := range orderedKeys {
-		keys = append(keys, ok.Keys...)
+		for _, key := range ok.Keys {
+			if !editorEnabled && key.Description == k.SQLQueryEditor.TermEditor.Description {
+				continue
+			}
+			keys = append(keys, key)
+		}
 	}
 
 	if len(keys) > 0 {
@@ -297,5 +368,6 @@ func formatKeyString(key config.Key) string {
 	var parts []string
 	parts = append(parts, key.Keys...)
 	parts = append(parts, key.Runes...)
+	parts = append(parts, key.Sequences...)
 	return strings.Join(parts, ", ")
 }

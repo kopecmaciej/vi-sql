@@ -15,21 +15,66 @@ import (
 
 const (
 	HelpPageId = "Help"
+
+	VimMotionsSectionName = "Vim Motions"
 )
 
-// sectionOrder defines the preferred display order for key sections.
-// Sections absent from this list are appended at the end.
+// sectionForFocusID maps a focused component's identifier to its help section name.
+func sectionForFocusID(id string) string {
+	switch {
+	case strings.HasSuffix(id, component.EditorSuffix):
+		return VimMotionsSectionName
+	case strings.HasPrefix(id, "QueryTab-"):
+		return "Data"
+	case strings.HasPrefix(id, string(component.PeekerId)):
+		return "Peeker"
+	case id == component.IndexId:
+		return "IndexAddForm"
+	case id == component.SQLQueryEditorId:
+		return VimMotionsSectionName
+	}
+	return id
+}
+
+// sectionOrder defines the display order; unlisted sections are appended last.
 var sectionOrder = []string{
 	"Navigation", "Common", "Global", "Help", "Connection",
 	"Main", "Schema", "Data",
-	"Peeker", "SQLQueryEditor", "IndexAddForm", "Structure", "History",
+	"Peeker", "SQLQueryEditor", "IndexAddForm", "Structure", "History", "ExplainViewer", VimMotionsSectionName,
+}
+
+// vimEditorKeys is a static, non-editable section documenting the built-in vim
+// motions available in the SQL query editor. It is injected at render time so
+// it appears in the help page without polluting KeyBindings or the YAML config.
+var vimEditorKeys = config.OrderedKeys{
+	Element: VimMotionsSectionName,
+	Keys: []config.Key{
+		{Keys: []string{"Esc"}, Description: "enter normal mode"},
+		{Keys: []string{"i / a / I / A / o / O"}, Description: "enter insert mode"},
+		{Keys: []string{"v / V"}, Description: "enter visual / visual-line select"},
+		{Keys: []string{"h / j / k / l"}, Description: "move ← ↓ ↑ →"},
+		{Keys: []string{"w / W / e / E / b / B"}, Description: "word / WORD forward, end, backward"},
+		{Keys: []string{"0 / ^ / $"}, Description: "line start / first non-blank / end"},
+		{Keys: []string{"{ / }"}, Description: "previous / next blank line"},
+		{Keys: []string{"gg / G"}, Description: "first / last line"},
+		{Keys: []string{"f / F / t / T"}, Description: "find / till char on line"},
+		{Keys: []string{"3w, d2e, 2dd"}, Description: "count repeats a motion or operator"},
+		{Keys: []string{"d / c / y + motion"}, Description: "delete / change / yank"},
+		{Keys: []string{"dd / cc / yy"}, Description: "delete / change / yank line"},
+		{Keys: []string{"D / C / Y"}, Description: "delete / change / yank to line end"},
+		{Keys: []string{"S"}, Description: "change whole line"},
+		{Keys: []string{"x / s"}, Description: "delete char / delete and enter insert"},
+		{Keys: []string{"r"}, Description: "replace char under cursor"},
+		{Keys: []string{"p / P"}, Description: "paste after / before cursor"},
+		{Keys: []string{"J"}, Description: "join lines"},
+		{Keys: []string{"u"}, Description: "undo"},
+	},
 }
 
 type Help struct {
 	*core.BaseElement
 	*core.Flex
 
-	style     *config.HelpStyle
 	leftFlex  *core.Flex
 	rightFlex *core.Flex
 
@@ -50,6 +95,9 @@ type Help struct {
 	editMode         bool
 	editSectionIdx   int
 	editKeyIdx       int
+	// dataRowMap maps visual row index → section.Keys index for the Data section.
+	// -1 marks the separator row. Nil when Data is not the active section.
+	dataRowMap []int
 }
 
 func NewHelp() *Help {
@@ -67,6 +115,7 @@ func NewHelp() *Help {
 		hints:          widget.NewHints(),
 	}
 
+	h.captureDisplay.SetRawInput(true)
 	h.SetIdentifier(HelpPageId)
 	h.SetAfterInitFunc(h.init)
 
@@ -119,7 +168,7 @@ func (h *Help) setLayout() {
 
 	captureHint := tview.NewTextView()
 	captureHint.SetDynamicColors(true)
-	captureHint.SetText(" [::d]any key=add  Enter=save  Ctrl+Q=cancel  Backspace=clear[-:-:-]")
+	captureHint.SetText(" [::d]any key=add  2+ runes=sequence  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
 
 	h.captureDisplay.SetDynamicColors(true)
 	h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")
@@ -128,7 +177,6 @@ func (h *Help) setLayout() {
 	h.capturePanel.SetDirection(tview.FlexRow)
 	h.capturePanel.AddItem(h.captureDisplay, 1, 0, true)
 	h.capturePanel.AddItem(captureHint, 1, 0, false)
-	// height 4 = 2 border rows + 1 display + 1 hint
 
 	contentFlex := tview.NewFlex()
 	contentFlex.AddItem(h.leftFlex, 28, 0, true)
@@ -137,13 +185,14 @@ func (h *Help) setLayout() {
 	h.leftFlex.AddItem(h.sectionList, 0, 1, true)
 	h.rightFlex.AddItem(h.keysTable, 0, 1, false)
 
+	h.footer.SetCentered(true)
+
 	h.Flex.AddItem(h.hints, 1, 0, false)
 	h.Flex.AddItem(contentFlex, 0, 1, true)
 	h.Flex.AddItem(h.footer, 2, 0, false)
 }
 
 func (h *Help) setStyle() {
-	h.style = &h.App.GetStyles().Help
 	s := h.App.GetStyles()
 	h.SetStyle(s)
 	h.leftFlex.SetStyle(s)
@@ -156,7 +205,7 @@ func (h *Help) setStyle() {
 	h.hints.SetStyle(s)
 
 	selectedFg := s.Global.BackgroundColor.Color()
-	selectedBg := h.style.SelectedBackgroundColor.Color()
+	selectedBg := s.Global.FocusColor.Color()
 
 	h.sectionList.SetSelectedStyle(tcell.StyleDefault.
 		Foreground(selectedFg).
@@ -168,7 +217,7 @@ func (h *Help) setStyle() {
 
 	h.keysTable.SetScrollBarStyle(
 		tcell.StyleDefault.Foreground(s.Global.SecondaryTextColor.Color()),
-		tcell.StyleDefault.Foreground(h.style.ScrollBarTrackColor.Color()),
+		tcell.StyleDefault.Foreground(s.Global.DimColor.Color()),
 	)
 }
 
@@ -179,56 +228,78 @@ func (h *Help) setKeybindings() {
 		h.renderKeysForSection(index)
 	})
 
-	h.sectionList.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	h.sectionList.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
-			h.App.Pages.RemovePage(HelpPageId)
+		case k.Match(k.Common.Close, event):
+			h.App.Pages.RemoveModalPage(HelpPageId)
 			return nil
-		case k.Contains(k.Navigation.FocusRight, event.Name()):
+		case k.Match(k.Navigation.FocusRight, event), k.Match(k.Common.Select, event):
 			h.App.SetFocusOnly(h.keysTable)
 			return nil
-		case k.Contains(k.Common.Filter, event.Name()):
+		case k.Match(k.Common.Filter, event):
 			h.enterSearchMode()
 			return nil
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			curr := h.sectionList.GetCurrentItem()
-			h.sectionList.SetCurrentItem(curr + 1)
+			vim := h.vimMotionsIndex()
+			next := curr + 1
+			if vim > 0 && next == vim-1 {
+				next = vim // skip separator
+			}
+			if next < h.sectionList.GetItemCount() {
+				h.sectionList.SetCurrentItem(next)
+			}
 			return nil
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
-			if curr := h.sectionList.GetCurrentItem(); curr > 0 {
-				h.sectionList.SetCurrentItem(curr - 1)
+		case k.Match(k.Navigation.MoveUp, event):
+			curr := h.sectionList.GetCurrentItem()
+			vim := h.vimMotionsIndex()
+			prev := curr - 1
+			if vim > 0 && curr == vim {
+				prev = vim - 2 // skip separator
+			}
+			if prev >= 0 {
+				h.sectionList.SetCurrentItem(prev)
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 
-	h.keysTable.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	h.keysTable.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
-		case k.Contains(k.Common.Close, event.Name()):
-			h.App.Pages.RemovePage(HelpPageId)
+		case k.Match(k.Common.Close, event):
+			h.App.Pages.RemoveModalPage(HelpPageId)
 			return nil
-		case k.Contains(k.Navigation.FocusLeft, event.Name()):
+		case k.Match(k.Navigation.FocusLeft, event):
 			h.App.SetFocusOnly(h.sectionList)
 			return nil
-		case k.Contains(k.Common.Edit, event.Name()):
+		case k.Match(k.Common.Edit, event):
 			row, _ := h.keysTable.GetSelection()
 			h.enterEditMode(row)
 			return nil
-		case k.Contains(k.Navigation.MoveDown, event.Name()):
+		case k.Match(k.Navigation.MoveDown, event):
 			row, _ := h.keysTable.GetSelection()
-			if row < h.keysTable.GetRowCount()-1 {
-				h.keysTable.Select(row+1, 0)
+			next := row + 1
+			if next < len(h.dataRowMap) && h.dataRowMap[next] < 0 {
+				next++ // skip separator
+			}
+			if next < h.keysTable.GetRowCount() {
+				h.keysTable.Select(next, 0)
 			}
 			return nil
-		case k.Contains(k.Navigation.MoveUp, event.Name()):
-			if row, _ := h.keysTable.GetSelection(); row > 0 {
-				h.keysTable.Select(row-1, 0)
+		case k.Match(k.Navigation.MoveUp, event):
+			row, _ := h.keysTable.GetSelection()
+			prev := row - 1
+			if prev >= 0 && prev < len(h.dataRowMap) && h.dataRowMap[prev] < 0 {
+				prev-- // skip separator
+			}
+			if prev >= 0 {
+				h.keysTable.Select(prev, 0)
 			}
 			return nil
 		}
 		return event
-	})
+	}))
 
 	h.searchInput.SetDoneFunc(func(key tcell.Key) {
 		h.exitSearchMode(key == tcell.KeyEsc)
@@ -246,7 +317,13 @@ func (h *Help) setKeybindings() {
 		case k == tcell.KeyEnter && event.Modifiers() == tcell.ModNone:
 			h.saveEdit()
 		case (k == tcell.KeyBackspace || k == tcell.KeyBackspace2 || k == tcell.KeyDelete) && event.Modifiers() == tcell.ModNone:
-			h.capturedKey = config.Key{}
+			if len(h.capturedKey.Runes) > 0 {
+				h.capturedKey.Runes = h.capturedKey.Runes[:len(h.capturedKey.Runes)-1]
+			} else if len(h.capturedKey.Keys) > 0 {
+				h.capturedKey.Keys = h.capturedKey.Keys[:len(h.capturedKey.Keys)-1]
+			} else {
+				h.capturedKey = config.Key{}
+			}
 			h.updateCaptureDisplay()
 		default:
 			captured := eventKeyToConfigKey(event)
@@ -278,25 +355,35 @@ func (h *Help) exitSearchMode(reset bool) {
 }
 
 func (h *Help) enterEditMode(row int) {
-	sectionIdx := h.sectionList.GetCurrentItem()
-	if sectionIdx >= len(h.filteredSections) {
+	listIdx := h.sectionList.GetCurrentItem()
+	vim := h.vimMotionsIndex()
+	if vim > 0 && listIdx >= vim-1 {
+		return // separator or vim motions — not editable
+	}
+	if listIdx >= len(h.filteredSections) || row < 0 {
 		return
 	}
-	section := h.filteredSections[sectionIdx]
-	if row < 0 || row >= len(section.Keys) {
+
+	section := h.filteredSections[listIdx]
+	keyIdx := row
+	if h.dataRowMap != nil && section.Element == "Data" {
+		if row >= len(h.dataRowMap) || h.dataRowMap[row] < 0 {
+			return // separator row
+		}
+		keyIdx = h.dataRowMap[row]
+	} else if row >= len(section.Keys) {
 		return
 	}
 
 	h.editMode = true
-	h.editSectionIdx = sectionIdx
-	h.editKeyIdx = row
+	h.editSectionIdx = listIdx
+	h.editKeyIdx = keyIdx
 	h.capturedKey = config.Key{}
 
-	desc := section.Keys[row].Description
+	desc := section.Keys[keyIdx].Description
 	h.capturePanel.SetTitle(fmt.Sprintf(" Editing: %s ", desc))
 	h.updateCaptureDisplay()
 
-	// Insert capturePanel above keysTable.
 	h.rightFlex.RemoveItem(h.keysTable)
 	h.rightFlex.AddItem(h.capturePanel, 4, 0, false)
 	h.rightFlex.AddItem(h.keysTable, 0, 1, false)
@@ -310,7 +397,7 @@ func (h *Help) exitEditMode() {
 }
 
 func (h *Help) saveEdit() {
-	if h.capturedKey.Keys == nil && h.capturedKey.Runes == nil {
+	if h.capturedKey.Keys == nil && h.capturedKey.Runes == nil && h.capturedKey.Sequences == nil {
 		h.exitEditMode()
 		return
 	}
@@ -324,10 +411,12 @@ func (h *Help) saveEdit() {
 		return
 	}
 
-	newKey := config.Key{
-		Keys:        h.capturedKey.Keys,
-		Runes:       h.capturedKey.Runes,
-		Description: section.Keys[h.editKeyIdx].Description,
+	newKey := config.Key{Description: section.Keys[h.editKeyIdx].Description}
+	if len(h.capturedKey.Runes) >= 2 {
+		newKey.Sequences = []string{strings.Join(h.capturedKey.Runes, "")}
+	} else {
+		newKey.Keys = h.capturedKey.Keys
+		newKey.Runes = h.capturedKey.Runes
 	}
 
 	kb := h.App.GetKeys()
@@ -340,18 +429,32 @@ func (h *Help) saveEdit() {
 		return
 	}
 
-	row := h.editKeyIdx
+	keyIdx := h.editKeyIdx
 	h.exitEditMode()
 
-	h.keysTable.SetCell(row, 0,
-		tview.NewTableCell(formatHelpKeyString(newKey)).SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color()))
-	h.keysTable.Select(row, 0)
+	visualRow := keyIdx
+	for vr, si := range h.dataRowMap {
+		if si == keyIdx {
+			visualRow = vr
+			break
+		}
+	}
+	s := h.App.GetStyles()
+	h.keysTable.SetCell(visualRow, 0,
+		tview.NewTableCell(formatHelpKeyString(newKey)).SetStyle(tcell.StyleDefault.
+			Foreground(s.Global.SecondaryTextColor.Color()).
+			Background(s.Global.BackgroundColor.Color())))
+	h.keysTable.Select(visualRow, 0)
 }
 
 func (h *Help) updateCaptureDisplay() {
 	var parts []string
 	parts = append(parts, h.capturedKey.Keys...)
-	parts = append(parts, h.capturedKey.Runes...)
+	if len(h.capturedKey.Runes) >= 2 {
+		parts = append(parts, "<"+strings.Join(h.capturedKey.Runes, "")+">"+" (sequence)")
+	} else {
+		parts = append(parts, h.capturedKey.Runes...)
+	}
 	if len(parts) == 0 {
 		h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")
 	} else {
@@ -407,23 +510,24 @@ func eventKeyToConfigKey(event *tcell.EventKey) config.Key {
 
 func (h *Help) filterSections(query string) {
 	query = strings.ToLower(strings.TrimSpace(query))
+	var filtered []config.OrderedKeys
 	if query == "" {
-		h.filteredSections = h.allSections
+		filtered = h.allSections
 	} else {
-		h.filteredSections = nil
 		for _, s := range h.allSections {
 			if strings.Contains(strings.ToLower(s.Element), query) {
-				h.filteredSections = append(h.filteredSections, s)
+				filtered = append(filtered, s)
 				continue
 			}
 			for _, key := range s.Keys {
 				if strings.Contains(strings.ToLower(key.Description), query) {
-					h.filteredSections = append(h.filteredSections, s)
+					filtered = append(filtered, s)
 					break
 				}
 			}
 		}
 	}
+	h.filteredSections = filtered
 	h.renderSectionList(0)
 	if len(h.filteredSections) > 0 {
 		h.renderKeysForSection(0)
@@ -433,13 +537,37 @@ func (h *Help) filterSections(query string) {
 }
 
 func (h *Help) Render() {
+	h.render("")
+}
+
+// OpenAt renders the help page, pre-selecting the section that corresponds to
+// the given focused component identifier.
+func (h *Help) OpenAt(focusID string) {
+	h.render(sectionForFocusID(focusID))
+}
+
+func (h *Help) render(startSection string) {
 	keys := h.App.GetKeys()
-	h.allSections = h.sortAndFilter(keys.GetAvailableKeys())
+	allSections := append(keys.GetAvailableKeys(), vimEditorKeys)
+	h.allSections = h.sortAndFilter(allSections)
 	h.filteredSections = h.allSections
 
-	h.renderSectionList(0)
+	startListIdx := 0
+	if startSection != "" {
+		vim := h.vimMotionsIndex()
+		for i, s := range h.filteredSections {
+			if s.Element == startSection {
+				startListIdx = i
+				if vim > 0 && i == len(h.filteredSections)-1 {
+					startListIdx = vim // vim section sits after the separator in the list
+				}
+				break
+			}
+		}
+	}
+	h.renderSectionList(startListIdx)
 	if len(h.filteredSections) > 0 {
-		h.renderKeysForSection(0)
+		h.renderKeysForSection(startListIdx)
 	}
 	h.hints.Render(keys, h.App.GetConfig().Styles.NerdFont)
 	h.renderFooter()
@@ -448,6 +576,7 @@ func (h *Help) Render() {
 func (h *Help) renderFooter() {
 	k := h.App.GetKeys()
 	h.footer.SetKeys([]config.Key{
+		k.Common.Select,
 		k.Navigation.FocusRight,
 		k.Navigation.FocusLeft,
 		k.Common.Filter,
@@ -484,32 +613,130 @@ func (h *Help) sortAndFilter(keys []config.OrderedKeys) []config.OrderedKeys {
 	return append(result, unknown...)
 }
 
-func (h *Help) renderSectionList(selectIdx int) {
+func (h *Help) vimMotionsIndex() int {
+	n := len(h.filteredSections)
+	if n > 0 && h.filteredSections[n-1].Element == VimMotionsSectionName {
+		return n
+	}
+	return -1
+}
+
+func (h *Help) renderSectionList(selectListIdx int) {
 	h.sectionList.Clear()
-	for _, s := range h.filteredSections {
+	vim := h.vimMotionsIndex()
+	for i, s := range h.filteredSections {
+		if vim > 0 && i == len(h.filteredSections)-1 {
+			h.sectionList.AddItem("──────────────────────────", "", 0, nil)
+		}
 		h.sectionList.AddItem(s.Element, "", 0, nil)
 	}
-	if len(h.filteredSections) > 0 {
-		if selectIdx >= len(h.filteredSections) {
-			selectIdx = 0
+	total := h.sectionList.GetItemCount()
+	if total > 0 {
+		if selectListIdx >= total {
+			selectListIdx = 0
 		}
-		h.sectionList.SetCurrentItem(selectIdx)
+		h.sectionList.SetCurrentItem(selectListIdx)
 	}
 }
 
-func (h *Help) renderKeysForSection(idx int) {
+func (h *Help) renderKeysForSection(listIdx int) {
 	h.keysTable.Clear()
-	if idx >= len(h.filteredSections) {
+	h.dataRowMap = nil
+	vim := h.vimMotionsIndex()
+
+	// Separator selected — clear table.
+	if vim > 0 && listIdx == vim-1 {
+		h.keysTable.SetTitle(" Keys ")
 		return
 	}
-	section := h.filteredSections[idx]
+
+	// Remap vim list index to filteredSections index.
+	sectionIdx := listIdx
+	if vim > 0 && listIdx == vim {
+		sectionIdx = vim - 1
+	}
+
+	if sectionIdx >= len(h.filteredSections) {
+		return
+	}
+	section := h.filteredSections[sectionIdx]
+	styles := h.App.GetStyles()
+
+	if section.Element == "Data" {
+		h.renderDataSection(section)
+		return
+	}
+
+	bg := styles.Global.BackgroundColor.Color()
+	keyStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+	descStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color()).Background(bg)
+
+	if section.Element == VimMotionsSectionName {
+		h.keysTable.SetTitle(" Vim Motions (read-only) ")
+		h.keysTable.SetCell(0, 0, tview.NewTableCell("").SetSelectable(false))
+		h.keysTable.SetCell(0, 1, tview.NewTableCell("Active in SQL editor: query tab, row add / edit / duplicate").
+			SetSelectable(false).SetStyle(keyStyle))
+		for row, key := range section.Keys {
+			keyString := formatHelpKeyString(key)
+			h.keysTable.SetCell(row+1, 0, tview.NewTableCell(keyString).SetStyle(keyStyle))
+			h.keysTable.SetCell(row+1, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
+		}
+		h.keysTable.ScrollToBeginning()
+		if h.keysTable.GetRowCount() > 1 {
+			h.keysTable.Select(1, 0)
+		}
+		return
+	}
+
+	h.keysTable.SetTitle(" Keys ")
 	for row, key := range section.Keys {
 		keyString := formatHelpKeyString(key)
-		h.keysTable.SetCell(row, 0,
-			tview.NewTableCell(keyString).SetTextColor(h.App.GetStyles().Global.SecondaryTextColor.Color()))
-		h.keysTable.SetCell(row, 1,
-			tview.NewTableCell(key.Description).SetTextColor(h.App.GetStyles().Global.TextColor.Color()))
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(keyString).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
 	}
+	h.keysTable.ScrollToBeginning()
+	if h.keysTable.GetRowCount() > 0 {
+		h.keysTable.Select(0, 0)
+	}
+}
+
+func (h *Help) renderDataSection(section config.OrderedKeys) {
+	h.keysTable.SetTitle(" Keys ")
+	styles := h.App.GetStyles()
+	bg := styles.Global.BackgroundColor.Color()
+	keyStyle := tcell.StyleDefault.Foreground(styles.Global.SecondaryTextColor.Color()).Background(bg)
+	descStyle := tcell.StyleDefault.Foreground(styles.Global.TextColor.Color()).Background(bg)
+
+	// Build a description→struct-index map so we can translate back to section.Keys.
+	descToIdx := make(map[string]int, len(section.Keys))
+	for i, k := range section.Keys {
+		descToIdx[k.Description] = i
+	}
+
+	queryKeys, tableKeys := h.App.GetKeys().DataKeysSplit()
+	row := 0
+	for _, key := range queryKeys {
+		idx := descToIdx[key.Description]
+		h.dataRowMap = append(h.dataRowMap, idx)
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
+		row++
+	}
+
+	h.dataRowMap = append(h.dataRowMap, -1)
+	h.keysTable.SetCell(row, 0, tview.NewTableCell("").SetSelectable(false))
+	h.keysTable.SetCell(row, 1, tview.NewTableCell("─── Table only ───────────────").
+		SetSelectable(false).SetStyle(keyStyle))
+	row++
+
+	for _, key := range tableKeys {
+		idx := descToIdx[key.Description]
+		h.dataRowMap = append(h.dataRowMap, idx)
+		h.keysTable.SetCell(row, 0, tview.NewTableCell(formatHelpKeyString(key)).SetStyle(keyStyle))
+		h.keysTable.SetCell(row, 1, tview.NewTableCell(key.Description).SetStyle(descStyle))
+		row++
+	}
+
 	h.keysTable.ScrollToBeginning()
 	if h.keysTable.GetRowCount() > 0 {
 		h.keysTable.Select(0, 0)
@@ -518,11 +745,8 @@ func (h *Help) renderKeysForSection(idx int) {
 
 func formatHelpKeyString(key config.Key) string {
 	var parts []string
-	if len(key.Keys) > 0 {
-		parts = append(parts, strings.Join(key.Keys, ", "))
-	}
-	if len(key.Runes) > 0 {
-		parts = append(parts, strings.Join(key.Runes, ", "))
-	}
+	parts = append(parts, key.Keys...)
+	parts = append(parts, key.Runes...)
+	parts = append(parts, key.Sequences...)
 	return strings.Join(parts, ", ")
 }

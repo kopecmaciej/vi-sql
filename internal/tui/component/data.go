@@ -2,7 +2,6 @@ package component
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -15,37 +14,35 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/sql/completion"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
 	"github.com/kopecmaciej/vi-sql/internal/util"
+	"github.com/rs/zerolog/log"
 )
 
 const (
-	DataId            = "Data"
-	FilterBarId       = "FilterBar"
-	SortBarId         = "SortBar"
-	DataDeleteModalId = "DataDeleteModal"
-	DataEditModalId   = "DataEditModal"
+	DataId = "Data"
 
-	maxQueryResultRows = 100
+	FilterBarSuffix   = "-filter"
+	OrderBarSuffix    = "-order"
+	ResultsSuffix     = "-results"
+	DeleteModalSuffix = "-delete"
+	EditorSuffix      = "-editor"
+
+	editorSizeNormal     = 0
+	editorSizeFullscreen = 1
 )
 
-// SQL editor size states toggled by the Fullscreen key.
-const (
-	editorSizeNormal     = 0 // 30/70 proportional split
-	editorSizeFullscreen = 1 // editor fills the tab, results hidden
-)
-
-// QueryTabMode controls which keybindings and features are active.
-type QueryTabMode int
+// TabMode controls which keybindings and features are active.
+type TabMode int
 
 const (
-	// TableMode: pre-filled SELECT, full CRUD keybindings. Used when opening a
-	// table directly from the schema tree.
-	TableMode QueryTabMode = iota
-	// QueryMode: blank editor, read-only results. Used for ad-hoc query tabs.
-	QueryMode
+	TableMode TabMode = iota // pre-filled SELECT, no editor, full CRUD keys
+	QueryMode                // blank editor, no CRUD keys
+	ViewMode                 // read-only (no PK, no CRUD)
 )
 
 // dataTabCounter generates unique identifiers for each Data/QueryTab instance
@@ -57,19 +54,19 @@ func nextDataID() string {
 	return fmt.Sprintf("QueryTab-%d", n)
 }
 
-// Data displays table rows in a grid with pagination, filtering,
-// sorting, column hide/show, and row CRUD.
+// Data displays table rows in a grid with scroll-buffered fetching, filtering,
+// ordering, column hide/show, and row CRUD.
 type Data struct {
 	*core.BaseElement
 	*core.Flex
 
-	mode           QueryTabMode
+	mode           TabMode
 	tableFlex      *core.Flex
 	resultsBar     *widget.ResultsBar
-	table          *core.Table
+	resultGrid     *ResultGrid
 	style          *config.DataStyle
 	filterBar      *InputBar
-	sortBar        *InputBar
+	orderBar       *InputBar
 	termEditor     *TermEditor
 	sqlQueryEditor *SQLQueryEditor
 	editorSize     int
@@ -84,13 +81,11 @@ type Data struct {
 	state          *database.TableState
 	stateMap       *database.StateMap
 	lastExecTime   time.Duration
-	countPending   bool
-	// TODO: refactor - move some of the logic elsewhere to not have 5k file next week
-	cancelQuery  context.CancelFunc
-	queryRunning bool
+	runner         *QueryRunner
+	scroll         *scrollFetcher
 }
 
-func newData(mode QueryTabMode) *Data {
+func newData(mode TabMode) *Data {
 	id := tview.Identifier(nextDataID())
 	c := &Data{
 		BaseElement: core.NewBaseElement(),
@@ -99,14 +94,14 @@ func newData(mode QueryTabMode) *Data {
 		mode:           mode,
 		tableFlex:      core.NewFlex(),
 		resultsBar:     widget.NewResultsBar(),
-		table:          core.NewTable(),
-		filterBar:      NewInputBar(id+"-filter", "WHERE"),
-		sortBar:        NewInputBar(id+"-sort", "ORDER BY"),
+		resultGrid:     NewResultGrid(),
+		filterBar:      NewInputBar(id+FilterBarSuffix, "WHERE"),
+		orderBar:       NewInputBar(id+OrderBarSuffix, "ORDER BY"),
 		termEditor:     NewTermEditor(),
-		sqlQueryEditor: NewSQLQueryEditor(),
+		sqlQueryEditor: NewSQLQueryEditor(string(id)),
 		editorSize:     editorSizeNormal,
 		inlineEdit:     modal.NewInlineEditModal(),
-		confirmModal:   modal.NewConfirm(id + "-delete"),
+		confirmModal:   modal.NewConfirm(id + DeleteModalSuffix),
 		exportModal:    modal.NewExportModal(),
 		sqlEditModal:   NewSQLEditModal(),
 		peeker:         NewPeeker(),
@@ -117,29 +112,31 @@ func newData(mode QueryTabMode) *Data {
 
 	c.SetIdentifier(id)
 	if mode == QueryMode {
-		c.table.SetIdentifier(id + "-results")
+		c.resultGrid.SetIdentifier(id + ResultsSuffix)
 	} else {
-		c.table.SetIdentifier(id)
+		c.resultGrid.SetIdentifier(id)
 	}
 	c.SetAfterInitFunc(c.init)
 
 	return c
 }
 
-// NewData creates a blank query-mode tab (no CRUD, empty editor).
-func NewData() *Data {
+func NewQueryMode() *Data {
 	return newData(QueryMode)
 }
 
-// NewTableTab creates a table-mode tab with full CRUD keybindings.
-// Callers must follow up with HandleTableSelection to load data.
 func NewTableTab() *Data {
 	return newData(TableMode)
+}
+
+func NewViewTab() *Data {
+	return newData(ViewMode)
 }
 
 func (c *Data) init() error {
 	ctx := context.Background()
 
+	c.resultGrid.SetApp(c.App)
 	c.setLayout()
 	c.setStyle()
 	c.setKeybindings(ctx)
@@ -150,128 +147,97 @@ func (c *Data) init() error {
 	if err := c.sqlQueryEditor.Init(c.App); err != nil {
 		return err
 	}
-	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]string, error) {
-		return c.Driver.GetTableColumnNames(context.Background(), schema, table)
+	c.sqlQueryEditor.SetColumnFetcher(func(schema, table string) ([]completion.Column, error) {
+		infos, err := c.Driver.GetTableColumns(ctx, schema, table)
+		if err != nil {
+			return nil, err
+		}
+		fks, err := c.Driver.GetTableForeignKeys(ctx, schema, table)
+		if err != nil {
+			log.Error().Err(err).Str("schema", schema).Str("table", table).
+				Msg("failed to load foreign keys for autocomplete")
+		}
+		fkSet := fkColumnSet(fks)
+		cols := make([]completion.Column, len(infos))
+		for i, info := range infos {
+			cols[i] = completion.Column{Name: info.Name, TypeHint: info.DataType, IsPK: info.IsPK, IsFK: fkSet[info.Name]}
+		}
+		return cols, nil
 	})
 	c.sqlQueryEditor.SetOnFullscreen(func() {
 		c.toggleFullscreen()
 	})
 	c.sqlQueryEditor.SetOnFocusDown(func() {
-		c.App.SetFocusOnly(c.table)
+		c.App.SetFocusOnly(c.resultGrid)
 	})
 	c.sqlQueryEditor.SetOnOpenInEditor(func() {
 		if c.App.GetConfig().Editor.Enabled {
 			c.handleTermEditorForQuery()
 		}
 	})
+	c.runner = NewQueryRunner(
+		c.Driver,
+		func(f func()) { go c.App.QueueUpdateDraw(f) },
+		c.sqlQueryEditor.SaveQueryToHistory,
+		func(result manager.QueryResult) {
+			c.App.GetManager().Broadcast(manager.NewQueryExecutedMsg(result))
+		},
+	)
+	c.scroll = newScrollFetcher(c.runner, c.state)
 	c.sqlQueryEditor.SetOnCancel(func() {
-		if c.queryRunning && c.cancelQuery != nil {
-			c.cancelQuery()
-		}
+		c.runner.CancelQuery()
 	})
 	c.sqlQueryEditor.SetOnExecute(func(sql string) {
 		if c.editorSize == editorSizeFullscreen {
 			c.toggleFullscreen()
 		}
-		go func() {
-			if c.cancelQuery != nil {
-				c.cancelQuery()
-			}
-			queryCtx, cancel := context.WithCancel(context.Background())
-			c.cancelQuery = cancel
-			c.queryRunning = true
-			defer func() {
-				c.queryRunning = false
-				c.cancelQuery = nil
-			}()
-
-			c.App.QueueUpdateDraw(func() {
-				c.resultsBar.RenderRunning()
-			})
-
-			if isExplainQuery(sql) {
-				c.runExplain(queryCtx, sql)
+		// For statements, show a confirm modal first; if shown the modal's
+		// OnConfirm calls runner.Execute itself so we return early here.
+		if !isSelectQuery(sql) && !isExplainQuery(sql) {
+			if c.confirmIfDestructive(sql, func() {
+				c.runner.Execute(sql, 0, c.statementCallbacks(sql))
+			}) {
 				return
 			}
-			if isSelectQuery(sql) {
-				sqlState := database.NewTableState("", "")
-				sqlState.RawSQL = sql
-				sqlState.BatchSize = c.state.BatchSize
-				if sqlState.BatchSize <= 0 {
-					_, _, _, height := c.table.GetInnerRect()
-					sqlState.BatchSize = int64(height - 1)
-					if sqlState.BatchSize <= 0 {
-						sqlState.BatchSize = 50
-					}
-				}
-
-				start := time.Now()
-				query, rows, cols, err := c.Driver.ListQueryRows(queryCtx, sql, sqlState.BatchSize, 0, func(count int64) {
-					sqlState.Count = count
-					c.App.QueueUpdateDraw(func() {
-						c.resultsBar.Render(sqlState, c.lastExecTime, false)
-					})
-				})
-				if err != nil {
-					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						c.App.QueueUpdateDraw(func() {
-							c.resultsBar.RenderCancelled()
-						})
-						return
-					}
-					c.App.QueueUpdateDraw(func() {
-						modal.ShowErrorWithDone(c.App.Pages, "Query error", err, func() {
-							c.resultsBar.RestorePrevious()
-						})
-					})
-					return
-				}
-				execTime := time.Since(start)
-				c.sqlQueryEditor.SaveQueryToHistory(sql)
+		}
+		// Pre-create state so OnCount can reference it while the query runs.
+		sqlState := database.NewTableState("", "")
+		sqlState.RawSQL = sql
+		sqlState.BatchSize = c.batchSize()
+		c.scroll.cancel()
+		c.runner.Execute(sql, sqlState.BatchSize, RunCallbacks{
+			OnRunning: func() { c.resultsBar.RenderRunning() },
+			OnSelect: func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration) {
 				sqlState.LastQuery = query
 				if val, ok := database.ExtractLimitValue(sql); ok {
 					sqlState.UserLimit = val
 				}
 				sqlState.PopulateRows(rows)
-
-				colNames := make([]string, len(cols))
-				for i, col := range cols {
-					colNames[i] = col.Name
+				c.state = sqlState
+				c.scroll.updateState(c.state)
+				c.columns = cols
+				c.lastExecTime = execTime
+				c.resultGrid.Clear()
+				c.resultsBar.Render(c.state, c.lastExecTime)
+				if len(rows) == 0 {
+					c.resultGrid.SetFixed(0, 0)
+					c.resultGrid.SetSelectable(false, false)
+					c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows returned"))
+					return
 				}
-				capped := rows
-				if len(capped) > maxQueryResultRows {
-					capped = capped[:maxQueryResultRows]
-				}
-				c.App.GetManager().Broadcast(manager.NewQueryExecutedMsg(manager.QueryResult{
-					Query:    sql,
-					Columns:  colNames,
-					Rows:     capped,
-					RowCount: len(rows),
-				}))
-
-				c.App.QueueUpdateDraw(func() {
-					c.state = sqlState
-					c.columns = cols
-					c.lastExecTime = execTime
-					c.countPending = sqlState.Count == 0
-
-					c.table.Clear()
-					c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
-
-					if len(rows) == 0 {
-						c.table.SetFixed(0, 0)
-						c.table.SetSelectable(false, false)
-						c.table.SetCell(0, 0, tview.NewTableCell("No rows returned"))
-						return
-					}
-					c.renderTableView(rows)
+				c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+			},
+			OnStatement: c.statementCallbacks(sql).OnStatement,
+			OnExplain: func(result, bareSql string, analyze bool) {
+				c.showExplainViewer(ctx, bareSql, result, analyze)
+			},
+			OnError: func(err error) {
+				modal.ShowErrorWithDone(c.App.Pages, "Query error", err, func() {
+					c.resultsBar.RestorePrevious()
 				})
-			} else {
-				if !c.confirmIfDestructive(queryCtx, sql) {
-					c.executeStatement(queryCtx, sql)
-				}
-			}
-		}()
+			},
+			OnCancel: func() { c.resultsBar.RenderCancelled() },
+		})
 	})
 	if err := c.sqlEditModal.Init(c.App); err != nil {
 		return err
@@ -294,27 +260,29 @@ func (c *Data) init() error {
 	if err := c.filterBar.Init(c.App); err != nil {
 		return err
 	}
-	if err := c.sortBar.Init(c.App); err != nil {
+	if err := c.orderBar.Init(c.App); err != nil {
 		return err
 	}
 
-	c.filterBar.EnableColumnAutocomplete(database.OperatorKeywords)
-	c.sortBar.EnableColumnAutocomplete(database.OrderKeywords)
+	c.filterBar.EnableColumnAutocomplete(sqlpkg.OperatorKeywords)
+	c.orderBar.EnableColumnAutocomplete(sqlpkg.OrderKeywords)
 
-	c.filterBarHandler(ctx)
-	c.sortBarHandler(ctx)
+	c.filterBarHandler()
+	c.orderBarHandler()
 
-	c.handleEvents(ctx)
+	c.handleEvents()
 
 	return nil
 }
 
-func (c *Data) handleEvents(ctx context.Context) {
+func (c *Data) handleEvents() {
 	go c.HandleEvents(c.GetIdentifier(), func(event manager.EventMsg) {
 		switch event.Message.Type {
 		case manager.StyleChanged:
-			c.setStyle()
-			_ = c.updateData(ctx, true)
+			go c.App.QueueUpdateDraw(func() {
+				c.setStyle()
+				c.reRenderState()
+			})
 		}
 	})
 }
@@ -324,26 +292,25 @@ func (c *Data) setStyle() {
 	styles := c.App.GetStyles()
 	sqlEditorStyle := &styles.SQLEditor
 	c.filterBar.EnableHighlighting(sqlEditorStyle)
-	c.sortBar.EnableHighlighting(sqlEditorStyle)
+	c.orderBar.EnableHighlighting(sqlEditorStyle)
 
 	c.tableFlex.SetStyle(styles)
 	c.resultsBar.SetStyle(styles)
 	c.Flex.SetStyle(styles)
-	c.table.SetStyle(styles)
-
-	c.table.SetBordersColor(styles.Others.SeparatorColor.Color())
-	c.table.SetSeparator(styles.Icons.Separator.Rune())
-
-	multiSelectedStyle := tcell.StyleDefault.
-		Background(c.style.MultiSelectedRowColor.Color()).
-		Foreground(tcell.ColorWhite)
-	c.table.SetMultiSelectedStyle(multiSelectedStyle)
+	c.resultGrid.SetStyle(styles, c.style)
 }
 
 func (c *Data) setLayout() {
 	c.tableFlex.SetBorder(true)
 	c.tableFlex.SetDirection(tview.FlexRow)
-	c.tableFlex.SetTitle(" Data ")
+	title := " Table "
+	switch c.mode {
+	case QueryMode:
+		title = " Query "
+	case ViewMode:
+		title = " View "
+	}
+	c.tableFlex.SetTitle(title)
 	c.tableFlex.SetTitleAlign(tview.AlignCenter)
 	c.tableFlex.SetBorderPadding(0, 0, 1, 1)
 
@@ -353,115 +320,146 @@ func (c *Data) setLayout() {
 func (c *Data) setKeybindings(ctx context.Context) {
 	k := c.App.GetKeys()
 
-	c.table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		row, col := c.table.GetSelection()
+	c.resultGrid.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		row, col := c.resultGrid.GetSelection()
 		switch {
-		case k.Contains(k.Data.PeekRow, event.Name()):
-			return c.handlePeekRow(ctx, row, false)
-		case k.Contains(k.Data.FullPagePeek, event.Name()):
-			return c.handlePeekRow(ctx, row, true)
-		case k.Contains(k.Common.Copy, event.Name()):
-			return c.handleCopyCell(row, col)
-		case k.Contains(k.Data.CopyRow, event.Name()):
-			return c.handleCopyRow(row)
-		case k.Contains(k.Common.Refresh, event.Name()):
-			return c.handleRefresh(ctx)
-		case k.Contains(k.Navigation.FocusUp, event.Name()):
+		case k.Match(k.Navigation.GoTop, event):
+			if c.resultGrid.GetRowCount() > 1 {
+				c.resultGrid.Select(1, col)
+			}
+			return nil
+		case k.Match(k.Navigation.GoBottom, event):
+			if rc := c.resultGrid.GetRowCount(); rc > 1 {
+				c.resultGrid.Select(rc-1, col)
+				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+				c.scroll.tryPrefetch(rc-1, viewHeight, c.renderAfterAppend)
+			}
+			return nil
+		case k.Match(k.Data.PeekRow, event):
+			return c.handlePeekRow(row, false)
+		case k.Match(k.Data.FullPagePeek, event):
+			return c.handlePeekRow(row, true)
+		case k.Match(k.Data.CopyCell, event):
+			c.resultGrid.CopyCell(row, col, c.state.GetAllRows())
+			return nil
+		case k.Match(k.Data.CopyRow, event):
+			c.resultGrid.CopyRow(row, c.state.GetAllRows(), c.columns)
+			return nil
+		case k.Match(k.Data.CopyRowJSON, event):
+			c.resultGrid.CopyRowAs(util.ExportJSON, row, c.state.GetAllRows(), c.columns)
+			return nil
+		case k.Match(k.Data.CopyRowCSV, event):
+			c.resultGrid.CopyRowAs(util.ExportCSV, row, c.state.GetAllRows(), c.columns)
+			return nil
+		case k.Match(k.Common.Refresh, event):
+			c.triggerRefresh(nil, func(err error) {
+				modal.ShowError(c.App.Pages, "Error refreshing rows", err)
+			})
+			return nil
+		case k.Match(k.Navigation.FocusUp, event):
 			if c.mode == QueryMode {
 				c.App.SetFocusOnly(c.sqlQueryEditor)
 				return nil
 			}
-		case k.Contains(k.Data.HideColumn, event.Name()):
-			return c.handleHideColumn(ctx, col)
-		case k.Contains(k.Data.ResetHiddenColumns, event.Name()):
-			return c.handleResetHiddenColumns(ctx)
-		case k.Contains(k.Data.NextPage, event.Name()):
-			return c.handleNextPage(ctx)
-		case k.Contains(k.Data.PreviousPage, event.Name()):
-			return c.handlePreviousPage(ctx)
-		case k.Contains(k.Data.MultipleSelect, event.Name()):
-			return c.handleMultipleSelect(row)
-		case k.Contains(k.Data.ClearSelection, event.Name()):
-			if c.queryRunning && c.cancelQuery != nil {
-				c.cancelQuery()
+		case k.Match(k.Data.HideColumn, event):
+			return c.handleHideColumn(col)
+		case k.Match(k.Data.ResetHiddenColumns, event):
+			c.resultGrid.ResetHiddenColumns()
+			c.reRenderState()
+			return nil
+		case k.Match(k.Data.MultipleSelect, event):
+			c.resultGrid.ToggleVisualMode()
+			return nil
+		case k.Match(k.Data.ClearSelection, event):
+			if c.runner.IsQueryRunning() {
+				c.runner.CancelQuery()
 				return nil
 			}
-			return c.handleClearSelection()
-		case k.Contains(k.Data.ExplainQuery, event.Name()):
+			c.resultGrid.ClearSelection()
+			return nil
+		case k.Match(k.Data.ExplainQuery, event):
 			if c.state.LastQuery != "" {
-				go c.runExplain(ctx, c.state.LastQuery)
+				c.runner.Execute("EXPLAIN "+c.state.LastQuery, 0, RunCallbacks{
+					OnExplain: func(result, bareSql string, analyze bool) {
+						c.showExplainViewer(ctx, bareSql, result, analyze)
+					},
+					OnError:  func(err error) { modal.ShowError(c.App.Pages, "Explain error", err) },
+					OnCancel: func() { c.resultsBar.RenderCancelled() },
+				})
 			}
 			return nil
-		case k.Contains(k.Data.ExportData, event.Name()):
+		case k.Match(k.Data.ExportData, event):
 			return c.handleExportData(ctx)
-		case k.Contains(k.Data.FollowForeignKey, event.Name()):
-			return c.handleFollowForeignKey(ctx, row, col)
-		}
-
-		// SortByColumn works in both modes.
-		if k.Contains(k.Data.SortByColumn, event.Name()) {
-			return c.handleSortByColumn(ctx, col)
+		case k.Match(k.Data.FollowForeignKey, event):
+			return c.handleFollowForeignKey(row, col)
+		case k.Match(k.Data.FindReferences, event):
+			return c.handleFindReferences(ctx, row, col)
+		case k.Match(k.Data.OrderByColumn, event):
+			return c.handleOrderByColumn(col)
 		}
 
 		// CRUD keybindings — only available in TableMode.
 		if c.mode == TableMode {
 			switch {
-			case k.Contains(k.Common.Edit, event.Name()):
+			case k.Match(k.Common.Edit, event):
 				return c.handleInlineEdit(ctx, row, col)
-			case k.Contains(k.Data.EditRow, event.Name()):
+			case k.Match(k.Data.EditRow, event):
 				return c.handleEditRow(ctx, row)
-			case k.Contains(k.Common.Add, event.Name()):
+			case k.Match(k.Common.Add, event):
 				c.handleAddRow(ctx)
 				return nil
-			case k.Contains(k.Data.DuplicateRow, event.Name()):
+			case k.Match(k.Data.DuplicateRow, event):
 				c.handleDuplicateRow(ctx, row)
 				return nil
-			case k.Contains(k.Common.Delete, event.Name()):
+			case k.Match(k.Common.Delete, event):
 				return c.handleDeleteRow(ctx, row, col)
-			case k.Contains(k.Common.Filter, event.Name()):
-				return c.handleToggleFilter()
-			case k.Contains(k.Data.ToggleSortBar, event.Name()):
-				return c.handleToggleSort()
+			case k.Match(k.Common.Filter, event):
+				c.filterBar.Toggle(c.state.Where)
+				c.Render()
+				return nil
+			case k.Match(k.Data.ToggleOrderBar, event):
+				c.orderBar.Toggle(c.state.OrderBy)
+				c.Render()
+				return nil
 			}
 		}
 
+		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+		c.scroll.tryPrefetch(row, viewHeight, c.renderAfterAppend)
+
 		return event
-	})
+	}))
 }
 
 // TabOptions carries optional initial state for a new table tab.
 type TabOptions struct {
-	Where string
+	Where       string
+	FocusColumn string // column name to select after loading (empty = default col 0)
 }
 
 func (c *Data) HandleTableSelection(ctx context.Context, schema, table string, opts ...TabOptions) error {
 	c.filterBar.SetText("")
-	c.sortBar.SetText("")
+	c.orderBar.SetText("")
+	c.resultGrid.ResetHiddenColumns()
 
 	state, ok := c.stateMap.Get(c.stateMap.Key(schema, table))
 	if ok {
 		c.state = state
 	} else {
 		c.state = database.NewTableState(schema, table)
-
-		conn := c.App.GetConfig().GetCurrentConnection()
-		if conn != nil && conn.Options.Limit != nil {
-			c.state.BatchSize = *conn.Options.Limit
-		} else {
-			_, _, _, height := c.table.GetInnerRect()
-			c.state.BatchSize = int64(height - 1)
-			if c.state.BatchSize <= 0 {
-				c.state.BatchSize = 50
-			}
-		}
+		c.state.BatchSize = c.batchSize()
 
 		if len(opts) > 0 && opts[0].Where != "" {
 			c.state.Where = opts[0].Where
 		}
 	}
+	c.scroll.updateState(c.state)
 
 	columns, err := c.Driver.GetTableColumns(ctx, schema, table)
-	if err == nil {
+	if err != nil {
+		log.Error().Err(err).Str("schema", schema).Str("table", table).
+			Msg("failed to load table columns")
+	} else {
 		c.columns = columns
 		var pkCols []string
 		for _, col := range columns {
@@ -472,19 +470,51 @@ func (c *Data) HandleTableSelection(ctx context.Context, schema, table string, o
 		c.state.SetPrimaryKey(pkCols)
 	}
 
-	c.foreignKeys, _ = c.Driver.GetTableForeignKeys(ctx, schema, table)
-
-	err = c.updateData(ctx, false)
-	if err != nil {
-		return err
+	var fkErr error
+	c.foreignKeys, fkErr = c.Driver.GetTableForeignKeys(ctx, schema, table)
+	if fkErr != nil {
+		log.Error().Err(fkErr).Str("schema", schema).Str("table", table).
+			Msg("failed to load foreign keys")
+	}
+	fkSet := fkColumnSet(c.foreignKeys)
+	for i := range c.columns {
+		c.columns[i].IsFK = fkSet[c.columns[i].Name]
 	}
 
-	c.App.SetFocus(c)
+	focusCol := ""
+	if len(opts) > 0 {
+		focusCol = opts[0].FocusColumn
+	}
+	c.triggerRefresh(
+		func() {
+			if focusCol != "" {
+				c.selectColumn(focusCol)
+			}
+			c.App.SetFocus(c.resultGrid)
+		},
+		func(err error) {
+			modal.ShowError(c.App.Pages, "Error loading table", err)
+		},
+	)
 	return nil
 }
 
+// selectColumn moves the table cursor to the first data row of the named column.
+func (c *Data) selectColumn(colName string) {
+	for col := 0; col < c.resultGrid.GetColumnCount(); col++ {
+		cell := c.resultGrid.GetCell(0, col)
+		if cell == nil {
+			continue
+		}
+		if ref, ok := cell.GetReference().(string); ok && ref == colName {
+			c.resultGrid.Select(1, col)
+			return
+		}
+	}
+}
+
 func (c *Data) Reset() {
-	c.table.Clear()
+	c.resultGrid.Clear()
 	c.resultsBar.Clear()
 	c.state = &database.TableState{}
 	c.stateMap = database.NewStateMap()
@@ -493,14 +523,29 @@ func (c *Data) Reset() {
 
 func (c *Data) SetSchemasForAutocomplete(schemas []database.Schema) {
 	c.filterBar.SetSchemas(schemas)
-	c.sortBar.SetSchemas(schemas)
+	c.orderBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
 	c.sqlEditModal.SetSchemas(schemas)
+}
+
+// IsQueryRunning reports whether a query is currently in flight.
+func (c *Data) IsQueryRunning() bool { return c.runner != nil && c.runner.IsQueryRunning() }
+
+// Refresh discards the current buffer and re-fetches from offset 0.
+func (c *Data) Refresh() {
+	c.triggerRefresh(nil, func(err error) {
+		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
+	})
 }
 
 // IsQueryTab reports whether this tab is in query mode (not a table tab).
 func (c *Data) IsQueryTab() bool {
 	return c.mode == QueryMode
+}
+
+// IsViewTab reports whether this tab is browsing a database view (read-only).
+func (c *Data) IsViewTab() bool {
+	return c.mode == ViewMode
 }
 
 // IsCleanQueryTab reports whether this tab has never loaded any table data,
@@ -515,7 +560,14 @@ func (c *Data) HasResults() bool {
 	return c.state != nil && (c.state.Table != "" || c.state.RawSQL != "")
 }
 
-// SelectedTable returns the schema and table currently loaded in this tab.
+// CopyRowAs copies the current row (or multi-selection) to the clipboard in
+// the given export format. Delegates to ResultGrid with the current selection.
+func (c *Data) CopyRowAs(format util.ExportFormat) {
+	row, _ := c.resultGrid.GetSelection()
+	c.resultGrid.CopyRowAs(format, row, c.state.GetAllRows(), c.columns)
+}
+
+// SelectedTable returns the schema and table/view currently loaded in this tab.
 // Returns empty strings for query-mode tabs or tabs with no table loaded.
 func (c *Data) SelectedTable() (schema, table string) {
 	if c.state == nil || c.mode == QueryMode {
@@ -535,13 +587,15 @@ func (c *Data) SetEditorTextAndExecute(text string) {
 
 func (c *Data) GetEditorText() string { return c.sqlQueryEditor.GetText() }
 
+func (c *Data) EnterNormalMode() { c.sqlQueryEditor.EnterNormalMode() }
+
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).
 func (c *Data) GetFocusPrimitive() tview.Primitive {
 	if c.mode == QueryMode {
 		return c.sqlQueryEditor
 	}
-	return c.table
+	return c.resultGrid
 }
 
 func (c *Data) Render() {
@@ -549,7 +603,7 @@ func (c *Data) Render() {
 	c.tableFlex.Clear()
 
 	c.tableFlex.AddItem(c.resultsBar, 2, 0, false)
-	c.tableFlex.AddItem(c.table, 0, 1, true)
+	c.tableFlex.AddItem(c.resultGrid, 0, 1, true)
 
 	var focusPrimitive tview.Primitive
 
@@ -558,20 +612,20 @@ func (c *Data) Render() {
 		switch c.editorSize {
 		case editorSizeFullscreen:
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 1, true)
-		default: // editorSizeNormal
+		default:
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 3, true)
 			c.Flex.AddItem(c.tableFlex, 0, 7, true)
 		}
 	} else {
-		// TableMode: filter/sort bars sit above the table
-		focusPrimitive = c.table
+		// TableMode: filter/order bars sit above the table
+		focusPrimitive = c.resultGrid
 		if c.filterBar.IsEnabled() {
 			c.Flex.AddItem(c.filterBar, 3, 0, false)
 			focusPrimitive = c.filterBar
 		}
-		if c.sortBar.IsEnabled() {
-			c.Flex.AddItem(c.sortBar, 3, 0, false)
-			focusPrimitive = c.sortBar
+		if c.orderBar.IsEnabled() {
+			c.Flex.AddItem(c.orderBar, 3, 0, false)
+			focusPrimitive = c.orderBar
 		}
 		c.Flex.AddItem(c.tableFlex, 0, 1, true)
 	}
@@ -579,92 +633,29 @@ func (c *Data) Render() {
 	c.App.SetFocus(focusPrimitive)
 }
 
-func (c *Data) listRows(_ context.Context) ([]database.Row, error) {
-	// Cancel any in-flight query (also stops its internal count goroutine).
-	if c.cancelQuery != nil {
-		c.cancelQuery()
-	}
-	queryCtx, cancel := context.WithCancel(context.Background())
-	c.cancelQuery = cancel
-	c.queryRunning = true
-	defer func() {
-		c.queryRunning = false
-		c.cancelQuery = nil
-	}()
-
-	// TODO: HandleTableSelection should call listRows in a goroutine (like SetOnExecute)
-	// so Esc can cancel table fetches too. Requires updateData UI calls wrapped in
-	// QueueUpdateDraw and error handling moved into the goroutine.
-
-	// For table mode on first visit, pre-fill with a fast estimate so the
-	// results bar shows a number immediately while the exact count runs.
-	c.countPending = c.state.Count == 0
-	if c.state.RawSQL == "" && c.state.Count == 0 {
-		if est, err := c.Driver.GetEstimatedRowCount(queryCtx, c.state.Schema, c.state.Table); err == nil && est > 0 {
-			c.state.Count = est
+// fkColumnSet returns a set of column names that participate in any FK in fks.
+func fkColumnSet(fks []database.ForeignKeyInfo) map[string]bool {
+	set := make(map[string]bool, len(fks))
+	for _, fk := range fks {
+		for _, col := range fk.Columns {
+			set[col] = true
 		}
 	}
-
-	start := time.Now()
-	thisState := c.state
-	countCallback := func(count int64) {
-		thisState.Count = count
-		if c.state == thisState {
-			c.countPending = false
-		}
-		c.App.QueueUpdateDraw(func() {
-			c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
-		})
-	}
-
-	var (
-		query string
-		rows  []database.Row
-		err   error
-	)
-
-	if c.state.RawSQL != "" {
-		var cols []database.ColumnInfo
-		query, rows, cols, err = c.Driver.ListQueryRows(queryCtx, c.state.RawSQL, c.state.BatchSize, c.state.Offset, countCallback)
-		if err != nil {
-			return nil, err
-		}
-		if val, ok := database.ExtractLimitValue(c.state.RawSQL); ok {
-			c.state.UserLimit = val
-		}
-		c.columns = cols
-	} else {
-		query, rows, err = c.Driver.ListRows(queryCtx, c.state, c.state.Where, c.state.OrderBy, nil, countCallback)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	c.lastExecTime = time.Since(start)
-	c.state.LastQuery = query
-
-	if len(rows) == 0 {
-		return nil, nil
-	}
-
-	c.state.PopulateRows(rows)
-	if c.state.RawSQL == "" {
-		c.loadAutocompleteKeys(queryCtx)
-	}
-
-	return rows, nil
+	return set
 }
 
 func (c *Data) loadAutocompleteKeys(ctx context.Context) {
-	cols, err := c.Driver.GetTableColumnNames(ctx, c.state.Schema, c.state.Table)
-	if err != nil {
-		return
+	colNames := make([]string, len(c.columns))
+	completionCols := make([]completion.Column, len(c.columns))
+	for i, col := range c.columns {
+		colNames[i] = col.Name
+		completionCols[i] = completion.Column{Name: col.Name, TypeHint: col.DataType, IsPK: col.IsPK, IsFK: col.IsFK}
 	}
-	c.filterBar.LoadAutocompleteKeys(cols)
-	c.sortBar.LoadAutocompleteKeys(cols)
-	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, cols)
+	c.filterBar.LoadAutocompleteColumns(completionCols)
+	c.orderBar.LoadAutocompleteColumns(completionCols)
+	c.sqlQueryEditor.SetColumnsForTable(c.state.Schema, c.state.Table, completionCols)
 
-	msg := manager.NewUpdateAutocompleteKeysMsg(cols)
+	msg := manager.NewUpdateAutocompleteKeysMsg(colNames)
 	msg.Sender = c.GetIdentifier()
 	c.App.GetManager().Broadcast(msg)
 
@@ -673,179 +664,70 @@ func (c *Data) loadAutocompleteKeys(ctx context.Context) {
 		return
 	}
 	c.filterBar.SetSchemas(schemas)
-	c.sortBar.SetSchemas(schemas)
+	c.orderBar.SetSchemas(schemas)
 	c.sqlQueryEditor.SetSchemas(schemas)
 }
 
-func (c *Data) updateData(ctx context.Context, useState bool) error {
-	c.table.ClearSelection()
-	var rows []database.Row
-
-	if useState {
-		rows = c.state.GetAllRows()
-	} else {
-		r, err := c.listRows(ctx)
-		if err != nil {
-			return err
-		}
-		rows = r
-	}
-
-	c.table.Clear()
-	c.resultsBar.Render(c.state, c.lastExecTime, c.countPending)
-	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-
-	if len(rows) == 0 {
-		c.table.SetCell(0, 0, tview.NewTableCell("No rows found"))
-		return nil
-	}
-
-	c.renderTableView(rows)
-	return nil
-}
-
-func (c *Data) renderTableView(rows []database.Row) {
-	c.table.SetFixed(1, 0)
-	c.table.SetSelectable(true, true)
-
-	allCols := c.orderedColumnNames(rows[0])
-
-	// Filter hidden columns
-	hiddenCols := c.stateMap.GetHiddenColumns(c.state.Schema, c.state.Table)
-	var visibleCols []string
-	for _, col := range allCols {
-		if !slices.Contains(hiddenCols, col) {
-			visibleCols = append(visibleCols, col)
-		}
-	}
-
-	// Build column metadata maps for header display
-	typeMap := make(map[string]string)
-	boolCols := make(map[string]bool)
-	pkCols := make(map[string]bool)
-	icons := c.App.GetStyles().Icons
-	for _, col := range c.columns {
-		typeMap[col.Name] = icons.TypeSymbol(col.DataType)
-		if col.DataType == "boolean" {
-			boolCols[col.Name] = true
-		}
-		if col.IsPK {
-			pkCols[col.Name] = true
-		}
-	}
-
-	// Header row: [key] name type
-	for col, name := range visibleCols {
-		headerText := name
-		if t, ok := typeMap[name]; ok {
-			pkPrefix := ""
-			if pkCols[name] {
-				if c.App.GetConfig().Styles.NerdFont {
-					pkPrefix = fmt.Sprintf("[%s]\uF084 ", c.App.GetStyles().Global.SecondaryTextColor.String())
-				} else {
-					pkPrefix = fmt.Sprintf("[%s]* ", c.App.GetStyles().Global.SecondaryTextColor.String())
-				}
-			}
-			headerText = fmt.Sprintf("%s[%s]%s [%s]%s ",
-				pkPrefix,
-				c.App.GetStyles().Global.SecondaryTextColor.String(), name,
-				c.App.GetStyles().Global.MoreContrastBackgroundColor.String(), t)
-		}
-		c.table.SetCell(0, col, tview.NewTableCell(headerText).
-			SetReference(name).
-			SetSelectable(false).
-			SetBackgroundColor(c.App.GetStyles().Global.ContrastBackgroundColor.Color()).
-			SetAlign(tview.AlignCenter))
-	}
-
-	// Data rows
-	for row, rowData := range rows {
-		for col, colName := range visibleCols {
-			isNull := rowData[colName] == nil
-			cellText := database.StringifyValue(rowData[colName])
-			if boolCols[colName] {
-				switch cellText {
-				case "t":
-					cellText = "true"
-				case "f":
-					cellText = "false"
-				}
-			}
-			if len(cellText) > 35 {
-				cellText = cellText[:35] + "..."
-			}
-			if isNull {
-				cellText = fmt.Sprintf("[%s]NULL[-:-:-]", c.App.GetStyles().Global.DimColor)
-			}
-
-			cell := tview.NewTableCell(cellText).
-				SetAlign(tview.AlignLeft).
-				SetMaxWidth(30)
-
-			c.table.SetCell(row+1, col, cell)
-		}
-	}
-	c.table.Select(1, 0)
-}
-
-func (c *Data) filterBarHandler(ctx context.Context) {
+func (c *Data) filterBarHandler() {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
 			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, text, c.state.OrderBy)
 		}
 		c.state.SetWhere(text)
-		err := c.updateData(ctx, false)
-		if err != nil {
-			c.state.SetWhere("")
-			modal.ShowError(c.App.Pages, "Error applying WHERE filter", err)
-		} else {
-			c.filterBar.Disable()
-			c.Flex.RemoveItem(c.filterBar)
-			c.App.SetFocus(c.table)
-		}
+		c.triggerRefresh(
+			func() {
+				c.filterBar.Disable()
+				c.Flex.RemoveItem(c.filterBar)
+				c.App.SetFocus(c.resultGrid)
+			},
+			func(err error) {
+				c.state.SetWhere("")
+				modal.ShowError(c.App.Pages, "Error applying WHERE filter", err)
+			},
+		)
 	}
 	rejectFunc := func() {
 		c.Flex.RemoveItem(c.filterBar)
-		c.App.SetFocus(c.table)
+		c.App.SetFocus(c.resultGrid)
 	}
 	c.filterBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-func (c *Data) sortBarHandler(ctx context.Context) {
+func (c *Data) orderBarHandler() {
 	acceptFunc := func(text string) {
 		if c.state.RawSQL != "" {
 			c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, text)
 		}
 		c.state.SetOrderBy(text)
-		err := c.updateData(ctx, false)
-		if err != nil {
-			c.state.SetOrderBy("")
-			modal.ShowError(c.App.Pages, "Error applying ORDER BY", err)
-		} else {
-			c.sortBar.Disable()
-			c.Flex.RemoveItem(c.sortBar)
-			c.App.SetFocus(c.table)
-		}
+		c.triggerRefresh(
+			func() {
+				c.orderBar.Disable()
+				c.Flex.RemoveItem(c.orderBar)
+				c.App.SetFocus(c.resultGrid)
+			},
+			func(err error) {
+				c.state.SetOrderBy("")
+				modal.ShowError(c.App.Pages, "Error applying ORDER BY", err)
+			},
+		)
 	}
 	rejectFunc := func() {
-		c.Flex.RemoveItem(c.sortBar)
-		c.App.SetFocus(c.table)
+		c.Flex.RemoveItem(c.orderBar)
+		c.App.SetFocus(c.resultGrid)
 	}
-	c.sortBar.DoneFuncHandler(acceptFunc, rejectFunc)
+	c.orderBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-func (c *Data) handlePeekRow(_ context.Context, row int, fullScreen bool) *tcell.EventKey {
+func (c *Data) handlePeekRow(row int, fullScreen bool) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
-	rows := c.state.GetAllRows()
-	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(rows) {
+	rowData := c.resultGrid.RowData(row, c.state.GetAllRows())
+	if rowData == nil {
 		return nil
 	}
-
 	c.peeker.ViewModal.SetFullScreen(fullScreen)
-	c.peeker.Render(rows[dataRow], c.columns)
+	c.peeker.Render(rowData, c.columns)
 	return nil
 }
 
@@ -855,16 +737,18 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 	}
 
 	// Collect primary keys: prefer multi-selected rows, fall back to cursor row.
-	selectedRows := c.table.GetSelectedRows()
+	selectedRows := c.resultGrid.GetSelectedRows()
+	allRows := c.state.GetAllRows()
+	pkCols := c.state.GetPrimaryKey()
 	var pks []database.PrimaryKey
 	if len(selectedRows) > 0 {
 		for _, r := range selectedRows {
-			if pk := c.rowPrimaryKey(r); pk != nil {
+			if pk := c.resultGrid.RowPrimaryKey(r, allRows, pkCols); pk != nil {
 				pks = append(pks, *pk)
 			}
 		}
 	} else {
-		pk := c.rowPrimaryKey(row)
+		pk := c.resultGrid.RowPrimaryKey(row, allRows, pkCols)
 		if pk == nil {
 			return nil
 		}
@@ -883,7 +767,7 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 	c.confirmModal.SetConfirmButtonLabel("Delete")
 	c.confirmModal.SetText(confirmText)
 	c.confirmModal.SetOnConfirm(func() {
-		defer c.App.Pages.RemovePage(c.confirmModal.GetIdentifier())
+		c.App.Pages.RemoveModalPage(c.confirmModal.GetIdentifier())
 		err := c.Driver.DeleteRows(ctx, c.state.Schema, c.state.Table, pks)
 		if err != nil {
 			modal.ShowError(c.App.Pages, "Error deleting row", err)
@@ -892,66 +776,168 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 		for _, pk := range pks {
 			c.state.DeleteRow(pk)
 		}
-		c.table.ClearSelection()
-		if err := c.updateData(ctx, true); err != nil {
-			modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-			return
-		}
-		if row >= c.table.GetRowCount() {
-			c.table.Select(row-1, col)
+		c.reRenderState()
+		if row >= c.resultGrid.GetRowCount() {
+			c.resultGrid.Select(row-1, col)
 		} else {
-			c.table.Select(row, col)
+			c.resultGrid.Select(row, col)
 		}
 	})
-	c.App.Pages.AddPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
+	c.App.Pages.ShowModal(c.confirmModal.GetIdentifier(), c.confirmModal, c.confirmModal, true, true)
 	return nil
 }
 
 func (c *Data) rowPrimaryKey(row int) *database.PrimaryKey {
-	pkCols := c.state.GetPrimaryKey()
-	if len(pkCols) == 0 {
-		return nil
-	}
-
-	rows := c.state.GetAllRows()
-	dataRow := row - 1 // account for header
-	if dataRow < 0 || dataRow >= len(rows) {
-		return nil
-	}
-
-	rowData := rows[dataRow]
-	pk := database.PrimaryKey{Columns: make(map[string]any)}
-	for _, col := range pkCols {
-		pk.Columns[col] = rowData[col]
-	}
-	return &pk
+	return c.resultGrid.RowPrimaryKey(row, c.state.GetAllRows(), c.state.GetPrimaryKey())
 }
 
-// executeStatement runs sql as a non-SELECT statement and updates the results bar.
-func (c *Data) executeStatement(ctx context.Context, sql string) {
-	start := time.Now()
-	affected, err := c.Driver.ExecuteStatement(ctx, sql)
-	if err != nil {
-		c.App.QueueUpdateDraw(func() {
+// statementCallbacks returns RunCallbacks for a non-SELECT statement result.
+// Used for both the direct execute path and the confirm-then-execute path.
+func (c *Data) statementCallbacks(sql string) RunCallbacks {
+	return RunCallbacks{
+		OnRunning: func() { c.resultsBar.RenderRunning() },
+		OnStatement: func(affected int64, execTime time.Duration) {
+			c.state.RawSQL = sql
+			c.showStatementResult(affected, execTime)
+		},
+		OnError: func(err error) {
 			modal.ShowErrorWithDone(c.App.Pages, "Statement error", err, func() {
 				c.resultsBar.RestorePrevious()
 			})
-		})
-		return
+		},
+		OnCancel: func() { c.resultsBar.RenderCancelled() },
 	}
-	execTime := time.Since(start)
-	c.sqlQueryEditor.SaveQueryToHistory(sql)
-	c.App.GetManager().Broadcast(manager.NewQueryExecutedMsg(manager.QueryResult{
-		Query:    sql,
-		Affected: affected,
-	}))
-	c.App.QueueUpdateDraw(func() {
-		c.state.RawSQL = sql
-		c.showStatementResult(affected, execTime)
+}
+
+// triggerRefresh discards the current buffer and fetches from offset 0.
+// onDone is called on the tview goroutine after the table re-renders.
+// onErr is called on the tview goroutine if the query fails.
+func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
+	c.resultGrid.ClearSelection()
+	c.state.ClearBuffer()
+	c.scroll.cancel()
+	c.runner.Refresh(c.state, RunCallbacks{
+		OnRunning: func() { c.resultsBar.RenderRunning() },
+		OnCountEstimate: func(count int64) {
+			c.state.Count = count
+			c.state.CountIsEstimate = true
+			c.resultsBar.Render(c.state, c.lastExecTime)
+		},
+		OnCount: func(count int64) {
+			c.state.Count = count
+			c.state.CountIsEstimate = false
+			c.resultsBar.Render(c.state, c.lastExecTime)
+		},
+		OnSelect: func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration) {
+			c.state.LastQuery = query
+			c.lastExecTime = execTime
+			if cols != nil {
+				c.columns = cols
+			}
+			if c.state.RawSQL != "" {
+				if val, ok := database.ExtractLimitValue(c.state.RawSQL); ok {
+					c.state.UserLimit = val
+				}
+			}
+			c.state.PopulateRows(rows)
+			if c.state.RawSQL == "" {
+				go c.loadAutocompleteKeys(context.Background())
+			}
+			c.resultGrid.Clear()
+			c.resultsBar.Render(c.state, c.lastExecTime)
+			c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
+			if len(rows) == 0 {
+				c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows found"))
+			} else {
+				c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+			}
+			if onDone != nil {
+				onDone()
+			}
+		},
+		OnError: func(err error) {
+			if onErr != nil {
+				onErr(err)
+			}
+		},
+		OnCancel: func() { c.resultsBar.RenderCancelled() },
 	})
 }
 
-func (c *Data) confirmIfDestructive(ctx context.Context, sql string) bool {
+// reRenderState re-renders the table from the current in-memory state without
+// hitting the database. Used after local mutations (delete, hide column, etc.).
+func (c *Data) reRenderState() {
+	c.resultGrid.ClearSelection()
+	rows := c.state.GetAllRows()
+	c.resultGrid.Clear()
+	c.resultsBar.Render(c.state, c.lastExecTime)
+	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
+	if len(rows) == 0 {
+		c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows found"))
+		return
+	}
+	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+}
+
+// RunCount fires an exact COUNT(*) for the current table/query and updates the results bar.
+func (c *Data) RunCount() {
+	sql := c.buildCountSQL()
+	if sql == "" {
+		return
+	}
+	c.runner.RunCount(sql, RunCallbacks{
+		OnRunning: func() { c.resultsBar.RenderRunning() },
+		OnCount: func(count int64) {
+			c.state.Count = count
+			c.state.CountIsEstimate = false
+			c.resultsBar.Render(c.state, c.lastExecTime)
+		},
+		OnError:  func(err error) { modal.ShowError(c.App.Pages, "Count error", err) },
+		OnCancel: func() { c.resultsBar.RenderCancelled() },
+	})
+}
+
+func (c *Data) buildCountSQL() string {
+	if c.state.RawSQL != "" {
+		return fmt.Sprintf("SELECT count(*) FROM (%s) AS _q", c.state.RawSQL)
+	}
+	if c.state.Table == "" {
+		return ""
+	}
+	q := fmt.Sprintf(`SELECT count(*) FROM "%s"."%s"`, c.state.Schema, c.state.Table)
+	if c.state.Where != "" {
+		q += " WHERE " + c.state.Where
+	}
+	return q
+}
+
+// batchSize returns the DB fetch granularity: Options.FetchLimit when set, otherwise 100.
+func (c *Data) batchSize() int64 {
+	conn := c.App.GetConfig().GetCurrentConnection()
+	if conn != nil && conn.Options.FetchLimit != nil {
+		return *conn.Options.FetchLimit
+	}
+	return 100
+}
+
+// renderAfterAppend re-renders the full buffer after a scroll prefetch appends rows.
+// Preserves the current cursor position.
+func (c *Data) renderAfterAppend() {
+	row, col := c.resultGrid.GetSelection()
+	rows := c.state.GetAllRows()
+	c.resultGrid.Clear()
+	c.resultsBar.Render(c.state, c.lastExecTime)
+	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
+	c.resultGrid.Render(rows, c.columns, c.App.GetStyles())
+	if row > 0 && row < c.resultGrid.GetRowCount() {
+		c.resultGrid.Select(row, col)
+	}
+}
+
+// confirmIfDestructive shows a confirm modal for destructive SQL statements.
+// If the statement is destructive, it shows the modal and wires proceed as the
+// confirm action, then returns true. Returns false if no confirmation is needed.
+func (c *Data) confirmIfDestructive(sql string, proceed func()) bool {
 	conn := c.App.GetConfig().GetCurrentConnection()
 	if conn != nil {
 		opts := conn.GetOptions()
@@ -960,257 +946,85 @@ func (c *Data) confirmIfDestructive(ctx context.Context, sql string) bool {
 		}
 	}
 
-	info := database.HasDestructiveStatement(sql)
+	info := sqlpkg.HasDestructiveStatement(sql)
 	if info == nil {
 		return false
 	}
 
-	c.App.QueueUpdateDraw(func() {
-		var text strings.Builder
-		if info.Table != "" {
-			text.WriteString(info.Operation + " on [::b]" + info.Table + "[::-]")
-		} else {
-			text.WriteString(info.Operation + " statement")
-		}
-		if (info.Operation == "DELETE" || info.Operation == "UPDATE") && !info.HasWhere {
-			text.WriteString("\n\n[red]No WHERE clause — all rows will be affected.[white]")
-		}
-		text.WriteString("\n\nExecute this statement?")
+	var text strings.Builder
+	if info.Table != "" {
+		text.WriteString(info.Operation + " on [::b]" + info.Table + "[::-]")
+	} else {
+		text.WriteString(info.Operation + " statement")
+	}
+	if (info.Operation == "DELETE" || info.Operation == "UPDATE") && !info.HasWhere {
+		text.WriteString("\n\n[red]No WHERE clause — all rows will be affected.[white]")
+	}
+	text.WriteString("\n\nExecute this statement?")
 
-		c.confirmModal.SetConfirmButtonLabel("Execute")
-		c.confirmModal.SetText(text.String())
-		c.confirmModal.SetOnConfirm(func() {
-			c.App.Pages.RemovePage(c.confirmModal.GetIdentifier())
-			go c.executeStatement(ctx, sql)
-		})
-		c.App.Pages.AddPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
-		c.App.SetFocusOnly(c.confirmModal)
+	c.confirmModal.SetConfirmButtonLabel("Execute")
+	c.confirmModal.SetText(text.String())
+	c.confirmModal.SetOnConfirm(func() {
+		c.App.Pages.RemoveModalPage(c.confirmModal.GetIdentifier())
+		proceed()
 	})
+	c.App.Pages.ShowModal(c.confirmModal.GetIdentifier(), c.confirmModal, c.confirmModal, true, true)
 	return true
 }
 
-func (c *Data) getVisibleColumns() []string {
-	rows := c.state.GetAllRows()
-	if len(rows) == 0 {
-		return nil
-	}
-	allCols := c.orderedColumnNames(rows[0])
-	hiddenCols := c.stateMap.GetHiddenColumns(c.state.Schema, c.state.Table)
-	var visible []string
-	for _, col := range allCols {
-		if !slices.Contains(hiddenCols, col) {
-			visible = append(visible, col)
-		}
-	}
-	return visible
-}
-
-// orderedColumnNames returns column names in their ordinal_position order
-// using c.columns metadata. Falls back to alphabetical if metadata is absent.
-func (c *Data) orderedColumnNames(row database.Row) []string {
-	if len(c.columns) > 0 {
-		names := make([]string, 0, len(c.columns))
-		for _, col := range c.columns {
-			if _, ok := row[col.Name]; ok {
-				names = append(names, col.Name)
-			}
-		}
-		return names
-	}
-	return database.GetSortedColumnNames(row)
-}
-
-func (c *Data) handleCopyCell(row, col int) *tcell.EventKey {
-	if row < 1 {
-		return nil
-	}
-	headerCell := c.table.GetCell(0, col)
-	if headerCell == nil {
-		return nil
-	}
-	colName, ok := headerCell.GetReference().(string)
-	if !ok {
-		return nil
-	}
-	rows := c.state.GetAllRows()
-	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(rows) {
-		return nil
-	}
-	util.Copy(database.StringifyValue(rows[dataRow][colName]))
-	return nil
-}
-
-func (c *Data) handleCopyRow(row int) *tcell.EventKey {
-	if row < 1 {
-		return nil
-	}
-	cols := c.getVisibleColumns()
-	rows := c.state.GetAllRows()
-	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(rows) {
-		return nil
-	}
-	rowData := rows[dataRow]
-
-	var parts []string
-	for _, col := range cols {
-		parts = append(parts, fmt.Sprintf("%s: %s", col, database.StringifyValue(rowData[col])))
-	}
-	util.Copy(strings.Join(parts, ", "))
-	return nil
-}
-
-func (c *Data) handleRefresh(ctx context.Context) *tcell.EventKey {
-	err := c.updateData(ctx, false)
-	if err != nil {
-		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-	}
-	return nil
-}
-
-func (c *Data) handleToggleFilter() *tcell.EventKey {
-	if c.state.Where != "" {
-		c.filterBar.Toggle(c.state.Where)
-	} else {
-		c.filterBar.Toggle("")
-	}
-	c.Render()
-	return nil
-}
-
-func (c *Data) handleToggleSort() *tcell.EventKey {
-	if c.state.OrderBy != "" {
-		c.sortBar.Toggle(c.state.OrderBy)
-	} else {
-		c.sortBar.Toggle("")
-	}
-	c.Render()
-	return nil
-}
-
-func (c *Data) handleSortByColumn(ctx context.Context, col int) *tcell.EventKey {
-	headerCell := c.table.GetCell(0, col)
-	if headerCell == nil {
-		return nil
-	}
-	columnName, _ := headerCell.GetReference().(string)
+func (c *Data) handleOrderByColumn(col int) *tcell.EventKey {
+	columnName := c.resultGrid.ColumnName(col)
 	if columnName == "" {
-		columnName = headerCell.Text
+		return nil
 	}
-	currentSort := c.state.OrderBy
+	quotedName := c.App.GetQuoter().Ident(columnName)
+	currentOrder := c.state.OrderBy
 
-	var newSort string
-	if currentSort == columnName+" ASC" {
-		newSort = columnName + " DESC"
+	var newOrder string
+	if currentOrder == quotedName+" ASC" {
+		newOrder = quotedName + " DESC"
 	} else {
-		newSort = columnName + " ASC"
+		newOrder = quotedName + " ASC"
 	}
 
 	if c.mode == QueryMode && c.state.RawSQL != "" {
-		c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, newSort)
+		c.state.RawSQL = database.RebuildSelectSQL(c.state.RawSQL, c.state.Where, newOrder)
 	}
-	c.state.SetOrderBy(newSort)
-	if err := c.updateData(ctx, false); err != nil {
-		modal.ShowError(c.App.Pages, "Error sorting rows", err)
-	}
-	c.table.Select(1, col)
+	c.state.SetOrderBy(newOrder)
+	c.triggerRefresh(func() {
+		c.resultGrid.Select(1, col)
+	}, func(err error) {
+		modal.ShowError(c.App.Pages, "Error ordering rows", err)
+	})
 	return nil
 }
 
-func (c *Data) handleHideColumn(ctx context.Context, col int) *tcell.EventKey {
-	headerCell := c.table.GetCell(0, col)
-	if headerCell == nil {
+func (c *Data) handleHideColumn(col int) *tcell.EventKey {
+	if c.resultGrid.HideColumn(col) == "" {
 		return nil
 	}
-	columnName, _ := headerCell.GetReference().(string)
-	if columnName == "" {
-		columnName = headerCell.Text
-	}
-	row, _ := c.table.GetSelection()
-	c.stateMap.AddHiddenColumn(c.state.Schema, c.state.Table, columnName)
-	if err := c.updateData(ctx, true); err != nil {
-		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-		return nil
-	}
-	newCol := col
-	if newColCount := c.table.GetColumnCount(); newCol >= newColCount {
-		newCol = newColCount - 1
-	}
-	if newCol < 0 {
-		newCol = 0
-	}
-	c.table.Select(row, newCol)
-	return nil
-}
-
-func (c *Data) handleResetHiddenColumns(ctx context.Context) *tcell.EventKey {
-	c.stateMap.ResetHiddenColumns(c.state.Schema, c.state.Table)
-	if err := c.updateData(ctx, true); err != nil {
-		modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-	}
-	return nil
-}
-
-func (c *Data) handleNextPage(ctx context.Context) *tcell.EventKey {
-	if c.state.Offset+c.state.BatchSize >= c.state.Count {
-		return nil
-	}
-	c.state.SetOffset(c.state.Offset + c.state.BatchSize)
-	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	if err := c.updateData(ctx, false); err != nil {
-		modal.ShowError(c.App.Pages, "Error loading page", err)
-	}
-	return nil
-}
-
-func (c *Data) handlePreviousPage(ctx context.Context) *tcell.EventKey {
-	if c.state.Offset == 0 {
-		return nil
-	}
-	c.state.SetOffset(c.state.Offset - c.state.BatchSize)
-	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
-	if err := c.updateData(ctx, false); err != nil {
-		modal.ShowError(c.App.Pages, "Error loading page", err)
-	}
-	return nil
-}
-
-func (c *Data) handleMultipleSelect(row int) *tcell.EventKey {
-	c.table.ToggleRowSelection(row)
-	return nil
-}
-
-func (c *Data) handleClearSelection() *tcell.EventKey {
-	c.table.ClearSelection()
+	row, _ := c.resultGrid.GetSelection()
+	c.reRenderState()
+	c.resultGrid.Select(row, c.resultGrid.ClampCol(col))
 	return nil
 }
 
 // handleFollowForeignKey opens a new table tab for the referenced table, pre-filtered
 // to the row that the current cell's FK value points to.
-func (c *Data) handleFollowForeignKey(_ context.Context, row, col int) *tcell.EventKey {
+func (c *Data) handleFollowForeignKey(row, col int) *tcell.EventKey {
 	if row < 1 || len(c.foreignKeys) == 0 {
 		return nil
 	}
 
-	headerCell := c.table.GetCell(0, col)
-	if headerCell == nil {
-		return nil
-	}
-	colName, ok := headerCell.GetReference().(string)
-	if !ok || colName == "" {
+	colName := c.resultGrid.ColumnName(col)
+	if colName == "" {
 		return nil
 	}
 
 	var fk *database.ForeignKeyInfo
 	for i := range c.foreignKeys {
-		for _, fkCol := range c.foreignKeys[i].Columns {
-			if fkCol == colName {
-				fk = &c.foreignKeys[i]
-				break
-			}
-		}
-		if fk != nil {
+		if slices.Contains(c.foreignKeys[i].Columns, colName) {
+			fk = &c.foreignKeys[i]
 			break
 		}
 	}
@@ -1218,21 +1032,26 @@ func (c *Data) handleFollowForeignKey(_ context.Context, row, col int) *tcell.Ev
 		return nil
 	}
 
-	rows := c.state.GetAllRows()
-	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(rows) {
+	rowData := c.resultGrid.RowData(row, c.state.GetAllRows())
+	if rowData == nil {
 		return nil
 	}
-	rowData := rows[dataRow]
 
+	driverName := c.App.GetConfig().GetCurrentConnection().GetDriver()
+	def, ok := database.GetConnector(driverName)
+	if !ok {
+		log.Warn().Str("driver", driverName).Msg("FollowForeignKey: connector not registered")
+		return nil
+	}
 	lit := c.App.GetFormatter().SQLLiteral
+	// Composite FKs reference multiple columns, so build one clause per column.
 	var whereParts []string
 	for i, fkColName := range fk.Columns {
 		val := rowData[fkColName]
 		if val == nil {
 			return nil
 		}
-		whereParts = append(whereParts, fmt.Sprintf(`"%s" = %s`, fk.ReferencedCols[i], lit(val)))
+		whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, def.Quoter.Ident(fk.ReferencedCols[i]), lit(val)))
 	}
 
 	c.App.GetManager().Broadcast(manager.NewOpenTableTabMsg(manager.TableTabRequest{
@@ -1240,6 +1059,113 @@ func (c *Data) handleFollowForeignKey(_ context.Context, row, col int) *tcell.Ev
 		Table:  fk.ReferencedTable,
 		Where:  strings.Join(whereParts, " AND "),
 	}))
+
+	return nil
+}
+
+// handleFindReferences finds all tables that have foreign keys pointing to the current
+// cell's column and opens a tab pre-filtered to matching rows. If multiple tables
+// reference the column a list is shown so the user can choose which one to open.
+func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.EventKey {
+	if c.mode != TableMode || row < 1 {
+		return nil
+	}
+
+	colName := c.resultGrid.ColumnName(col)
+	if colName == "" {
+		return nil
+	}
+
+	rowData := c.resultGrid.RowData(row, c.state.GetAllRows())
+	if rowData == nil {
+		return nil
+	}
+	cellValue := rowData[colName]
+	if cellValue == nil {
+		return nil
+	}
+
+	incoming, err := c.App.GetDriver().GetIncomingForeignKeys(ctx, c.state.Schema, c.state.Table)
+	if err != nil || len(incoming) == 0 {
+		modal.ShowInfo(c.App.Pages, "No references found for "+c.state.Table+"."+colName)
+		return nil
+	}
+
+	// Keep only entries that reference our column.
+	var relevant []database.IncomingForeignKeyInfo
+	for _, fk := range incoming {
+		if slices.Contains(fk.ReferencedCols, colName) {
+			relevant = append(relevant, fk)
+		}
+	}
+	if len(relevant) == 0 {
+		modal.ShowInfo(c.App.Pages, "No references found for "+c.state.Table+"."+colName)
+		return nil
+	}
+
+	driverName := c.App.GetConfig().GetCurrentConnection().GetDriver()
+	def, ok := database.GetConnector(driverName)
+	if !ok {
+		log.Warn().Str("driver", driverName).Msg("FindReferences: connector not registered")
+		return nil
+	}
+	lit := c.App.GetFormatter().SQLLiteral
+
+	// A single FK references each column at most once, so finding the match
+	// yields exactly one fkCol → one WHERE clause.
+	openRef := func(fk database.IncomingForeignKeyInfo) {
+		var fkCol string
+		for i, refCol := range fk.ReferencedCols {
+			if refCol == colName {
+				fkCol = fk.Columns[i]
+				break
+			}
+		}
+		if fkCol == "" {
+			return
+		}
+		c.App.GetManager().Broadcast(manager.NewOpenTableTabMsg(manager.TableTabRequest{
+			Schema:      fk.Schema,
+			Table:       fk.Table,
+			Where:       fmt.Sprintf(`%s = %s`, def.Quoter.Ident(fkCol), lit(cellValue)),
+			FocusColumn: fkCol,
+		}))
+	}
+
+	if len(relevant) == 1 {
+		openRef(relevant[0])
+		return nil
+	}
+
+	// Multiple referencing tables: show a list so the user can pick one.
+	refsPageID := tview.Identifier(string(c.GetIdentifier()) + "-refs")
+	list := core.NewList()
+	list.SetBorder(true)
+	list.SetTitle(" Referenced by ")
+	list.ShowSecondaryText(false)
+
+	closeModal := func() {
+		c.App.Pages.RemoveModalPage(refsPageID)
+	}
+
+	for _, fk := range relevant {
+		fkCopy := fk
+		label := fk.Schema + "." + fk.Table
+		list.AddItem(label, "", 0, func() {
+			closeModal()
+			openRef(fkCopy)
+		})
+	}
+
+	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc {
+			closeModal()
+			return nil
+		}
+		return event
+	})
+
+	c.App.Pages.ShowModal(refsPageID, core.CenteredFlex(list, 2, 2), list, true, true)
 
 	return nil
 }
@@ -1261,7 +1187,6 @@ func (c *Data) handleTermEditorForQuery() {
 // runEditorStatement opens the configured editor (built-in modal or external $EDITOR)
 // pre-filled with initialSQL, executes the result as a SQL statement, and retries on
 // error. The table is refreshed on success. modalTitle is shown in the modal header
-// (e.g. "EDIT", "ADD", "DUPLICATE").
 func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, errorTitle string) {
 	if !c.App.GetConfig().Editor.Enabled {
 		var openModal func(sql string)
@@ -1277,11 +1202,11 @@ func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, e
 						})
 						return
 					}
-					if err := c.updateData(ctx, false); err != nil {
-						c.App.QueueUpdateDraw(func() {
+					c.App.QueueUpdateDraw(func() {
+						c.triggerRefresh(nil, func(err error) {
 							modal.ShowError(c.App.Pages, "Error refreshing rows", err)
 						})
-					}
+					})
 				}()
 			})
 		}
@@ -1306,9 +1231,9 @@ func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, e
 			})
 			return
 		}
-		if err := c.updateData(ctx, false); err != nil {
+		c.triggerRefresh(nil, func(err error) {
 			modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-		}
+		})
 	}
 	openEditor(initialSQL)
 }
@@ -1323,33 +1248,12 @@ func (c *Data) toggleFullscreen() {
 }
 
 func (c *Data) showStatementResult(affected int64, execTime time.Duration) {
-	c.table.Clear()
-	c.table.SetFixed(0, 0)
-	c.table.SetSelectable(false, false)
+	c.resultGrid.Clear()
+	c.resultGrid.SetFixed(0, 0)
+	c.resultGrid.SetSelectable(false, false)
 	c.resultsBar.RenderStatementResult(affected, execTime)
-	c.table.SetCell(0, 0, tview.NewTableCell(
+	c.resultGrid.SetCell(0, 0, tview.NewTableCell(
 		fmt.Sprintf("%d rows affected", affected)))
-}
-
-func (c *Data) runExplain(ctx context.Context, sql string) {
-	bare, userWantsAnalyze := parseExplainPrefix(sql)
-	var result string
-	var err error
-	if userWantsAnalyze {
-		result, err = c.Driver.ExplainAnalyze(ctx, bare)
-	} else {
-		result, err = c.Driver.ExplainPlan(ctx, bare)
-	}
-	if err != nil {
-		c.App.QueueUpdateDraw(func() {
-			modal.ShowError(c.App.Pages, "Explain error", err)
-		})
-		return
-	}
-	c.sqlQueryEditor.SaveQueryToHistory(sql)
-	c.App.QueueUpdateDraw(func() {
-		c.showExplainViewer(ctx, bare, result, userWantsAnalyze)
-	})
 }
 
 func (c *Data) showExplainViewer(ctx context.Context, sql, result string, analyze bool) {
@@ -1362,41 +1266,9 @@ func (c *Data) showExplainViewer(ctx context.Context, sql, result string, analyz
 	})
 	c.explainViewer.Render(result)
 	c.explainViewer.SetDoneFunc(func() {
-		c.App.Pages.RemovePage(ExplainViewerId)
+		c.App.Pages.RemoveModalPage(ExplainViewerId)
 	})
-	c.App.Pages.AddPage(ExplainViewerId, c.explainViewer, true, true)
-	c.App.SetFocusOnly(c.explainViewer.tree.TreeView)
-}
-
-func isExplainQuery(sql string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "EXPLAIN")
-}
-
-// parseExplainPrefix strips any leading EXPLAIN / EXPLAIN ANALYZE / EXPLAIN (...)
-// prefix and reports whether the user explicitly requested ANALYZE.
-func parseExplainPrefix(sql string) (bare string, analyze bool) {
-	upper := strings.ToUpper(strings.TrimSpace(sql))
-	if !strings.HasPrefix(upper, "EXPLAIN") {
-		return sql, false
-	}
-	rest := strings.TrimSpace(sql[7:])
-	restUpper := strings.ToUpper(rest)
-	// Parenthesised options: EXPLAIN (ANALYZE, FORMAT JSON)
-	if strings.HasPrefix(restUpper, "(") {
-		end := strings.Index(rest, ")")
-		if end >= 0 {
-			opts := strings.ToUpper(rest[1:end])
-			analyze = strings.Contains(opts, "ANALYZE")
-			rest = strings.TrimSpace(rest[end+1:])
-			restUpper = strings.ToUpper(rest)
-		}
-	}
-
-	if strings.HasPrefix(restUpper, "ANALYZE") {
-		analyze = true
-		rest = strings.TrimSpace(rest[7:])
-	}
-	return rest, analyze
+	c.App.Pages.ShowModal(ExplainViewerId, c.explainViewer, c.explainViewer.tree.TreeView, true, true)
 }
 
 func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventKey {
@@ -1409,21 +1281,15 @@ func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventK
 		return nil
 	}
 
-	headerCell := c.table.GetCell(0, col)
-	if headerCell == nil {
-		return nil
-	}
-	colName, _ := headerCell.GetReference().(string)
+	colName := c.resultGrid.ColumnName(col)
 	if colName == "" {
 		return nil
 	}
 
-	rows := c.state.GetAllRows()
-	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(rows) {
+	originalRow := c.resultGrid.RowData(row, c.state.GetAllRows())
+	if originalRow == nil {
 		return nil
 	}
-	originalRow := rows[dataRow]
 	currentValue := c.App.GetFormatter().EditableString(originalRow[colName])
 
 	c.inlineEdit.SetApplyCallback(func(fieldName, newValue string) error {
@@ -1440,18 +1306,16 @@ func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventK
 		}
 		c.state.UpdateRow(*pk, updatedRow)
 		c.inlineEdit.Hide()
-		c.App.SetFocus(c.table)
-		if err := c.updateData(ctx, true); err != nil {
-			modal.ShowError(c.App.Pages, "Error refreshing rows", err)
-		}
-		c.table.Select(row, col)
+		c.App.SetFocus(c.resultGrid)
+		c.reRenderState()
+		c.resultGrid.Select(row, col)
 		return nil
 	})
 
 	c.inlineEdit.SetCancelCallback(func() {
 		c.inlineEdit.Hide()
-		c.App.SetFocus(c.table)
-		c.table.Select(row, col)
+		c.App.SetFocus(c.resultGrid)
+		c.resultGrid.Select(row, col)
 	})
 
 	c.inlineEdit.Render(colName, currentValue)
@@ -1465,11 +1329,11 @@ func (c *Data) handleAddRow(ctx context.Context) {
 	if len(c.columns) == 0 {
 		return
 	}
-	c.runEditorStatement(ctx, "ADD", c.buildInsertSQL(), "Insert error")
+	c.runEditorStatement(ctx, "Add Row", c.buildInsertSQL(), "Insert error")
 }
 
 func (c *Data) buildInsertSQL() string {
-	return database.BuildInsertSQL(c.state.Schema, c.state.Table, c.columns)
+	return sqlpkg.BuildInsertSQL(c.state.Schema, c.state.Table, c.columns, c.App.GetQuoter())
 }
 
 func (c *Data) buildDuplicateInsertSQL(row database.Row) string {
@@ -1477,10 +1341,11 @@ func (c *Data) buildDuplicateInsertSQL(row database.Row) string {
 	for _, col := range c.columns {
 		colMeta[col.Name] = col
 	}
-	return database.BuildDuplicateInsertSQL(
+	return sqlpkg.BuildDuplicateInsertSQL(
 		c.state.Schema, c.state.Table,
-		c.orderedColumnNames(row), colMeta,
+		orderedColumnNames(row, c.columns), colMeta,
 		c.App.GetFormatter().SQLLiteral, row,
+		c.App.GetQuoter(),
 	)
 }
 
@@ -1497,7 +1362,7 @@ func (c *Data) handleDuplicateRow(ctx context.Context, row int) {
 	if dataRow < 0 || dataRow >= len(rows) {
 		return
 	}
-	c.runEditorStatement(ctx, "DUPLICATE", c.buildDuplicateInsertSQL(rows[dataRow]), "Insert error")
+	c.runEditorStatement(ctx, "Duplicate Row", c.buildDuplicateInsertSQL(rows[dataRow]), "Insert error")
 }
 
 // handleEditRow opens the configured editor pre-filled with an UPDATE SQL template
@@ -1519,20 +1384,46 @@ func (c *Data) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 		return nil
 	}
 
-	c.runEditorStatement(ctx, "EDIT", c.buildUpdateSQL(rows[dataRow], pk), "Update error")
+	c.runEditorStatement(ctx, "Edit Row", c.buildUpdateSQL(rows[dataRow], pk), "Update error")
 	return nil
 }
 
 func (c *Data) buildUpdateSQL(row database.Row, pk *database.PrimaryKey) string {
-	return database.BuildUpdateSQL(
+	return sqlpkg.BuildUpdateSQL(
 		c.state.Schema, c.state.Table,
-		c.orderedColumnNames(row), c.state.GetPrimaryKey(),
+		orderedColumnNames(row, c.columns), c.state.GetPrimaryKey(),
 		c.App.GetFormatter().SQLLiteral, row, *pk,
+		c.App.GetQuoter(),
 	)
+}
+
+// selectedRowsData returns the currently selected rows and visible columns when
+// at least one row is selected or (nil, nil) when nothing is selected.
+func (c *Data) selectedRowsData() ([]database.Row, []string) {
+	indices := c.resultGrid.GetSelectedRows()
+	if len(indices) == 0 {
+		return nil, nil
+	}
+	allRows := c.state.GetAllRows()
+	if len(allRows) == 0 {
+		return nil, nil
+	}
+	cols := c.resultGrid.VisibleColumns(allRows[0], c.columns)
+	rows := make([]database.Row, 0, len(indices))
+	for _, r := range indices {
+		if rowData := c.resultGrid.RowData(r, allRows); rowData != nil {
+			rows = append(rows, rowData)
+		}
+	}
+	return rows, cols
 }
 
 func (c *Data) handleExportData(ctx context.Context) *tcell.EventKey {
 	if c.state.Table == "" && c.state.RawSQL == "" {
+		return nil
+	}
+	if rows, cols := c.selectedRowsData(); rows != nil {
+		c.exportModal.RenderWithRows(ctx, rows, cols, c.state.Schema, c.state.Table)
 		return nil
 	}
 	c.exportModal.Render(ctx, c.buildExportQuery(), c.state.Schema, c.state.Table)
@@ -1543,7 +1434,7 @@ func (c *Data) buildExportQuery() string {
 	if c.state.RawSQL != "" {
 		return c.state.RawSQL
 	}
-	q := fmt.Sprintf(`SELECT * FROM "%s"."%s"`, c.state.Schema, c.state.Table)
+	q := "SELECT * FROM " + c.App.GetQuoter().Table(c.state.Schema, c.state.Table)
 	if c.state.Where != "" {
 		q += " WHERE " + c.state.Where
 	}
@@ -1558,17 +1449,25 @@ func (c *Data) OpenExport(ctx context.Context) {
 	if c.state.Table == "" && c.state.RawSQL == "" {
 		return
 	}
+	if rows, cols := c.selectedRowsData(); rows != nil {
+		c.exportModal.RenderWithRows(ctx, rows, cols, c.state.Schema, c.state.Table)
+		return
+	}
 	c.exportModal.Render(ctx, c.buildExportQuery(), c.state.Schema, c.state.Table)
 }
 
 // OpenExplain runs EXPLAIN on the last executed query and shows the viewer.
 func (c *Data) OpenExplain(ctx context.Context) {
 	if c.state.LastQuery != "" {
-		go c.runExplain(ctx, c.state.LastQuery)
+		c.runner.Execute("EXPLAIN "+c.state.LastQuery, 0, RunCallbacks{
+			OnExplain: func(result, bareSql string, analyze bool) {
+				c.showExplainViewer(ctx, bareSql, result, analyze)
+			},
+			OnError: func(err error) { modal.ShowError(c.App.Pages, "Explain error", err) },
+		})
 	}
 }
 
-// OpenHistory opens the SQL history modal.
 func (c *Data) OpenHistory() {
 	c.sqlQueryEditor.OpenHistory()
 }
@@ -1579,12 +1478,6 @@ func (c *Data) OpenHistoryWithCallback(onAccept func(query string)) {
 	c.sqlQueryEditor.OpenHistoryWithCallback(onAccept)
 }
 
-// isSelectQuery returns true when sql is a statement that returns rows.
-func isSelectQuery(sql string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(sql))
-	return strings.HasPrefix(upper, "SELECT") ||
-		strings.HasPrefix(upper, "WITH") ||
-		strings.HasPrefix(upper, "EXPLAIN") ||
-		strings.HasPrefix(upper, "TABLE") ||
-		database.IsReturningDML(sql)
+func (c *Data) Prettify() {
+	c.sqlQueryEditor.Prettify()
 }

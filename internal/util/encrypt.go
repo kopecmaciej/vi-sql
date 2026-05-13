@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 type EncryptionError struct {
@@ -24,9 +25,49 @@ func (e *EncryptionError) Unwrap() error {
 }
 
 const (
-	EncryptionKeyEnv = "VI_SQL_SECRET_KEY"
-	KeyLength        = 32
+	KeyLength = 32
+	EncPrefix = "enc:"
 )
+
+func IsEncrypted(s string) bool {
+	return strings.HasPrefix(s, EncPrefix)
+}
+
+// EncryptPasswordWithMethod encrypts password and embeds the security method enc:<method>:<ciphertext>.
+func EncryptPasswordWithMethod(password, hexKey, method string) (ciphertext string, err error) {
+	enc, err := EncryptPassword(password, hexKey)
+	if err != nil {
+		return "", err
+	}
+	return EncPrefix + method + ":" + strings.TrimPrefix(enc, EncPrefix), nil
+}
+
+// DecryptPasswordWithMethod decrypts an enc:<method>:<hex-ciphertext> value
+func DecryptPasswordWithMethod(encryptedHex, hexKey string) (plaintext string, method string, err error) {
+	rest, ok := strings.CutPrefix(encryptedHex, EncPrefix)
+	if !ok {
+		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("not a tagged value")}
+	}
+	method, hex, ok := strings.Cut(rest, ":")
+	if !ok {
+		return "", "", &EncryptionError{Operation: "tag parsing", Err: fmt.Errorf("invalid tagged format")}
+	}
+	plaintext, err = DecryptPassword(EncPrefix+hex, hexKey)
+	return plaintext, method, err
+}
+
+// ParseMethodTag returns the method embedded in a tagged password value, or "" if untagged.
+func ParseMethodTag(s string) string {
+	rest, ok := strings.CutPrefix(s, EncPrefix)
+	if !ok {
+		return ""
+	}
+	method, _, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ""
+	}
+	return method
+}
 
 func GenerateEncryptionKey() (string, error) {
 	key := make([]byte, KeyLength)
@@ -46,14 +87,8 @@ func PrintEncryptionKeyInstructions() {
 
 	fmt.Println("Encryption key successfully generated for vi-sql:")
 	fmt.Println(key)
-	fmt.Println("\nPlease store this key securely using one of the following methods:")
-	fmt.Println("- Set it as an environment variable: VI_SQL_SECRET_KEY")
-	fmt.Println("- Save it to a file and reference the path in the config file")
-	fmt.Println("  or use the CLI option: vi-sql --key-path=/path/to/key")
-}
-
-func GetEncryptionKey() string {
-	return os.Getenv(EncryptionKeyEnv)
+	fmt.Println("\nSet it as an environment variable to use the 'env' security method:")
+	fmt.Println("  export VI_SQL_SECRET_KEY=" + key)
 }
 
 func EncryptPassword(password string, hexKey string) (string, error) {
@@ -77,13 +112,14 @@ func EncryptPassword(password string, hexKey string) (string, error) {
 		return "", &EncryptionError{Operation: "nonce generation", Err: err}
 	}
 	ciphertext := gcm.Seal(nonce, nonce, []byte(password), nil)
-	return hex.EncodeToString(ciphertext), nil
+	return EncPrefix + hex.EncodeToString(ciphertext), nil
 }
 
 func DecryptPassword(encryptedHex string, hexKey string) (string, error) {
 	if encryptedHex == "" {
 		return "", nil
 	}
+	encryptedHex = strings.TrimPrefix(encryptedHex, EncPrefix)
 	ciphertext, err := hex.DecodeString(encryptedHex)
 	if err != nil {
 		return "", &EncryptionError{Operation: "decode encrypted password", Err: err}

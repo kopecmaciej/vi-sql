@@ -48,13 +48,10 @@ var appHints = []func(k *config.KeyBindings) string{
 		return fmt.Sprintf("Press [::b]%s[-:-:-] to hide the schema tree and give more space to the data view.", k.Main.HideSchema.String())
 	},
 	func(k *config.KeyBindings) string {
-		return fmt.Sprintf("Use [::b]%s[-:-:-] to sort by the column under the cursor without opening a sort bar.", k.Data.SortByColumn.String())
+		return fmt.Sprintf("Use [::b]%s[-:-:-] to order by the column under the cursor without opening an order bar.", k.Data.OrderByColumn.String())
 	},
 	func(k *config.KeyBindings) string {
 		return fmt.Sprintf("[::b]%s[-:-:-] copies the current row to the clipboard in a key: value format.", k.Data.CopyRow.String())
-	},
-	func(k *config.KeyBindings) string {
-		return fmt.Sprintf("Use [::b]%s[-:-:-] / [::b]%s[-:-:-] to page through large result sets.", k.Data.PreviousPage.String(), k.Data.NextPage.String())
 	},
 	func(k *config.KeyBindings) string {
 		return fmt.Sprintf("[::b]%s[-:-:-] opens the SQL query editor history so you can re-run or edit past queries.", k.SQLQueryEditor.OpenHistory.String())
@@ -84,7 +81,7 @@ var appHints = []func(k *config.KeyBindings) string{
 		return fmt.Sprintf("[::b]%s[-:-:-] exports the current result set to CSV, JSON, or SQL INSERT statements.", k.Data.ExportData.String())
 	},
 	func(k *config.KeyBindings) string {
-		return "Run [::b]vi-sql --debug[-:-:-] to enable verbose logging — check /tmp/vi-sql.log for details."
+		return fmt.Sprintf("Run [::b]vi-sql --debug[-:-:-] to enable verbose logging — check %s for details.", config.LogPath)
 	},
 	func(k *config.KeyBindings) string {
 		return "Create your own style by adding a .yaml file to the styles folder in your config directory."
