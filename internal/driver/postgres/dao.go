@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
@@ -513,14 +514,7 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 	fqTable := pgx.Identifier{schema, table}.Sanitize()
 
 	for _, pk := range pks {
-		parts := make([]string, 0, len(pk.Columns))
-		args := make([]any, 0, len(pk.Columns))
-		i := 1
-		for col, val := range pk.Columns {
-			parts = append(parts, fmt.Sprintf("%s = $%d", pgx.Identifier{col}.Sanitize(), i))
-			args = append(args, val)
-			i++
-		}
+		parts, args := util.ANSIQuoter.WhereEqIndexed(pk.Columns)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s", fqTable, strings.Join(parts, " AND "))
 
 		result, err := d.client.Pool.Exec(ctx, query, args...)

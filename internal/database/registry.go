@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 // DriverFactory creates a Driver and ValueFormatter from a connection config.
@@ -47,6 +48,11 @@ type ConnectorDef struct {
 
 	// PreFill returns label→value pairs to pre-populate the form in edit mode.
 	PreFill func(*config.SQLConfig) map[string]string
+
+	// Quoter is the driver's SQL identifier quoting rule. TUI code that
+	// builds SQL fragments (e.g. ad-hoc WHERE clauses) uses this to quote
+	// identifiers without needing a driver instance.
+	Quoter util.Quoter
 }
 
 var registry = map[string]ConnectorDef{}

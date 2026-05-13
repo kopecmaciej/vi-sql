@@ -6,10 +6,12 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 func init() {
 	database.RegisterConnector("sqlite", database.ConnectorDef{
+		Quoter: util.ANSIQuoter,
 		Factory: func(cfg *config.SQLConfig) (database.Driver, database.ValueFormatter, error) {
 			client := NewClient(cfg)
 			if err := client.Connect(context.Background()); err != nil {

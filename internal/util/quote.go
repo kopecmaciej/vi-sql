@@ -1,0 +1,56 @@
+package util
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Quoter applies a SQL dialect's identifier-quoting rules. Use the
+// predefined ANSIQuoter (Postgres, SQLite) or BacktickQuoter (MySQL).
+type Quoter byte
+
+const (
+	ANSIQuoter     Quoter = '"' // PostgreSQL, SQLite
+	BacktickQuoter Quoter = '`' // MySQL
+)
+
+// Ident wraps name in the dialect's quote character, doubling any embedded
+// quote characters so reserved words and special characters in identifiers
+// are safe to interpolate.
+func (q Quoter) Ident(name string) string {
+	s := string(q)
+	return s + strings.ReplaceAll(name, s, s+s) + s
+}
+
+// Table returns a schema-qualified table reference with both parts quoted.
+func (q Quoter) Table(schema, table string) string {
+	return q.Ident(schema) + "." + q.Ident(table)
+}
+
+// WhereEqAnon builds `<col> = ?` clauses for each entry in cols, returning
+// the clauses alongside matching args. Use for drivers with anonymous
+// placeholders bound by argument order (MySQL, SQLite).
+func (q Quoter) WhereEqAnon(cols map[string]any) ([]string, []any) {
+	parts := make([]string, 0, len(cols))
+	args := make([]any, 0, len(cols))
+	for col, val := range cols {
+		parts = append(parts, q.Ident(col)+" = ?")
+		args = append(args, val)
+	}
+	return parts, args
+}
+
+// WhereEqIndexed builds `<col> = $N` clauses for each entry in cols,
+// returning the clauses alongside matching args. Use for drivers with
+// 1-based indexed placeholders (Postgres).
+func (q Quoter) WhereEqIndexed(cols map[string]any) ([]string, []any) {
+	parts := make([]string, 0, len(cols))
+	args := make([]any, 0, len(cols))
+	i := 1
+	for col, val := range cols {
+		parts = append(parts, fmt.Sprintf("%s = $%d", q.Ident(col), i))
+		args = append(args, val)
+		i++
+	}
+	return parts, args
+}

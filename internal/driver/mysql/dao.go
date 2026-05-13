@@ -9,11 +9,11 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
-func quoteIdent(name string) string { return database.QuoteIdent(name, '`') }
-func quoteTable(s, t string) string { return database.QuoteQualified(s, t, '`') }
+const quote = util.BacktickQuoter
 
 // Dao implements database.Driver for MySQL.
 type Dao struct {
@@ -279,7 +279,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 }
 
 func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
-	query := fmt.Sprintf("SELECT * FROM %s", quoteTable(state.Schema, state.Table))
+	query := fmt.Sprintf("SELECT * FROM %s", quote.Table(state.Schema, state.Table))
 	args := []any{}
 
 	if where != "" {
@@ -316,13 +316,13 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	args := make([]any, 0, len(row))
 
 	for col, val := range row {
-		cols = append(cols, quoteIdent(col))
+		cols = append(cols, quote.Ident(col))
 		placeholders = append(placeholders, "?")
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		quoteTable(schema, table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+		quote.Table(schema, table), strings.Join(cols, ", "), strings.Join(placeholders, ", "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -360,7 +360,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 		}
 		oldVal, exists := original[col]
 		if !exists || fmt.Sprint(oldVal) != fmt.Sprint(newVal) {
-			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quoteIdent(col)))
+			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quote.Ident(col)))
 			args = append(args, newVal)
 		}
 	}
@@ -371,12 +371,12 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 
 	whereParts := []string{}
 	for col, val := range pk.Columns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quoteIdent(col)))
+		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quote.Ident(col)))
 		args = append(args, val)
 	}
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
-		quoteTable(schema, table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
+		quote.Table(schema, table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
 
 	result, err := d.client.DB.ExecContext(ctx, query, args...)
 	if err != nil {
@@ -391,9 +391,9 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []database.PrimaryKey) error {
 	log.Info().Str("schema", schema).Str("table", table).Int("count", len(pks)).Msg("Deleting rows")
 	for _, pk := range pks {
-		whereParts, args := database.BuildPKWhere(pk, quoteIdent)
+		whereParts, args := quote.WhereEqAnon(pk.Columns)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s",
-			quoteTable(schema, table), strings.Join(whereParts, " AND "))
+			quote.Table(schema, table), strings.Join(whereParts, " AND "))
 
 		result, err := d.client.DB.ExecContext(ctx, query, args...)
 		if err != nil {
@@ -431,13 +431,13 @@ func (d *Dao) CommonDataTypes() []string {
 
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 	return fmt.Sprintf("CREATE TABLE %s (id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY (id))",
-		quoteTable(schema, tableName))
+		quote.Table(schema, tableName))
 }
 
 func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
 	var tableName, ddl string
 	err := d.client.DB.QueryRowContext(ctx,
-		fmt.Sprintf("SHOW CREATE TABLE %s", quoteTable(schema, table))).
+		fmt.Sprintf("SHOW CREATE TABLE %s", quote.Table(schema, table))).
 		Scan(&tableName, &ddl)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table DDL: %w", err)
@@ -455,7 +455,7 @@ func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
 
 func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP TABLE IF EXISTS %s", quoteTable(schema, table)))
+		fmt.Sprintf("DROP TABLE IF EXISTS %s", quote.Table(schema, table)))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
 	}
@@ -465,7 +465,7 @@ func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 
 func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) error {
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("RENAME TABLE %s TO %s",
-		quoteTable(schema, old), quoteTable(schema, newName)))
+		quote.Table(schema, old), quote.Table(schema, newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename table: %w", err)
 	}
@@ -476,7 +476,7 @@ func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) erro
 func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName string) error {
 	// RENAME COLUMN is available in MySQL 8.0+.
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-		quoteTable(schema, table), quoteIdent(old), quoteIdent(newName)))
+		quote.Table(schema, table), quote.Ident(old), quote.Ident(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
@@ -486,7 +486,7 @@ func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName stri
 
 func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("TRUNCATE TABLE %s", quoteTable(schema, table)))
+		fmt.Sprintf("TRUNCATE TABLE %s", quote.Table(schema, table)))
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
 	}
@@ -534,14 +534,14 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 	quotedCols := make([]string, len(def.Columns))
 	for i, c := range def.Columns {
 		parts := strings.Fields(c)
-		quotedCols[i] = quoteIdent(parts[0])
+		quotedCols[i] = quote.Ident(parts[0])
 		if len(parts) > 1 {
 			quotedCols[i] += " " + parts[1]
 		}
 	}
 
 	query := fmt.Sprintf("CREATE %sINDEX %s ON %s (%s)",
-		uniqueStr, quoteIdent(def.Name), quoteTable(schema, table),
+		uniqueStr, quote.Ident(def.Name), quote.Table(schema, table),
 		strings.Join(quotedCols, ", "))
 
 	if _, err := d.client.DB.ExecContext(ctx, query); err != nil {
@@ -561,7 +561,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 		return fmt.Errorf("failed to locate index %q: %w", indexName, err)
 	}
 	_, err = d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("DROP INDEX %s ON %s", quoteIdent(indexName), quoteTable(schema, tableName)))
+		fmt.Sprintf("DROP INDEX %s ON %s", quote.Ident(indexName), quote.Table(schema, tableName)))
 	if err != nil {
 		return fmt.Errorf("failed to drop index: %w", err)
 	}

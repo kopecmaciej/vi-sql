@@ -12,6 +12,7 @@ import (
 
 func init() {
 	database.RegisterConnector("postgres", database.ConnectorDef{
+		Quoter: util.ANSIQuoter,
 		Factory: func(cfg *config.SQLConfig) (database.Driver, database.ValueFormatter, error) {
 			client := NewClient(cfg)
 			if err := client.Connect(); err != nil {

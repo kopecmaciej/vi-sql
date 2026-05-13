@@ -20,6 +20,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/primitives"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -988,14 +989,21 @@ func (c *Data) handleFollowForeignKey(row, col int) *tcell.EventKey {
 		return nil
 	}
 
+	driverName := c.App.GetConfig().GetCurrentConnection().GetDriver()
+	def, ok := database.GetConnector(driverName)
+	if !ok {
+		log.Warn().Str("driver", driverName).Msg("FollowForeignKey: connector not registered")
+		return nil
+	}
 	lit := c.App.GetFormatter().SQLLiteral
+	// Composite FKs reference multiple columns, so build one clause per column.
 	var whereParts []string
 	for i, fkColName := range fk.Columns {
 		val := rowData[fkColName]
 		if val == nil {
 			return nil
 		}
-		whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, fk.ReferencedCols[i], lit(val)))
+		whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, def.Quoter.Ident(fk.ReferencedCols[i]), lit(val)))
 	}
 
 	c.App.GetManager().Broadcast(manager.NewOpenTableTabMsg(manager.TableTabRequest{
@@ -1047,25 +1055,32 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 		return nil
 	}
 
+	driverName := c.App.GetConfig().GetCurrentConnection().GetDriver()
+	def, ok := database.GetConnector(driverName)
+	if !ok {
+		log.Warn().Str("driver", driverName).Msg("FindReferences: connector not registered")
+		return nil
+	}
 	lit := c.App.GetFormatter().SQLLiteral
 
+	// A single FK references each column at most once, so finding the match
+	// yields exactly one fkCol → one WHERE clause.
 	openRef := func(fk database.IncomingForeignKeyInfo) {
-		var whereParts []string
-		var focusCol string
+		var fkCol string
 		for i, refCol := range fk.ReferencedCols {
 			if refCol == colName {
-				fkCol := fk.Columns[i]
-				whereParts = append(whereParts, fmt.Sprintf(`%s = %s`, fkCol, lit(cellValue)))
-				if focusCol == "" {
-					focusCol = fkCol
-				}
+				fkCol = fk.Columns[i]
+				break
 			}
+		}
+		if fkCol == "" {
+			return
 		}
 		c.App.GetManager().Broadcast(manager.NewOpenTableTabMsg(manager.TableTabRequest{
 			Schema:      fk.Schema,
 			Table:       fk.Table,
-			Where:       strings.Join(whereParts, " AND "),
-			FocusColumn: focusCol,
+			Where:       fmt.Sprintf(`%s = %s`, def.Quoter.Ident(fkCol), lit(cellValue)),
+			FocusColumn: fkCol,
 		}))
 	}
 

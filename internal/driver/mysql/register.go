@@ -13,6 +13,7 @@ import (
 
 func init() {
 	database.RegisterConnector("mysql", database.ConnectorDef{
+		Quoter: util.BacktickQuoter,
 		Factory: func(cfg *config.SQLConfig) (database.Driver, database.ValueFormatter, error) {
 			client := NewClient(cfg)
 			if err := client.Connect(context.Background()); err != nil {
