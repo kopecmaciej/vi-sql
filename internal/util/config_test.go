@@ -35,40 +35,6 @@ func TestIsHexColor(t *testing.T) {
 	}
 }
 
-func TestHidePasswordInUri(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{
-			input:    "postgres://user:secret@localhost/db",
-			expected: "postgres://user:****@localhost/db",
-		},
-		{
-			input:    "postgres://user@localhost/db",
-			expected: "postgres://user@localhost/db",
-		},
-		{
-			input:    "postgres://localhost/db",
-			expected: "postgres://localhost/db",
-		},
-		{
-			input:    "mysql://admin:p@$$word@host:3306/db",
-			expected: "mysql://admin:****@host:3306/db",
-		},
-		{
-			input:    "notauri",
-			expected: "notauri",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			assert.Equal(t, tt.expected, HidePasswordInUri(tt.input))
-		})
-	}
-}
-
 type mergeTestConfig struct {
 	Name   string
 	Port   int

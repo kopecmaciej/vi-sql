@@ -74,6 +74,17 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 		info.DatabaseSize = fmt.Sprintf("%.2f MiB", *dbSizeMB)
 	}
 
+	var sslVar, sslVersion, sslCipher string
+	if err := d.client.DB.QueryRowContext(ctx, "SHOW STATUS LIKE 'Ssl_version'").
+		Scan(&sslVar, &sslVersion); err == nil && sslVersion != "" {
+		if err := d.client.DB.QueryRowContext(ctx, "SHOW STATUS LIKE 'Ssl_cipher'").
+			Scan(&sslVar, &sslCipher); err == nil {
+			info.TLS = sslVersion + " (" + sslCipher + ")"
+		} else {
+			info.TLS = sslVersion
+		}
+	}
+
 	return info, nil
 }
 

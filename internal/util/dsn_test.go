@@ -145,6 +145,14 @@ func TestHidePasswordInDSN(t *testing.T) {
 			input:    "postgres://localhost:5432/mydb",
 			expected: "postgres://localhost:5432/mydb",
 		},
+		{
+			input:    "mysql://admin:p@$$word@host:3306/db",
+			expected: "mysql://admin:****@host:3306/db",
+		},
+		{
+			input:    "notaurl",
+			expected: "notaurl",
+		},
 	}
 
 	for _, tt := range tests {

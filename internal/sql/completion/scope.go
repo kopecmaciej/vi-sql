@@ -210,6 +210,7 @@ func extractCTENames(tokens []sql.Token) []string {
 			}
 			// skip the CTE body tracking parenthesis depth
 			depth := 0
+		skipBody:
 			for j < len(tokens) {
 				if tokens[j].Type == sql.TokenPunctuation {
 					switch tokens[j].Value {
@@ -219,13 +220,12 @@ func extractCTENames(tokens []sql.Token) []string {
 						depth--
 						if depth == 0 {
 							j++
-							goto afterBody
+							break skipBody
 						}
 					}
 				}
 				j++
 			}
-		afterBody:
 			j = skipWS(tokens, j)
 			// comma → another CTE follows
 			if j < len(tokens) && tokens[j].Type == sql.TokenPunctuation && tokens[j].Value == "," {

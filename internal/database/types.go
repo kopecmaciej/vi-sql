@@ -83,5 +83,6 @@ type ServerInfo struct {
 	CacheHitRatio  string
 	Host           string
 	Port           int
+	TLS            string            // TLS protocol in use (e.g. "TLSv1.3"), empty if not encrypted
 	Extra          map[string]string // driver-specific key/value pairs
 }

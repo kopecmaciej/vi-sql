@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 
 	"github.com/adrg/xdg"
 	"github.com/rs/zerolog/log"
@@ -179,25 +178,4 @@ func IsHexColor(s string) bool {
 		}
 	}
 	return true
-}
-
-func HidePasswordInUri(uri string) string {
-	if !strings.Contains(uri, "@") {
-		return uri
-	}
-	parts := strings.SplitN(uri, "://", 2)
-	if len(parts) != 2 {
-		return uri
-	}
-	rest := parts[1]
-	atIdx := strings.LastIndex(rest, "@")
-	if atIdx < 0 {
-		return uri
-	}
-	credentials := rest[:atIdx]
-	colonIdx := strings.Index(credentials, ":")
-	if colonIdx < 0 {
-		return uri
-	}
-	return parts[0] + "://" + credentials[:colonIdx] + ":****" + rest[atIdx:]
 }

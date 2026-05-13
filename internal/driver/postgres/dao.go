@@ -106,6 +106,17 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 		info.CacheHitRatio = cacheHit
 	}
 
+	var sslActive bool
+	var sslVersion, sslCipher string
+	err = d.client.Pool.QueryRow(ctx,
+		"SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid()").
+		Scan(&sslActive, &sslVersion, &sslCipher)
+	if err != nil {
+		log.Warn().Err(err).Msg("Failed to get SSL status")
+	} else if sslActive {
+		info.TLS = sslVersion + " (" + sslCipher + ")"
+	}
+
 	return info, nil
 }
 

@@ -402,6 +402,23 @@ func (m *SQLConfig) IsPasswordReadable() bool {
 	return err == nil
 }
 
+func (m *SQLConfig) buildDSNFromFields(password string) string {
+	switch m.GetDriver() {
+	case "mysql":
+		params := map[string]string{}
+		if m.SSLMode != "" && m.SSLMode != "false" {
+			params["tls"] = m.SSLMode
+		}
+		return util.BuildDSN("mysql", m.Host, m.Port, m.Database, m.Username, password, params)
+	default: // postgres
+		sslMode := m.SSLMode
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		return util.BuildDSN("postgres", m.Host, m.Port, m.Database, m.Username, password, map[string]string{"sslmode": sslMode})
+	}
+}
+
 // GetDSN returns the DSN from config. If the stored DSN starts with "$" it is
 // treated as an environment-variable reference and expanded via os.ExpandEnv.
 func (m *SQLConfig) GetDSN() string {
@@ -411,15 +428,7 @@ func (m *SQLConfig) GetDSN() string {
 		}
 		return m.DSN
 	}
-
-	switch m.GetDriver() {
-	default: // "postgres"
-		sslMode := m.SSLMode
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		return util.BuildPostgresDSN(m.Host, m.Port, m.Database, m.Username, m.Password, sslMode)
-	}
+	return m.buildDSNFromFields(m.Password)
 }
 
 // GetDecryptedDSN returns the DSN with decrypted password.
@@ -435,12 +444,7 @@ func (m *SQLConfig) GetDecryptedDSN() string {
 		return dsn
 	}
 
-	sslMode := m.SSLMode
-	if sslMode == "" {
-		sslMode = "disable"
-	}
-
-	return util.BuildPostgresDSN(m.Host, m.Port, m.Database, m.Username, decryptedPass, sslMode)
+	return m.buildDSNFromFields(decryptedPass)
 }
 
 // GetSafeDSN returns the DSN with password replaced by asterisks.

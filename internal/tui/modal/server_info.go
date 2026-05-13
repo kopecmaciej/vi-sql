@@ -121,6 +121,11 @@ func (s *ServerInfoModal) buildContent(info *database.ServerInfo) string {
 	// System Metrics
 	fmt.Fprintf(&sb, "[%s]─ SYSTEM METRICS %s[-]\n", label, strings.Repeat("─", sectionLine))
 	fmt.Fprintf(&sb, "  [%s]Version[-]      [%s]%s[-]\n", dim, text, info.Version)
+	if info.TLS != "" {
+		fmt.Fprintf(&sb, "  [%s]TLS[-]          [%s]%s[-]\n", dim, accent, info.TLS)
+	} else {
+		fmt.Fprintf(&sb, "  [%s]TLS[-]          [%s]none[-]\n", dim, dim)
+	}
 	if info.Uptime != "" {
 		fmt.Fprintf(&sb, "  [%s]Uptime[-]       [%s]%s[-]\n", dim, text, info.Uptime)
 	}

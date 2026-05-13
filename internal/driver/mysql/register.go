@@ -69,62 +69,64 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
+	var host, username, password, dbName, sslMode, portStr string
+	var fromURL bool
+
 	if !dsnUnchanged && trimmedDSN != "" {
 		if strings.HasPrefix(trimmedDSN, "$") {
 			if name == "" {
 				name = trimmedDSN
 			}
-			return &config.SQLConfig{
-				Driver:  "mysql",
-				Name:    name,
-				DSN:     trimmedDSN,
-				Timeout: timeout,
-			}, nil
+			return &config.SQLConfig{Driver: "mysql", Name: name, DSN: trimmedDSN, Timeout: timeout}, nil
 		}
-		parsed, err := mysqldrv.ParseDSN(trimmedDSN)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse DSN — expected user:pass@tcp(host:3306)/db: %w", err)
+		if strings.HasPrefix(trimmedDSN, "mysql://") {
+			parsed, err := util.ParseMySQLDSN(trimmedDSN)
+			if err != nil || parsed.Host == "" {
+				return nil, fmt.Errorf("could not parse host from DSN — check format: mysql://user:pass@host:3306/db")
+			}
+			host, portStr, username, password, dbName, sslMode = parsed.Host, parsed.Port, parsed.Username, parsed.Password, parsed.Database, parsed.SSLMode
+			fromURL = true
+		} else {
+			parsed, err := mysqldrv.ParseDSN(trimmedDSN)
+			if err != nil {
+				return nil, fmt.Errorf("could not parse DSN — expected user:pass@tcp(host:3306)/db or mysql://user:pass@host:3306/db: %w", err)
+			}
+			host, portStr, _ = strings.Cut(parsed.Addr, ":")
+			if portStr == "" {
+				portStr = "3306"
+			}
+			username, password, dbName, sslMode = parsed.User, parsed.Passwd, parsed.DBName, parsed.TLSConfig
 		}
-		host, portStr, _ := strings.Cut(parsed.Addr, ":")
-		if portStr == "" {
-			portStr = "3306"
-		}
-		port, _ := database.ParsePortField(portStr)
 		if name == "" {
-			name = parsed.Addr
+			name = host + ":" + portStr
 		}
-		return &config.SQLConfig{
-			Driver:   "mysql",
-			Name:     name,
-			Host:     host,
-			Port:     port,
-			Username: parsed.User,
-			Password: parsed.Passwd,
-			Database: parsed.DBName,
-			SSLMode:  parsed.TLSConfig,
-			Timeout:  timeout,
-		}, nil
+	} else {
+		host, portStr = fields["Host"], fields["Port"]
+		username, dbName, sslMode = fields["Username"], fields["Database"], fields["TLS"]
+		password = database.PreserveEncryptedPassword(fields["Password"], editConn)
+		if name == "" {
+			name = host + ":" + portStr
+		}
 	}
 
-	host := fields["Host"]
-	portStr := fields["Port"]
 	port, err := database.ParsePortField(portStr)
 	if err != nil {
 		return nil, err
 	}
-	password := database.PreserveEncryptedPassword(fields["Password"], editConn)
-	if name == "" {
-		name = host + ":" + portStr
-	}
-	return &config.SQLConfig{
+	cfg := &config.SQLConfig{
 		Driver:   "mysql",
 		Name:     name,
 		Host:     host,
 		Port:     port,
-		Username: fields["Username"],
+		Username: username,
 		Password: password,
-		Database: fields["Database"],
-		SSLMode:  fields["TLS"],
+		Database: dbName,
+		SSLMode:  sslMode,
 		Timeout:  timeout,
-	}, nil
+	}
+	if fromURL {
+		// Store safe DSN so the edit form can pre-fill the URL field, matching Postgres behaviour.
+		cfg.DSN = cfg.GetSafeDSN()
+	}
+	return cfg, nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,12 +57,36 @@ func (c *Client) buildDSN() (string, error) {
 				raw = resolved
 			}
 		}
-		cfg, err := mysqldrv.ParseDSN(raw)
-		if err != nil {
-			return "", fmt.Errorf("could not parse mysql DSN: %w", err)
+		// mysql:// URL is only used when no individual fields are set; otherwise fall through.
+		if strings.HasPrefix(raw, "mysql://") && c.Config.Host == "" {
+			parsed, err := util.ParseMySQLDSN(raw)
+			if err != nil || parsed.Host == "" {
+				return "", fmt.Errorf("could not parse mysql DSN URL: %w", err)
+			}
+			port, _ := strconv.Atoi(parsed.Port)
+			if port == 0 {
+				port = 3306
+			}
+			cfg := mysqldrv.NewConfig()
+			cfg.User = parsed.Username
+			cfg.Passwd = parsed.Password
+			cfg.Net = "tcp"
+			cfg.Addr = fmt.Sprintf("%s:%d", parsed.Host, port)
+			cfg.DBName = parsed.Database
+			if parsed.SSLMode != "" && parsed.SSLMode != "false" {
+				cfg.TLSConfig = parsed.SSLMode
+			}
+			applyConnectionDefaults(cfg)
+			return cfg.FormatDSN(), nil
 		}
-		applyConnectionDefaults(cfg)
-		return cfg.FormatDSN(), nil
+		if !strings.HasPrefix(raw, "mysql://") {
+			cfg, err := mysqldrv.ParseDSN(raw)
+			if err != nil {
+				return "", fmt.Errorf("could not parse mysql DSN: %w", err)
+			}
+			applyConnectionDefaults(cfg)
+			return cfg.FormatDSN(), nil
+		}
 	}
 
 	password := c.Config.Password
