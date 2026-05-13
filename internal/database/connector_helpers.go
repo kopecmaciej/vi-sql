@@ -8,8 +8,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
-// ParseTimeoutField parses a connection-form Timeout field as positive seconds.
-// Empty input yields fallback so callers can keep a sensible default.
+// ParseTimeoutField parses a connection-form Timeout field as seconds; empty input returns fallback.
 func ParseTimeoutField(s string, fallback int) (int, error) {
 	if s == "" {
 		return fallback, nil
@@ -21,7 +20,6 @@ func ParseTimeoutField(s string, fallback int) (int, error) {
 	return n, nil
 }
 
-// ParsePortField parses a connection-form Port field as an integer.
 func ParsePortField(s string) (int, error) {
 	n, err := strconv.Atoi(s)
 	if err != nil {
