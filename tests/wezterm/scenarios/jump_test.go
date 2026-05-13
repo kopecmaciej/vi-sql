@@ -30,8 +30,8 @@ func TestJumpFlag(t *testing.T) {
 
 	s := harness.Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
 
-	// Wait for the data tab to appear — SELECT queries are not written to the log.
-	s.WaitForPane(" rows", 10*time.Second)
+	// Wait for the results bar — ⏱ appears after any query completes.
+	s.WaitForPane("⏱", 10*time.Second)
 
 	// The tab title should contain the table name.
 	if parts := strings.SplitN(jump, "/", 2); len(parts) == 2 {
