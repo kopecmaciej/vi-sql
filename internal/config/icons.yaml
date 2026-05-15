@@ -30,6 +30,9 @@ nerd:
   completionCTE: "󰆍" # nf-md-source_branch
   completionAlias: "" # nf-fa-arrow_right
   completionFunction: "󰊕" # nf-md-function
+  driverPostgres: "" # nf-dev-postgresql
+  driverMySQL: "" # nf-dev-mysql
+  driverSQLite: "" # nf-fa-database
 ascii:
   openNode: "▾"
   closedNode: "▸"
@@ -59,3 +62,6 @@ ascii:
   completionCTE: "ct"
   completionAlias: "al"
   completionFunction: "fn"
+  driverPostgres: "PG"
+  driverMySQL: "MY"
+  driverSQLite: "SQ"

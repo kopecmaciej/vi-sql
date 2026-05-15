@@ -33,9 +33,10 @@ type ConnectionForm struct {
 
 	onSave   func()
 	onCancel func()
+	onBack   func() // non-nil when launched from DriverPicker; Esc goes back instead of cancel
 }
 
-func NewConnectionForm(conn *config.SQLConfig) *ConnectionForm {
+func NewConnectionForm(conn *config.SQLConfig, driver string) *ConnectionForm {
 	cf := &ConnectionForm{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
@@ -50,7 +51,7 @@ func NewConnectionForm(conn *config.SQLConfig) *ConnectionForm {
 		cf.editOrigName = conn.Name
 		cf.currentDriver = conn.GetDriver()
 	} else {
-		cf.currentDriver = "postgres"
+		cf.currentDriver = driver
 	}
 
 	return cf
@@ -62,6 +63,10 @@ func (cf *ConnectionForm) SetOnSaveFunc(fn func()) {
 
 func (cf *ConnectionForm) SetOnCancelFunc(fn func()) {
 	cf.onCancel = fn
+}
+
+func (cf *ConnectionForm) SetOnBackFunc(fn func()) {
+	cf.onBack = fn
 }
 
 func (cf *ConnectionForm) Init(app *core.App) error {
@@ -111,11 +116,15 @@ func (cf *ConnectionForm) Render() {
 
 func (cf *ConnectionForm) renderFooter() {
 	k := cf.App.GetKeys()
+	escDesc := "cancel"
+	if cf.onBack != nil {
+		escDesc = "back"
+	}
 	cf.footer.SetKeys([]config.Key{
 		k.Navigation.FocusUp,
 		k.Navigation.FocusDown,
 		k.Common.Confirm,
-		{Keys: []string{"Esc"}, Description: "cancel"},
+		{Keys: []string{"Esc"}, Description: escDesc},
 	})
 }
 
@@ -124,25 +133,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.currentDriver = driver
 	cf.form.Clear(true)
 
-	// Driver selector (locked to read-only text in edit mode).
-	drivers := database.ListConnectors()
-	driverIdx := 0
-	for i, d := range drivers {
-		if d == driver {
-			driverIdx = i
-			break
-		}
-	}
-	if cf.editConn != nil {
-		cf.form.AddTextView("Driver", driver, 0, 1, true, false)
-	} else {
-		cf.form.AddDropDown("Driver", drivers, driverIdx, func(option string, _ int) {
-			if option != cf.currentDriver {
-				cf.buildForm(option)
-				cf.App.SetFocus(cf.form)
-			}
-		})
-	}
+	cf.form.AddTextView("Driver", driver, 0, 1, true, false)
 
 	// Name is common to all drivers.
 	nameVal := ""
@@ -216,7 +207,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		}
 	}
 	cf.form.AddTextView("─── Options", "", 0, 1, true, false)
-	cf.form.AddInputField("Row limit", rowLimit, 0, nil, nil)
+	cf.form.AddInputField("Fetch limit", rowLimit, 0, nil, nil)
 	cf.form.AddDropDown("Confirm actions", []string{"yes", "no"}, confirmActionsIdx, nil)
 
 	saveLabel := "Save"
@@ -230,7 +221,11 @@ func (cf *ConnectionForm) buildForm(driver string) {
 	cf.form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case event.Key() == tcell.KeyEscape:
-			cf.cancel()
+			if cf.onBack != nil {
+				cf.onBack()
+			} else {
+				cf.cancel()
+			}
 			return nil
 		case k.Match(k.Common.Confirm, event):
 			_, buttonIdx := cf.form.GetFocusedItemIndex()
@@ -312,11 +307,11 @@ func (cf *ConnectionForm) collectFields(spec []database.FieldSpec) map[string]st
 func (cf *ConnectionForm) collectOptions() (config.SQLOptions, error) {
 	opts := config.SQLOptions{}
 
-	limitStr := cf.form.GetFormItemByLabel("Row limit").(*tview.InputField).GetText()
+	limitStr := cf.form.GetFormItemByLabel("Fetch limit").(*tview.InputField).GetText()
 	if limitStr != "" {
 		n, err := strconv.ParseInt(limitStr, 10, 64)
 		if err != nil {
-			return opts, fmt.Errorf("row limit must be a number")
+			return opts, fmt.Errorf("fetch limit must be a number")
 		}
 		opts.Limit = &n
 	}

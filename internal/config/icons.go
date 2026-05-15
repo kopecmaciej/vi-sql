@@ -55,6 +55,24 @@ type IconStyle struct {
 	CompletionCTE      Style `yaml:"completionCTE"`
 	CompletionAlias    Style `yaml:"completionAlias"`
 	CompletionFunction Style `yaml:"completionFunction"`
+
+	DriverPostgres Style `yaml:"driverPostgres"`
+	DriverMySQL    Style `yaml:"driverMySQL"`
+	DriverSQLite   Style `yaml:"driverSQLite"`
+}
+
+// DriverIcon returns the icon glyph for the named driver, or empty string if unknown.
+func (s *IconStyle) DriverIcon(driver string) string {
+	switch driver {
+	case "postgres":
+		return string(s.DriverPostgres)
+	case "mysql":
+		return string(s.DriverMySQL)
+	case "sqlite":
+		return string(s.DriverSQLite)
+	default:
+		return ""
+	}
 }
 
 // TypeSymbol returns the icon for a given SQL data type.

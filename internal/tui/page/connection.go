@@ -100,13 +100,13 @@ func (c *Connection) setKeybindings() {
 		case k.Match(k.Common.Select, event):
 			row, _ := c.table.GetSelection()
 			if row >= c.table.GetRowCount()-1 {
-				c.openAddForm()
+				c.openDriverPicker()
 			} else {
 				c.setConnection()
 			}
 			return nil
 		case k.Match(k.Common.Add, event):
-			c.openAddForm()
+			c.openDriverPicker()
 			return nil
 		case k.Match(k.Common.Delete, event):
 			c.deleteCurrConnection()
@@ -119,8 +119,27 @@ func (c *Connection) setKeybindings() {
 	}))
 }
 
-func (c *Connection) openAddForm() {
-	form := NewConnectionForm(nil)
+func (c *Connection) openDriverPicker() {
+	picker := NewDriverPicker()
+	if err := picker.Init(c.App); err != nil {
+		modal.ShowError(c.App.Pages, "Failed to init driver picker", err)
+		return
+	}
+	picker.SetOnSelectFunc(func(driver string) {
+		c.App.Pages.RemovePage(DriverPickerPageId)
+		c.openAddFormWithDriver(driver)
+	})
+	picker.SetOnCancelFunc(func() {
+		c.App.Pages.RemovePage(DriverPickerPageId)
+		c.App.SetFocus(c.table)
+	})
+	picker.Render()
+	c.App.Pages.AddPage(DriverPickerPageId, picker, true, true)
+	c.App.SetFocusOnly(picker.buttons)
+}
+
+func (c *Connection) openAddFormWithDriver(driver string) {
+	form := NewConnectionForm(nil, driver)
 	if err := form.Init(c.App); err != nil {
 		modal.ShowError(c.App.Pages, "Failed to init connection form", err)
 		return
@@ -135,8 +154,13 @@ func (c *Connection) openAddForm() {
 		c.App.Pages.RemovePage(ConnectionFormPageId)
 		c.App.SetFocus(c.table)
 	})
+	form.SetOnBackFunc(func() {
+		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.openDriverPicker()
+	})
 	form.Render()
 	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.SetFocusOnly(form.form)
 }
 
 func (c *Connection) openEditForm() {
@@ -155,7 +179,7 @@ func (c *Connection) openEditForm() {
 		return
 	}
 
-	form := NewConnectionForm(conn)
+	form := NewConnectionForm(conn, "")
 	if err := form.Init(c.App); err != nil {
 		modal.ShowError(c.App.Pages, "Failed to init connection form", err)
 		return
@@ -172,6 +196,7 @@ func (c *Connection) openEditForm() {
 	})
 	form.Render()
 	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.SetFocusOnly(form.form)
 }
 
 func (c *Connection) Render() {
@@ -202,7 +227,7 @@ func (c *Connection) Render() {
 		if c.table.GetRowCount() > 2 {
 			defer c.App.SetFocus(c.table)
 		} else {
-			defer c.openAddForm()
+			defer c.openDriverPicker()
 		}
 	}
 }

@@ -4,7 +4,9 @@
 
 ---
 
-A terminal UI for PostgreSQL and SQLite — built for keyboard-driven workflows. Browse schemas, write and run SQL, inspect query plans, edit rows, and expose your session to AI tools via a built-in MCP server.
+A terminal UI for SQL databases — built for keyboard-driven workflows. Browse schemas, write and run SQL, inspect query plans, edit rows, and expose your session to AI tools via a built-in MCP server.
+
+**Supported databases:** PostgreSQL · SQLite · MySQL
 
 ![Query image](./assets/query_autocomplete.png)
 ![Actions image](./assets/actions.png)
