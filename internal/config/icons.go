@@ -61,7 +61,6 @@ type IconStyle struct {
 	DriverSQLite   Style `yaml:"driverSQLite"`
 }
 
-// DriverIcon returns the icon glyph for the named driver, or empty string if unknown.
 func (s *IconStyle) DriverIcon(driver string) string {
 	switch driver {
 	case "postgres":
