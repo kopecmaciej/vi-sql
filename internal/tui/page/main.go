@@ -259,6 +259,7 @@ func (m *Main) openNewQueryTabWithRequest(req manager.OpenQueryTabRequest) {
 	}
 	tab := m.queryTabs[len(m.queryTabs)-1]
 	tab.SetEditorText(req.Query)
+	tab.EnterNormalMode()
 }
 
 func (m *Main) openNewQueryTabWithQuery(query string, execute bool) {

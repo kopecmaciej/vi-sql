@@ -10,6 +10,7 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/build"
 	"github.com/kopecmaciej/vi-sql/internal/config"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/mariadb"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlite"
@@ -141,13 +142,6 @@ func runApp(cmd *cobra.Command, args []string) {
 		}
 	})
 
-	// Master-mode loading is deferred so the user is prompted via an in-app modal.
-	if cfg.Security.Method != config.SecurityMethodMaster {
-		if err := cfg.LoadEncryptionKey(); err != nil {
-			fatalf("loading encryption key: %v", err)
-		}
-	}
-
 	logLevel := zerolog.InfoLevel
 	if debug {
 		logLevel = zerolog.DebugLevel
@@ -160,6 +154,12 @@ func runApp(cmd *cobra.Command, args []string) {
 			fmt.Printf("\nError closing log file %s, error: %s", cfg.Log.Path, err)
 		}
 	}()
+	// Master-mode loading is deferred so the user is prompted via an in-app modal.
+	if cfg.Security.Method != config.SecurityMethodMaster {
+		if err := cfg.LoadEncryptionKey(); err != nil {
+			fatalf("loading encryption key: %v", err)
+		}
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			log.Error().

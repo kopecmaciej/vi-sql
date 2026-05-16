@@ -556,6 +556,8 @@ func (c *Data) SetEditorTextAndExecute(text string) {
 
 func (c *Data) GetEditorText() string { return c.sqlQueryEditor.GetText() }
 
+func (c *Data) EnterNormalMode() { c.sqlQueryEditor.EnterNormalMode() }
+
 // GetFocusPrimitive returns the inner primitive that should receive focus
 // when this tab is activated from outside (e.g. tab switching).
 func (c *Data) GetFocusPrimitive() tview.Primitive {

@@ -142,6 +142,12 @@ func (e *SQLQueryEditor) IsVisualMode() bool {
 	return e.vim != nil && (e.vim.mode == vimVisual || e.vim.mode == vimVisualLine)
 }
 
+func (e *SQLQueryEditor) EnterNormalMode() {
+	if e.vim != nil {
+		e.vim.transitionTo(vimNormal)
+	}
+}
+
 func (e *SQLQueryEditor) setStyle() {
 	styles := e.App.GetStyles()
 	e.TextArea.SetStyle(styles)
