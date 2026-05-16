@@ -32,7 +32,8 @@ nerd:
   completionFunction: "󰊕" # nf-md-function
   driverPostgres: "" # nf-dev-postgresql
   driverMySQL: "" # nf-dev-mysql
-  driverSQLite: "" # nf-fa-database
+  driverSQLite: "" # nf-dev-sqlite
+  driverMariaDB: "" # nf-dev-mariadb
 ascii:
   openNode: "▾"
   closedNode: "▸"
@@ -64,4 +65,5 @@ ascii:
   completionFunction: "fn"
   driverPostgres: "PG"
   driverMySQL: "MY"
+  driverMariaDB: "MA"
   driverSQLite: "SQ"

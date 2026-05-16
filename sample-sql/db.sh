@@ -23,6 +23,14 @@ MY_DB="tui_sample_db"
 MY_PORT="3306"
 MY_SQL="sample.mysql.sql"
 
+# MariaDB config
+MARIA_CONTAINER="tui-mariadb"
+MARIA_USER="root"
+MARIA_PASSWORD="mariadb"
+MARIA_DB="tui_sample_db"
+MARIA_PORT="3307"
+MARIA_SQL="sample.mariadb.sql"
+
 usage() {
   echo "Usage: $0 <command>"
   echo ""
@@ -38,6 +46,10 @@ usage() {
   echo "  mysql stop        Stop MySQL container"
   echo "  mysql rm          Remove MySQL container"
   echo "  mysql url         Print MySQL connection strings"
+  echo "  mariadb up        Start MariaDB container and load sample data"
+  echo "  mariadb stop      Stop MariaDB container"
+  echo "  mariadb rm        Remove MariaDB container"
+  echo "  mariadb url       Print MariaDB connection strings"
   echo "  stop-all          Stop all containers"
   echo "  rm-all            Remove all containers"
   echo "  clean             Stop and remove all containers"
@@ -215,16 +227,70 @@ mysql_url() {
   echo "TLS require: mysql://$MY_USER:$MY_PASSWORD@localhost:$MY_PORT/$MY_DB?tls=true"
 }
 
+mariadb_up() {
+  if [ ! -f "$MARIA_SQL" ]; then
+    echo "Error: $MARIA_SQL not found"
+    exit 1
+  fi
+
+  echo "Removing old container (if exists)..."
+  docker rm -f $MARIA_CONTAINER 2>/dev/null || true
+
+  echo "Starting MariaDB..."
+  docker run -d \
+    --name $MARIA_CONTAINER \
+    -e MARIADB_ROOT_PASSWORD=$MARIA_PASSWORD \
+    -e MARIADB_DATABASE=$MARIA_DB \
+    -p $MARIA_PORT:3306 \
+    mariadb:11
+
+  echo "Waiting for MariaDB..."
+  until docker exec $MARIA_CONTAINER mariadb-admin ping -u $MARIA_USER -p$MARIA_PASSWORD --silent 2>/dev/null; do
+    sleep 2
+  done
+
+  echo "Copying SQL file..."
+  docker cp $MARIA_SQL $MARIA_CONTAINER:/sample.sql
+
+  echo "Executing SQL..."
+  docker exec -i $MARIA_CONTAINER mariadb -u $MARIA_USER -p$MARIA_PASSWORD $MARIA_DB -e "source /sample.sql"
+
+  echo "Verifying tables..."
+  docker exec -it $MARIA_CONTAINER mariadb -u $MARIA_USER -p$MARIA_PASSWORD $MARIA_DB -e "SHOW TABLES;"
+
+  echo
+  echo "MariaDB is ready on port $MARIA_PORT"
+  mariadb_url
+}
+
+mariadb_stop() {
+  echo "Stopping MariaDB..."
+  docker stop $MARIA_CONTAINER 2>/dev/null || echo "Container not running"
+}
+
+mariadb_rm() {
+  echo "Removing MariaDB container..."
+  docker rm -f $MARIA_CONTAINER 2>/dev/null || echo "Container not found"
+}
+
+mariadb_url() {
+  echo "Plain:       mariadb://$MARIA_USER:$MARIA_PASSWORD@localhost:$MARIA_PORT/$MARIA_DB"
+  echo "TLS skip:    mariadb://$MARIA_USER:$MARIA_PASSWORD@localhost:$MARIA_PORT/$MARIA_DB?tls=skip-verify"
+  echo "TLS prefer:  mariadb://$MARIA_USER:$MARIA_PASSWORD@localhost:$MARIA_PORT/$MARIA_DB?tls=preferred"
+}
+
 stop_all() {
   postgres_stop
   postgres_stop_ssl
   mysql_stop
+  mariadb_stop
 }
 
 rm_all() {
   postgres_rm
   postgres_rm_ssl
   mysql_rm
+  mariadb_rm
 }
 
 clean() {
@@ -251,6 +317,15 @@ case "$1" in
       stop) mysql_stop ;;
       rm)   mysql_rm ;;
       url)  mysql_url ;;
+      *)    usage ;;
+    esac
+    ;;
+  mariadb)
+    case "$2" in
+      up)   mariadb_up ;;
+      stop) mariadb_stop ;;
+      rm)   mariadb_rm ;;
+      url)  mariadb_url ;;
       *)    usage ;;
     esac
     ;;

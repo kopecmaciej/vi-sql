@@ -429,12 +429,12 @@ func (m *SQLConfig) IsPasswordReadable() bool {
 
 func (m *SQLConfig) buildDSNFromFields(password string) string {
 	switch m.GetDriver() {
-	case "mysql":
+	case "mysql", "mariadb":
 		params := map[string]string{}
 		if m.SSLMode != "" && m.SSLMode != "false" {
 			params["tls"] = m.SSLMode
 		}
-		return util.BuildDSN("mysql", m.Host, m.Port, m.Database, m.Username, password, params)
+		return util.BuildDSN(m.GetDriver(), m.Host, m.Port, m.Database, m.Username, password, params)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {

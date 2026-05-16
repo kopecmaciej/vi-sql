@@ -22,10 +22,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Keys:        []string{"Enter", "Space"},
 			Description: "Select",
 		},
-		Confirm: Key{
-			Keys:        []string{"Ctrl+s"},
-			Description: "Confirm",
-		},
 		Refresh: Key{
 			Keys:        []string{"Ctrl+r"},
 			Description: "Refresh",
@@ -41,7 +37,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 	}
 
 	if vimMode {
-		k.Common.Confirm = Key{Sequences: []string{"Ctrl+s"}, Description: "Confirm"}
+		k.Common.Confirm = Key{Keys: []string{"Ctrl+s"}, Description: "Confirm"}
 		k.Common.Delete = Key{Sequences: []string{"dd"}, Description: "Delete"}
 		k.Common.Copy = Key{Sequences: []string{"yy"}, Description: "Copy"}
 

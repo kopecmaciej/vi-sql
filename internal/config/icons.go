@@ -58,6 +58,7 @@ type IconStyle struct {
 
 	DriverPostgres Style `yaml:"driverPostgres"`
 	DriverMySQL    Style `yaml:"driverMySQL"`
+	DriverMariaDB  Style `yaml:"driverMariaDB"`
 	DriverSQLite   Style `yaml:"driverSQLite"`
 }
 
@@ -67,6 +68,8 @@ func (s *IconStyle) DriverIcon(driver string) string {
 		return string(s.DriverPostgres)
 	case "mysql":
 		return string(s.DriverMySQL)
+	case "mariadb":
+		return string(s.DriverMariaDB)
 	case "sqlite":
 		return string(s.DriverSQLite)
 	default:

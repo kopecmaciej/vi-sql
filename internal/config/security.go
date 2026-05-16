@@ -54,6 +54,10 @@ func (c *Config) LoadEncryptionKey() error {
 }
 
 func (c *Config) loadKeyringKey() error {
+	if !sec.IsKeyringAvailable() {
+		log.Debug().Msg("Keyring backend not available — connection passwords will not be decrypted. Switch to a different encryption method in Options.")
+		return nil
+	}
 	key, err := sec.GetOrCreateKey(c.Security.KeyringService, c.Security.KeyringAccount)
 	if err != nil {
 		return fmt.Errorf("keyring unavailable: %w", err)
