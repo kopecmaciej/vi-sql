@@ -57,10 +57,12 @@ type IconStyle struct {
 	CompletionAlias    Style `yaml:"completionAlias"`
 	CompletionFunction Style `yaml:"completionFunction"`
 
-	DriverPostgres Style `yaml:"driverPostgres"`
-	DriverMySQL    Style `yaml:"driverMySQL"`
-	DriverMariaDB  Style `yaml:"driverMariaDB"`
-	DriverSQLite   Style `yaml:"driverSQLite"`
+	DriverPostgres    Style `yaml:"driverPostgres"`
+	DriverMySQL       Style `yaml:"driverMySQL"`
+	DriverMariaDB     Style `yaml:"driverMariaDB"`
+	DriverSQLite      Style `yaml:"driverSQLite"`
+	DriverCockroachDB Style `yaml:"driverCockroachDB"`
+	DriverDefault     Style `yaml:"driverDefault"`
 }
 
 func (s *IconStyle) DriverIcon(driver string) string {
@@ -73,8 +75,10 @@ func (s *IconStyle) DriverIcon(driver string) string {
 		return string(s.DriverMariaDB)
 	case "sqlite":
 		return string(s.DriverSQLite)
+	case "cockroachdb":
+		return string(s.DriverCockroachDB)
 	default:
-		return ""
+		return string(s.DriverDefault)
 	}
 }
 

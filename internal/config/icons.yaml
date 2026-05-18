@@ -34,6 +34,8 @@ nerd:
   driverMySQL: "" # nf-dev-mysql
   driverSQLite: "" # nf-dev-sqlite
   driverMariaDB: "" # nf-dev-mariadb
+  driverCockroachDB: "" # nf-fa-database
+  driverDefault: "" # nf-fa-database
   update: "" # nf-fa-arrow_circle_up
 ascii:
   openNode: "▾"
@@ -68,4 +70,6 @@ ascii:
   driverMySQL: "MY"
   driverMariaDB: "MA"
   driverSQLite: "SQ"
+  driverCockroachDB: "CR"
+  driverDefault: "DB"
   update: "↑"
