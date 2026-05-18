@@ -5,7 +5,7 @@ global:
   textColor: "#E2E8F0"
   secondaryTextColor: "#FDE68A"
   borderColor: "#2D6335"
-  focusColor: "#449650"
+  focusColor: "#4ADE80"
   titleColor: "#387D44"
   graphicsColor: "#387D44"
   dimColor: "#64748B"

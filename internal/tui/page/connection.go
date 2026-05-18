@@ -135,7 +135,7 @@ func (c *Connection) openDriverPicker() {
 	})
 	picker.Render()
 	c.App.Pages.AddPage(DriverPickerPageId, picker, true, true)
-	c.App.SetFocusOnly(picker.buttons)
+	c.App.SetFocusOnly(picker)
 }
 
 func (c *Connection) openAddFormWithDriver(driver string) {
