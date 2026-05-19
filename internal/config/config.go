@@ -41,14 +41,6 @@ type SQLConfig struct {
 	LastUsed time.Time  `yaml:"lastUsed,omitempty"`
 }
 
-// GetDriver returns the configured driver name, defaulting to "postgres".
-func (m *SQLConfig) GetDriver() string {
-	if m.Driver == "" {
-		return "postgres"
-	}
-	return m.Driver
-}
-
 type LogConfig struct {
 	Path        string `yaml:"path"`
 	Level       string `yaml:"level"`
@@ -80,6 +72,12 @@ type MCPConfig struct {
 	MaxRows      int  `yaml:"maxRows,omitempty"`
 }
 
+// PendingConnect carries a --connect/--name request from the CLI through to
+type PendingConnect struct {
+	Name string
+	DSN  string
+}
+
 type Config struct {
 	Version            string          `yaml:"version"`
 	Log                LogConfig       `yaml:"log"`
@@ -96,14 +94,6 @@ type Config struct {
 	ConfigPath         string          `yaml:"-"`
 	FirstLaunch        bool            `yaml:"-"`
 	PendingConnect     *PendingConnect `yaml:"-"`
-}
-
-// PendingConnect carries a --connect/--name request from the CLI through to
-// the TUI startup path, so the connection is added via the same flow as the
-// connection form (after the encryption key / master unlock is available).
-type PendingConnect struct {
-	Name string
-	DSN  string
 }
 
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
@@ -422,6 +412,13 @@ func (c *Config) GetConnectionByName(name string) (*SQLConfig, error) {
 		}
 	}
 	return nil, fmt.Errorf("connection '%s' not found", name)
+}
+
+func (m *SQLConfig) GetDriver() string {
+	if m.Driver == "" {
+		return "postgres"
+	}
+	return m.Driver
 }
 
 func (m *SQLConfig) IsPasswordReadable() bool {

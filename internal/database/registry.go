@@ -78,9 +78,7 @@ func ListConnectors() []string {
 	return names
 }
 
-// BuildConfigFromDSN detects the driver from the DSN scheme and runs the
-// registered ConnectorDef.BuildConfig to produce a populated SQLConfig — the
-// same path the connection form uses when only the DSN field is filled.
+// BuildConfigFromDSN detects the sql driver and build SQLConfig
 // An empty name defaults to the detected driver name.
 func BuildConfigFromDSN(name, dsn string) (*config.SQLConfig, error) {
 	driver, err := util.DetectDriverFromDSN(dsn)

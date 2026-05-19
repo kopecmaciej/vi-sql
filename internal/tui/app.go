@@ -330,10 +330,7 @@ func (a *App) continueStartup() {
 	go a.checkForUpdate()
 }
 
-// applyPendingConnect persists a --connect/--name request once the encryption
-// key is loaded (either eagerly for keyring/env/off or after master unlock).
-// Uses the same database.BuildConfigFromDSN + Config.AddConnection path as the
-// connection form, so the password is encrypted under the configured method.
+// applyPendingConnect adds connection passed via --connect/--name flag
 func applyPendingConnect(cfg *config.Config) error {
 	if cfg.PendingConnect == nil {
 		return nil

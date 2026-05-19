@@ -19,11 +19,6 @@ func TestApplyPendingConnect_NoopWhenAbsent(t *testing.T) {
 	assert.Empty(t, cfg.CurrentConnection)
 }
 
-// TestApplyPendingConnect_PersistsAndEncrypts is the regression test for the
-// original --connect bug. It mirrors the runtime ordering: cmd.go stashes a
-// PendingConnect, runApp loads the encryption key, then continueStartup calls
-// applyPendingConnect. The persisted password must NOT appear in plaintext on
-// disk, and the connection must survive a reload.
 func TestApplyPendingConnect_PersistsAndEncrypts(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.yaml")

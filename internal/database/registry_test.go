@@ -1,5 +1,3 @@
-// Package database_test is an external test package so the driver register
-// imports below don't create a cycle (drivers import internal/database).
 package database_test
 
 import (
@@ -26,10 +24,6 @@ func TestBuildConfigFromDSN_ExplicitNamePreserved(t *testing.T) {
 	assert.Equal(t, "my-pg", cfg.Name)
 }
 
-// TestBuildConfigFromDSN_PostgresTimeoutNonZero is the regression test for the
-// original --connect crash: with Timeout=0 the postgres client's
-// context.WithTimeout expired immediately. BuildConfig must default to a
-// non-zero timeout.
 func TestBuildConfigFromDSN_PostgresTimeoutNonZero(t *testing.T) {
 	cfg, err := database.BuildConfigFromDSN("my-conn", "postgresql://user:pass@localhost:5432/mydb")
 	require.NoError(t, err)
