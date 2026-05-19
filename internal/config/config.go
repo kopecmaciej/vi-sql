@@ -81,20 +81,29 @@ type MCPConfig struct {
 }
 
 type Config struct {
-	Version            string         `yaml:"version"`
-	Log                LogConfig      `yaml:"log"`
-	Editor             EditorConfig   `yaml:"editor"`
-	UI                 UIConfig       `yaml:"ui"`
-	MCP                MCPConfig      `yaml:"mcp"`
-	Security           SecurityConfig `yaml:"security"`
-	ShowConnectionPage bool           `yaml:"showConnectionPage"`
-	ShowOptionsPage    bool           `yaml:"-"`
-	CurrentConnection  string         `yaml:"currentConnection"`
-	Connections        []SQLConfig    `yaml:"connections"`
-	Styles             StylesConfig   `yaml:"styles"`
-	JumpInto           string         `yaml:"-"`
-	ConfigPath         string         `yaml:"-"`
-	FirstLaunch        bool           `yaml:"-"`
+	Version            string          `yaml:"version"`
+	Log                LogConfig       `yaml:"log"`
+	Editor             EditorConfig    `yaml:"editor"`
+	UI                 UIConfig        `yaml:"ui"`
+	MCP                MCPConfig       `yaml:"mcp"`
+	Security           SecurityConfig  `yaml:"security"`
+	ShowConnectionPage bool            `yaml:"showConnectionPage"`
+	ShowOptionsPage    bool            `yaml:"-"`
+	CurrentConnection  string          `yaml:"currentConnection"`
+	Connections        []SQLConfig     `yaml:"connections"`
+	Styles             StylesConfig    `yaml:"styles"`
+	JumpInto           string          `yaml:"-"`
+	ConfigPath         string          `yaml:"-"`
+	FirstLaunch        bool            `yaml:"-"`
+	PendingConnect     *PendingConnect `yaml:"-"`
+}
+
+// PendingConnect carries a --connect/--name request from the CLI through to
+// the TUI startup path, so the connection is added via the same flow as the
+// connection form (after the encryption key / master unlock is available).
+type PendingConnect struct {
+	Name string
+	DSN  string
 }
 
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {

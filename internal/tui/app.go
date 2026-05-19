@@ -315,6 +315,10 @@ func (a *App) gateOnMasterPassword(next func()) {
 }
 
 func (a *App) continueStartup() {
+	if err := applyPendingConnect(a.App.GetConfig()); err != nil {
+		modal.ShowError(a.Pages, "Failed to add --connect connection", err)
+		a.App.GetConfig().ShowConnectionPage = true
+	}
 	switch {
 	case a.App.GetConfig().ShowOptionsPage:
 		a.renderOptionsOnStartup()
@@ -324,6 +328,28 @@ func (a *App) continueStartup() {
 		a.initAndRenderMain()
 	}
 	go a.checkForUpdate()
+}
+
+// applyPendingConnect persists a --connect/--name request once the encryption
+// key is loaded (either eagerly for keyring/env/off or after master unlock).
+// Uses the same database.BuildConfigFromDSN + Config.AddConnection path as the
+// connection form, so the password is encrypted under the configured method.
+func applyPendingConnect(cfg *config.Config) error {
+	if cfg.PendingConnect == nil {
+		return nil
+	}
+	pc := cfg.PendingConnect
+	cfg.PendingConnect = nil
+
+	conn, err := database.BuildConfigFromDSN(pc.Name, pc.DSN)
+	if err != nil {
+		return err
+	}
+	if err := cfg.AddConnection(conn); err != nil {
+		return err
+	}
+	cfg.CurrentConnection = conn.Name
+	return nil
 }
 
 func getPendingChangelog(lastVersion string) []util.ChangelogEntry {
