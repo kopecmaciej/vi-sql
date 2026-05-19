@@ -35,6 +35,7 @@ var (
 	jumpInto            string
 	resetMasterPassword bool
 	connectDSN          string
+	connectName         string
 	rootCmd             = &cobra.Command{
 		Use:   "vi-sql",
 		Short: "SQL TUI client",
@@ -64,12 +65,17 @@ func init() {
 	rootCmd.Flags().StringVarP(&jumpInto, "jump", "j", "", "Jump directly to schema/table (format: schema-name/table-name)")
 	rootCmd.Flags().BoolVar(&resetMasterPassword, "reset-master-password", false, "Reset master password (clears wrapped key and erases encrypted connection passwords)")
 	rootCmd.Flags().StringVar(&connectDSN, "connect", "", "Connect directly using a DSN (e.g. postgresql://user:pass@host/db, file:/home/user/sqlite.db)")
+	rootCmd.Flags().StringVar(&connectName, "name", "", "Name for the --connect connection (defaults to driver name)")
 }
 
 func runApp(cmd *cobra.Command, args []string) {
 	if ok, _ := cmd.Flags().GetBool("paths"); ok {
 		printPaths()
 		os.Exit(0)
+	}
+
+	if cmd.Flags().Changed("name") && !cmd.Flags().Changed("connect") {
+		fatalf("--name can only be used with --connect")
 	}
 
 	if showVersion {
