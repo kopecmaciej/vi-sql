@@ -72,28 +72,22 @@ type MCPConfig struct {
 	MaxRows      int  `yaml:"maxRows,omitempty"`
 }
 
-// PendingConnect carries a --connect/--name request from the CLI through to
-type PendingConnect struct {
-	Name string
-	DSN  string
-}
-
 type Config struct {
-	Version            string          `yaml:"version"`
-	Log                LogConfig       `yaml:"log"`
-	Editor             EditorConfig    `yaml:"editor"`
-	UI                 UIConfig        `yaml:"ui"`
-	MCP                MCPConfig       `yaml:"mcp"`
-	Security           SecurityConfig  `yaml:"security"`
-	ShowConnectionPage bool            `yaml:"showConnectionPage"`
-	ShowOptionsPage    bool            `yaml:"-"`
-	CurrentConnection  string          `yaml:"currentConnection"`
-	Connections        []SQLConfig     `yaml:"connections"`
-	Styles             StylesConfig    `yaml:"styles"`
-	JumpInto           string          `yaml:"-"`
-	ConfigPath         string          `yaml:"-"`
-	FirstLaunch        bool            `yaml:"-"`
-	PendingConnect     *PendingConnect `yaml:"-"`
+	Version            string         `yaml:"version"`
+	Log                LogConfig      `yaml:"log"`
+	Editor             EditorConfig   `yaml:"editor"`
+	UI                 UIConfig       `yaml:"ui"`
+	MCP                MCPConfig      `yaml:"mcp"`
+	Security           SecurityConfig `yaml:"security"`
+	ShowConnectionPage bool           `yaml:"showConnectionPage"`
+	ShowOptionsPage    bool           `yaml:"-"`
+	CurrentConnection  string         `yaml:"currentConnection"`
+	Connections        []SQLConfig    `yaml:"connections"`
+	Styles             StylesConfig   `yaml:"styles"`
+	JumpInto           string         `yaml:"-"`
+	ConfigPath         string         `yaml:"-"`
+	FirstLaunch        bool           `yaml:"-"`
+	PendingConnect     string         `yaml:"-"`
 }
 
 func LoadConfigWithVersion(version string, customPath string) (*Config, error) {

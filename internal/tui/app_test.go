@@ -32,14 +32,11 @@ func TestApplyPendingConnect_PersistsAndEncrypts(t *testing.T) {
 	// Simulate runApp state right after LoadEncryptionKey.
 	config.EncryptionKey = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 
-	cfg.PendingConnect = &config.PendingConnect{
-		Name: "mysql2",
-		DSN:  "mysql://root:topsecret@localhost:3306/tui_sample_db",
-	}
+	cfg.PendingConnect = "myconn=mysql://root:topsecret@localhost:3306/tui_sample_db"
 
 	require.NoError(t, applyPendingConnect(cfg))
-	assert.Nil(t, cfg.PendingConnect, "PendingConnect must be consumed")
-	assert.Equal(t, "mysql2", cfg.CurrentConnection)
+	assert.Empty(t, cfg.PendingConnect, "PendingConnect must be consumed")
+	assert.Equal(t, "myconn", cfg.CurrentConnection)
 
 	raw, err := os.ReadFile(cfgPath)
 	require.NoError(t, err)
@@ -49,7 +46,7 @@ func TestApplyPendingConnect_PersistsAndEncrypts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, reloaded.Connections, 1)
 	conn := reloaded.Connections[0]
-	assert.Equal(t, "mysql2", conn.Name)
+	assert.Equal(t, "myconn", conn.Name)
 	assert.Equal(t, "mysql", conn.Driver)
 	assert.Equal(t, "localhost", conn.Host)
 	assert.Equal(t, 3306, conn.Port)
@@ -57,9 +54,7 @@ func TestApplyPendingConnect_PersistsAndEncrypts(t *testing.T) {
 }
 
 func TestApplyPendingConnect_InvalidDSN(t *testing.T) {
-	cfg := &config.Config{
-		PendingConnect: &config.PendingConnect{Name: "x", DSN: "ftp://nope"},
-	}
+	cfg := &config.Config{PendingConnect: "bad=ftp://nope"}
 	assert.Error(t, applyPendingConnect(cfg))
 }
 

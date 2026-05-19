@@ -330,15 +330,17 @@ func (a *App) continueStartup() {
 	go a.checkForUpdate()
 }
 
-// applyPendingConnect adds connection passed via --connect/--name flag
+// applyPendingConnect adds a connection passed via --connect.
 func applyPendingConnect(cfg *config.Config) error {
-	if cfg.PendingConnect == nil {
+	if cfg.PendingConnect == "" {
 		return nil
 	}
-	pc := cfg.PendingConnect
-	cfg.PendingConnect = nil
+	raw := cfg.PendingConnect
+	cfg.PendingConnect = ""
 
-	conn, err := database.BuildConfigFromDSN(pc.Name, pc.DSN)
+	// PendingConnect is stored as "name=dsn" by cmd.go after name resolution.
+	name, dsn, _ := strings.Cut(raw, "=")
+	conn, err := database.BuildConfigFromDSN(name, dsn)
 	if err != nil {
 		return err
 	}
