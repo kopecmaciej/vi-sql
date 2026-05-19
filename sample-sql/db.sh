@@ -31,28 +31,40 @@ MARIA_DB="tui_sample_db"
 MARIA_PORT="3307"
 MARIA_SQL="sample.mariadb.sql"
 
+# CockroachDB config
+CRDB_CONTAINER="tui-cockroachdb"
+CRDB_USER="root"
+CRDB_DB="tui_sample_db"
+CRDB_PORT="26257"
+CRDB_HTTP_PORT="8080"
+CRDB_SQL="sample.cockroach.sql"
+
 usage() {
   echo "Usage: $0 <command>"
   echo ""
   echo "Commands:"
-  echo "  postgres up       Start PostgreSQL container and load sample data"
-  echo "  postgres up-ssl   Start PostgreSQL container with SSL (port $PG_SSL_PORT) and load sample data"
-  echo "  postgres stop     Stop PostgreSQL container"
-  echo "  postgres stop-ssl Stop PostgreSQL SSL container"
-  echo "  postgres rm       Remove PostgreSQL container"
-  echo "  postgres rm-ssl   Remove PostgreSQL SSL container and cert volume"
-  echo "  postgres url      Print PostgreSQL connection strings"
-  echo "  mysql up          Start MySQL container and load sample data"
-  echo "  mysql stop        Stop MySQL container"
-  echo "  mysql rm          Remove MySQL container"
-  echo "  mysql url         Print MySQL connection strings"
-  echo "  mariadb up        Start MariaDB container and load sample data"
-  echo "  mariadb stop      Stop MariaDB container"
-  echo "  mariadb rm        Remove MariaDB container"
-  echo "  mariadb url       Print MariaDB connection strings"
-  echo "  stop-all          Stop all containers"
-  echo "  rm-all            Remove all containers"
-  echo "  clean             Stop and remove all containers"
+  echo "  postgres up         Start PostgreSQL container and load sample data"
+  echo "  postgres up-ssl     Start PostgreSQL container with SSL (port $PG_SSL_PORT) and load sample data"
+  echo "  postgres stop       Stop PostgreSQL container"
+  echo "  postgres stop-ssl   Stop PostgreSQL SSL container"
+  echo "  postgres rm         Remove PostgreSQL container"
+  echo "  postgres rm-ssl     Remove PostgreSQL SSL container and cert volume"
+  echo "  postgres url        Print PostgreSQL connection strings"
+  echo "  mysql up            Start MySQL container and load sample data"
+  echo "  mysql stop          Stop MySQL container"
+  echo "  mysql rm            Remove MySQL container"
+  echo "  mysql url           Print MySQL connection strings"
+  echo "  mariadb up          Start MariaDB container and load sample data"
+  echo "  mariadb stop        Stop MariaDB container"
+  echo "  mariadb rm          Remove MariaDB container"
+  echo "  mariadb url         Print MariaDB connection strings"
+  echo "  cockroachdb up      Start CockroachDB container and load sample data"
+  echo "  cockroachdb stop    Stop CockroachDB container"
+  echo "  cockroachdb rm      Remove CockroachDB container"
+  echo "  cockroachdb url     Print CockroachDB connection strings"
+  echo "  stop-all            Stop all containers"
+  echo "  rm-all              Remove all containers"
+  echo "  clean               Stop and remove all containers"
   exit 1
 }
 
@@ -279,11 +291,69 @@ mariadb_url() {
   echo "TLS prefer:  mariadb://$MARIA_USER:$MARIA_PASSWORD@localhost:$MARIA_PORT/$MARIA_DB?tls=preferred"
 }
 
+cockroachdb_up() {
+  if [ ! -f "$CRDB_SQL" ]; then
+    echo "Error: $CRDB_SQL not found"
+    exit 1
+  fi
+
+  echo "Removing old container (if exists)..."
+  docker rm -f $CRDB_CONTAINER 2>/dev/null || true
+
+  echo "Starting CockroachDB..."
+  docker run -d \
+    --name $CRDB_CONTAINER \
+    -p $CRDB_PORT:26257 \
+    -p $CRDB_HTTP_PORT:8080 \
+    cockroachdb/cockroach:latest-v24.3 \
+    start-single-node --insecure
+
+  echo "Waiting for CockroachDB..."
+  until docker exec $CRDB_CONTAINER cockroach sql --insecure --execute "SELECT 1" > /dev/null 2>&1; do
+    sleep 2
+  done
+
+  echo "Creating database..."
+  docker exec $CRDB_CONTAINER cockroach sql --insecure \
+    --execute "CREATE DATABASE IF NOT EXISTS $CRDB_DB;"
+
+  echo "Copying SQL file..."
+  docker cp $CRDB_SQL $CRDB_CONTAINER:/sample.sql
+
+  echo "Executing SQL..."
+  docker exec $CRDB_CONTAINER bash -c \
+    "cockroach sql --insecure --database=$CRDB_DB < /sample.sql"
+
+  echo "Verifying tables..."
+  docker exec $CRDB_CONTAINER cockroach sql --insecure --database=$CRDB_DB \
+    --execute "SHOW TABLES;"
+
+  echo
+  echo "CockroachDB is ready on port $CRDB_PORT (HTTP UI: $CRDB_HTTP_PORT)"
+  cockroachdb_url
+}
+
+cockroachdb_stop() {
+  echo "Stopping CockroachDB..."
+  docker stop $CRDB_CONTAINER 2>/dev/null || echo "Container not running"
+}
+
+cockroachdb_rm() {
+  echo "Removing CockroachDB container..."
+  docker rm -f $CRDB_CONTAINER 2>/dev/null || echo "Container not found"
+}
+
+cockroachdb_url() {
+  echo "Plain:       cockroachdb://$CRDB_USER@localhost:$CRDB_PORT/$CRDB_DB?sslmode=disable"
+  echo "Postgres:    postgresql://$CRDB_USER@localhost:$CRDB_PORT/$CRDB_DB?sslmode=disable"
+}
+
 stop_all() {
   postgres_stop
   postgres_stop_ssl
   mysql_stop
   mariadb_stop
+  cockroachdb_stop
 }
 
 rm_all() {
@@ -291,6 +361,7 @@ rm_all() {
   postgres_rm_ssl
   mysql_rm
   mariadb_rm
+  cockroachdb_rm
 }
 
 clean() {
@@ -326,6 +397,15 @@ case "$1" in
       stop) mariadb_stop ;;
       rm)   mariadb_rm ;;
       url)  mariadb_url ;;
+      *)    usage ;;
+    esac
+    ;;
+  cockroachdb)
+    case "$2" in
+      up)   cockroachdb_up ;;
+      stop) cockroachdb_stop ;;
+      rm)   cockroachdb_rm ;;
+      url)  cockroachdb_url ;;
       *)    usage ;;
     esac
     ;;
