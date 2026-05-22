@@ -343,6 +343,13 @@ func (s *Session) ClearField() {
 	s.sendAction(s.mustKeys().Common.Clear)
 }
 
+func (s *Session) MoveUp(n int) {
+	s.t.Helper()
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.MoveUp)
+	}
+}
+
 func (s *Session) MoveDown(n int) {
 	s.t.Helper()
 	for range n {
@@ -350,10 +357,35 @@ func (s *Session) MoveDown(n int) {
 	}
 }
 
-func (s *Session) MoveUp(n int) {
+func (s *Session) MoveLeft(n int) {
 	s.t.Helper()
 	for range n {
-		s.sendAction(s.mustKeys().Navigation.MoveUp)
+		s.sendAction(s.mustKeys().Navigation.MoveLeft)
+	}
+
+}
+
+func (s *Session) MoveRight(n int) {
+	s.t.Helper()
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.MoveRight)
+	}
+}
+
+// FocusDown advances to the next field in a tview Form. Tab is tview's
+// built-in form-navigation key and is not part of the vi-sql keybindings.
+func (s *Session) FocusDown(n int) {
+	s.t.Helper()
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.FocusDown)
+	}
+
+}
+
+func (s *Session) FocusUp(n int) {
+	s.t.Helper()
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.FocusUp)
 	}
 }
 
@@ -400,13 +432,6 @@ func (s *Session) Edit() {
 func (s *Session) EditRow() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Data.EditRow)
-}
-
-// FormNext advances to the next field in a tview Form. Tab is tview's
-// built-in form-navigation key and is not part of the vi-sql keybindings.
-func (s *Session) FormNext() {
-	s.t.Helper()
-	s.sendAction(s.mustKeys().Navigation.FocusDown)
 }
 
 // WriteToEditor pastes sql via clipboard. TextArea is always in insert mode — no mode switch needed.

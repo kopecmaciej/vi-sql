@@ -32,15 +32,13 @@ func TestExportCSV(t *testing.T) {
 	s.WaitForPane(" Export ", 2*time.Second)
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
-	s.FormNext() // → Filename
+	s.FocusDown(1) // → Filename
 	s.ClearField()
 	s.Paste("export.csv")
-	s.FormNext() // → Path
+	s.FocusDown(1) // → Path
 	s.ClearField()
 	s.Paste(tmp + "/")
-	s.FormNext() // → Include Headers
-	s.FormNext() // → Compress
-	s.FormNext() // → Export button
+	s.FocusDown(3) // -> till buttons
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
@@ -64,16 +62,14 @@ func TestExportJSON(t *testing.T) {
 	s.WaitForPane(" Export ", 5*time.Second)
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
-	s.MoveDown(1) // Format: CSV → JSON
-	s.FormNext()  // → Filename
+	s.MoveDown(1)  // Format: CSV → JSON
+	s.FocusDown(1) // → Filename
 	s.ClearField()
 	s.Paste("export.json")
-	s.FormNext() // → Path
+	s.FocusDown(1) // → Path
 	s.ClearField()
 	s.Paste(tmp + "/")
-	s.FormNext() // → Pretty Print
-	s.FormNext() // → Compress
-	s.FormNext() // → Export button
+	s.FocusDown(3) // → Pretty Print
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")

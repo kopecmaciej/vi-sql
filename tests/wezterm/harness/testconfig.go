@@ -5,6 +5,7 @@ package harness
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/kopecmaciej/vi-sql/internal/util"
@@ -74,10 +75,8 @@ func newTestConfigWithDSN(t *testing.T, dsn string) (configPath, logPath string)
 
 func hasArg(args []string, flags ...string) bool {
 	for _, a := range args {
-		for _, f := range flags {
-			if a == f {
-				return true
-			}
+		if slices.Contains(flags, a) {
+			return true
 		}
 	}
 	return false
