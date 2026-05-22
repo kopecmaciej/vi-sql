@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/atotto/clipboard"
 )
 
 // weztermCheckAvailable returns an error if `wezterm cli list` fails,
@@ -59,4 +61,10 @@ func weztermGetText(paneID string) (string, error) {
 // weztermKillPane closes the pane; errors are ignored (best-effort cleanup).
 func weztermKillPane(paneID string) error {
 	return exec.Command("wezterm", "cli", "kill-pane", "--pane-id", paneID).Run()
+}
+
+// weztermSetClipboard writes text to the system clipboard using atotto/clipboard,
+// which handles macOS (pbcopy), Wayland (wl-copy), and X11 (xclip/xsel).
+func weztermSetClipboard(text string) error {
+	return clipboard.WriteAll(text)
 }

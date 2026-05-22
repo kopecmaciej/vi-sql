@@ -4,7 +4,6 @@ package wezterm_test
 
 import (
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +33,7 @@ func TestJumpFlag(t *testing.T) {
 	s.WaitForPane("⏱", 10*time.Second)
 
 	// The tab title should contain the table name.
-	if parts := strings.SplitN(jump, "/", 2); len(parts) == 2 {
-		s.AssertPaneContains(parts[1])
+	if _, table, ok := harness.ParseJump(jump); ok {
+		s.AssertPaneContains(table)
 	}
 }

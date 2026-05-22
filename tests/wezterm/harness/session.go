@@ -6,7 +6,7 @@
 // Usage:
 //
 //	s := harness.Spawn(t, "--connection-name", "mydb", "--debug")
-//	s.Send("Ctrl+/")       // focus schema tree
+//	s.FocusSchemaTree()
 //	s.Send("Down", "Down") // navigate to 3rd schema
 //	s.Send("e")            // expand schema
 //	s.Send("Enter")        // open table
@@ -30,12 +30,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
 	defaultLogPath   = "/tmp/vi-sql.log"
 	defaultKeyDelay  = 40 * time.Millisecond
-	slowKeyDelay     = 300 * time.Millisecond
+	slowKeyDelay     = 200 * time.Millisecond
 	readyMarker      = "Vi-SQL started"
 	connectedMarker  = "Connected to database"
 	startupTimeout   = 15 * time.Second
@@ -49,6 +52,8 @@ type Session struct {
 	logPath  string
 	logStart int64
 	keyDelay time.Duration
+	keys     *config.KeyBindings // nil if config loading failed
+	vimMode  bool
 }
 
 // Spawn builds the path to vi-sql, starts it in a new wezterm pane with the
@@ -86,12 +91,17 @@ func Spawn(t *testing.T, args ...string) *Session {
 		t.Fatalf("Spawn: %v", err)
 	}
 
+	configPath := extractConfigArg(args)
+	vm := configVimMode(configPath)
+
 	s := &Session{
 		t:        t,
 		PaneID:   paneID,
 		logPath:  logPath,
 		logStart: logStart,
 		keyDelay: keyDelayFromEnv(),
+		vimMode:  vm,
+		keys:     loadKeyBindings(vm),
 	}
 	t.Cleanup(s.Close)
 
@@ -139,6 +149,13 @@ func (s *Session) Type(text string) {
 		}
 		time.Sleep(s.keyDelay)
 	}
+}
+
+// Paste copies text to the system clipboard and sends Ctrl+v to the pane.
+func (s *Session) Paste(text string) {
+	s.t.Helper()
+	util.Copy(text)
+	s.Send("Ctrl+v")
 }
 
 // WaitForLog blocks until substr appears in the log (from the offset captured
@@ -233,6 +250,212 @@ func (s *Session) Close() {
 	_ = weztermKillPane(s.PaneID)
 }
 
+// mustKeys returns the loaded keybindings or fatals if they are unavailable.
+func (s *Session) mustKeys() *config.KeyBindings {
+	s.t.Helper()
+	if s.keys == nil {
+		s.t.Fatal("keybindings not loaded — check --config or config file path")
+	}
+	return s.keys
+}
+
+// sendAction sends all key names for the given binding. Sequences (e.g. "ge")
+// are split into individual runes and sent one at a time.
+func (s *Session) sendAction(k config.Key) {
+	s.t.Helper()
+	for _, key := range sendableKeys(k) {
+		s.Send(key)
+	}
+}
+
+// Dismiss closes the current modal or overlay using Common.Close.
+func (s *Session) Dismiss() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Close)
+}
+
+// Select confirms or opens the focused item using Common.Select.
+func (s *Session) Select() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Select)
+}
+
+// Filter opens the filter bar using Common.Filter.
+func (s *Session) Filter() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Filter)
+}
+
+// ClearField clears the current input field using Common.Clear.
+func (s *Session) ClearField() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Clear)
+}
+
+// MoveDown moves the cursor down n times using Navigation.MoveDown.
+func (s *Session) MoveDown(n int) {
+	s.t.Helper()
+	k := s.mustKeys().Navigation.MoveDown
+	for i := 0; i < n; i++ {
+		s.sendAction(k)
+	}
+}
+
+// MoveUp moves the cursor up n times using Navigation.MoveUp.
+func (s *Session) MoveUp(n int) {
+	s.t.Helper()
+	k := s.mustKeys().Navigation.MoveUp
+	for i := 0; i < n; i++ {
+		s.sendAction(k)
+	}
+}
+
+// NewTab opens a new query tab using Main.NewTab.
+func (s *Session) NewTab() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.NewTab)
+}
+
+// CloseTab closes the active tab using Main.CloseTab.
+func (s *Session) CloseTab() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.CloseTab)
+}
+
+// OpenServerInfo opens the server info modal using Main.ServerInfo.
+func (s *Session) OpenServerInfo() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.ServerInfo)
+}
+
+// OpenHistory opens the SQL query history modal using SQLQueryEditor.OpenHistory.
+func (s *Session) OpenHistory() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().SQLQueryEditor.OpenHistory)
+}
+
+// ChangeStyle opens the style-change modal using Global.ChangeStyle.
+func (s *Session) ChangeStyle() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Global.ChangeStyle)
+}
+
+// ExpandSchemaNode expands the focused schema-tree node using Schema.ExpandTable.
+func (s *Session) ExpandSchemaNode() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.ExpandTable)
+}
+
+// CollapseAll collapses all schema-tree nodes using Schema.CollapseAll.
+func (s *Session) CollapseAll() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.CollapseAll)
+}
+
+// EditRow opens the inline-edit modal for the focused row using Data.EditRow.
+func (s *Session) EditRow() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.EditRow)
+}
+
+// FormNext advances to the next field in a tview Form. Tab is tview's
+// built-in form-navigation key and is not part of the vi-sql keybindings.
+func (s *Session) FormNext() {
+	s.t.Helper()
+	s.Send("Ctrl+j")
+}
+
+// WriteToEditor pastes sql into the active SQL editor via the system clipboard.
+// The SQL editor (TextArea) is always in insert mode, so no mode switching is needed.
+func (s *Session) WriteToEditor(sql string) {
+	s.t.Helper()
+	if err := weztermSetClipboard(sql); err != nil {
+		s.t.Fatalf("WriteToEditor: clipboard: %v", err)
+	}
+	s.Send("Ctrl+v")
+}
+
+// RunQuery executes the current editor content using the mode-aware Confirm key.
+func (s *Session) RunQuery() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Confirm)
+}
+
+// RunQueryInNewTab opens a new query tab, types sql, and executes it.
+// It does NOT wait for results — call WaitForQueryResult or WaitForPane
+// afterward to assert on success or failure.
+func (s *Session) RunQueryInNewTab(sql string) {
+	s.t.Helper()
+	s.Send("Ctrl+t")
+	s.AssertPaneContains("Query")
+	s.WriteToEditor(sql)
+	s.RunQuery()
+}
+
+// WaitForQueryResult waits for the query-timing indicator (⏱) to appear,
+// which signals a successful query completion.
+func (s *Session) WaitForQueryResult(timeout time.Duration) {
+	s.t.Helper()
+	s.WaitForPane("⏱", timeout)
+}
+
+// FocusSchemaTree sends the mode-aware focus-schema-tree binding.
+func (s *Session) FocusSchemaTree() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.FocusSchemaTree)
+}
+
+// OpenActionsModal opens the actions modal using the mode-aware binding.
+func (s *Session) OpenActionsModal() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.OpenActions)
+}
+
+// GoToTable opens the named table via the go-to-table modal and waits for
+// the data grid to show row results. It uses the actions modal to reach the
+// go-to-table modal, so focus must be on the main page (not inside a modal).
+func (s *Session) GoToTable(schema, table string) {
+	s.t.Helper()
+	s.OpenActionsModal()
+	s.AssertPaneContains("Actions")
+	s.Type("go to")
+	s.Send("Enter")
+	s.WaitForPane("Go to table", 5*time.Second)
+	s.Type(schema + "." + table)
+	s.sendAction(s.mustKeys().Common.Confirm)
+	s.WaitForPane(schema+"."+table, 10*time.Second)
+}
+
+// OpenExportModal opens the export modal. A data tab must be active.
+func (s *Session) OpenExportModal() {
+	s.t.Helper()
+	s.Send("Alt+m")
+}
+
+// OpenImportModal opens the CSV import modal.
+func (s *Session) OpenImportModal() {
+	s.t.Helper()
+	s.Send("Alt+i")
+}
+
+// AssertPaneNotContains fails the test if substr is still visible in the pane
+// after assertionTimeout. Use it to confirm a modal has closed.
+func (s *Session) AssertPaneNotContains(substr string) {
+	s.t.Helper()
+	deadline := time.Now().Add(assertionTimeout)
+	for time.Now().Before(deadline) {
+		text, err := weztermGetText(s.PaneID)
+		if err != nil {
+			s.t.Fatalf("AssertPaneNotContains: %v", err)
+		}
+		if !strings.Contains(text, substr) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	s.t.Errorf("AssertPaneNotContains: %q still visible in pane", substr)
+}
+
 // waitForOneOf polls the log until one of substrs appears and returns the match,
 // or fails the test after timeout. Used to detect either success or failure logs.
 func (s *Session) waitForOneOf(timeout time.Duration, substrs ...string) string {
@@ -255,7 +478,7 @@ func (s *Session) logContains(substr string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Seek(s.logStart, 0); err != nil {
 		return false
 	}
@@ -286,6 +509,34 @@ func fileExists(path string) bool {
 func projectRoot() string {
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "..", "..", "..")
+}
+
+// DefaultConnection returns the value of VI_SQL_WEZTERM_CONNECTION, falling
+// back to the currently active connection from `vi-sql -l` when the variable
+// is unset. Returns "" when no connection is available.
+func DefaultConnection() string {
+	if v := os.Getenv("VI_SQL_WEZTERM_CONNECTION"); v != "" {
+		return v
+	}
+	return CurrentConnectionName()
+}
+
+// DefaultJump returns the value of VI_SQL_WEZTERM_JUMP, falling back to
+// "auth.users" when the variable is unset.
+func DefaultJump() string {
+	if v := os.Getenv("VI_SQL_WEZTERM_JUMP"); v != "" {
+		return v
+	}
+	return "auth.users"
+}
+
+// ParseJump splits a jump target of the form "schema.table" into its parts.
+func ParseJump(jump string) (schema, table string, ok bool) {
+	parts := strings.SplitN(jump, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
 }
 
 // CurrentConnectionName returns the name of the connection currently marked as

@@ -14,7 +14,6 @@
 package wezterm_test
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -29,45 +28,41 @@ import (
 //  5. Apply a WHERE filter (/) with the clause "1=1".
 //
 // Prerequisites:
-//   - VI_SQL_WEZTERM_CONNECTION must be set to a pre-configured connection name.
+//   - VI_SQL_WEZTERM_CONNECTION (or active connection) must be available.
 //   - The connection must expose at least 3 schemas, and the 3rd schema must
 //     have at least 2 tables.
 func TestSchemaTableFilter(t *testing.T) {
-	conn := os.Getenv("VI_SQL_WEZTERM_CONNECTION")
+	conn := harness.DefaultConnection()
 	if conn == "" {
-		t.Skip("VI_SQL_WEZTERM_CONNECTION not set — skipping filter scenario")
+		t.Skip("no connection available — skipping filter scenario")
 	}
 
 	s := harness.Spawn(t, "--connection-name", conn, "--debug")
 
-	// Focus the schema tree.
-	// Ctrl+/ = FocusSchemaTree keybinding (main.go). Sends \x1f (KeyCtrlUnderscore).
-	// If the schema tree is already focused on startup this is a no-op.
-	s.Send("Ctrl+/")
+	// Focus the schema tree (mode-aware: "ge" sequence in vim, Ctrl+/ in normal).
+	s.FocusSchemaTree()
 
 	// Navigate to the 3rd schema. The tree cursor starts on the 1st schema,
 	// so two Down presses land on the 3rd.
-	s.Send("Down", "Down")
+	s.MoveDown(2)
 
-	// Expand the 3rd schema (ExpandTable rune = "e" in schema keys).
-	s.Send("Enter")
+	// Expand the 3rd schema.
+	s.Select()
 
 	// Navigate to the 2nd table inside the expanded schema.
-	// First Down moves to table 1, second Down moves to table 2.
-	s.Send("Down", "Down")
+	s.MoveDown(2)
 
 	// Open the selected table as a TableMode data tab.
-	s.Send("Enter")
+	s.Select()
 
 	// Wait for the results bar — confirms data loaded (SELECT queries are not
 	// written to the log, so we assert on pane content instead).
 	s.WaitForPane(" rows", 10*time.Second)
 
-	// Open the filter bar (Common.Filter rune = "/" in data component).
-	s.Send("/")
-	// Type the WHERE clause and confirm.
+	// Open the filter bar and type the WHERE clause.
+	s.Filter()
 	s.Type("1=1")
-	s.Send("Enter")
+	s.Select()
 
 	// Results bar shows "⚑ WHERE: 1=1" on its second line after the query reruns.
 	s.AssertPaneContains("WHERE: 1=1")
