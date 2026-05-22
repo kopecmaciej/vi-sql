@@ -4,22 +4,21 @@ package harness
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
 // configVimMode reads UI.VimMode from the vi-sql config YAML at configPath.
-// If configPath is empty the default path (~/.config/vi-sql/config.yaml) is used.
+// If configPath is empty, config.GetConfigPath() is used (platform-aware).
 // Returns false when the file is missing or the field is absent.
 func configVimMode(configPath string) bool {
 	if configPath == "" {
-		home, err := os.UserHomeDir()
+		var err error
+		configPath, err = config.GetConfigPath()
 		if err != nil {
 			return false
 		}
-		configPath = filepath.Join(home, ".config", "vi-sql", "config.yaml")
 	}
 	var c struct {
 		UI struct {

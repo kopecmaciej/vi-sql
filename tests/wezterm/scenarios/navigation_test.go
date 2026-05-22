@@ -27,9 +27,6 @@ func TestSchemaTreeExpandCollapse(t *testing.T) {
 }
 
 // TestSchemaTreeFilterByTable verifies the schema-tree filter matches table names.
-//
-// Prerequisites:
-//   - The database must have a table named "users" (or set VI_SQL_WEZTERM_FILTER_TABLE).
 func TestSchemaTreeFilterByTable(t *testing.T) {
 	conn := harness.DefaultConnection()
 	if conn == "" {
@@ -59,5 +56,5 @@ func TestOpenTableViaTree(t *testing.T) {
 	jump := harness.DefaultJump()
 
 	s := harness.Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
-	s.WaitForPane(" rows", 10*time.Second)
+	s.WaitForPane("⏱", 10*time.Second)
 }

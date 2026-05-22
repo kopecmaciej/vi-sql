@@ -103,7 +103,7 @@ func Spawn(t *testing.T, args ...string) *Session {
 		vimMode:  vm,
 		keys:     loadKeyBindings(vm),
 	}
-	t.Cleanup(s.Close)
+	t.Cleanup(s.KillPane)
 
 	s.WaitForLog(readyMarker, startupTimeout)
 
@@ -149,6 +149,10 @@ func (s *Session) Type(text string) {
 		}
 		time.Sleep(s.keyDelay)
 	}
+}
+
+func (s *Session) IsVimMode() bool {
+	return s.vimMode
 }
 
 // Paste copies text to the system clipboard and sends Ctrl+v to the pane.
@@ -212,7 +216,7 @@ func (s *Session) waitForPane(substr string, timeout time.Duration, fatal bool) 
 		if strings.Contains(text, substr) {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 	if fatal {
 		s.t.Fatalf("WaitForPane: %q not visible in pane within %v", substr, timeout)
@@ -245,8 +249,8 @@ func (s *Session) GetPaneText() string {
 	return text
 }
 
-// Close kills the wezterm pane. Registered automatically by Spawn via t.Cleanup.
-func (s *Session) Close() {
+// KillPane kills the wezterm pane. Registered automatically by Spawn via t.Cleanup.
+func (s *Session) KillPane() {
 	_ = weztermKillPane(s.PaneID)
 }
 
@@ -268,8 +272,8 @@ func (s *Session) sendAction(k config.Key) {
 	}
 }
 
-// Dismiss closes the current modal or overlay using Common.Close.
-func (s *Session) Dismiss() {
+// Close closes the current modal or overlay using Common.Close.
+func (s *Session) Close() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Common.Close)
 }
@@ -295,18 +299,16 @@ func (s *Session) ClearField() {
 // MoveDown moves the cursor down n times using Navigation.MoveDown.
 func (s *Session) MoveDown(n int) {
 	s.t.Helper()
-	k := s.mustKeys().Navigation.MoveDown
-	for i := 0; i < n; i++ {
-		s.sendAction(k)
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.MoveDown)
 	}
 }
 
 // MoveUp moves the cursor up n times using Navigation.MoveUp.
 func (s *Session) MoveUp(n int) {
 	s.t.Helper()
-	k := s.mustKeys().Navigation.MoveUp
-	for i := 0; i < n; i++ {
-		s.sendAction(k)
+	for range n {
+		s.sendAction(s.mustKeys().Navigation.MoveUp)
 	}
 }
 
@@ -352,7 +354,11 @@ func (s *Session) CollapseAll() {
 	s.sendAction(s.mustKeys().Schema.CollapseAll)
 }
 
-// EditRow opens the inline-edit modal for the focused row using Data.EditRow.
+func (s *Session) Edit() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Edit)
+}
+
 func (s *Session) EditRow() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Data.EditRow)
@@ -362,7 +368,7 @@ func (s *Session) EditRow() {
 // built-in form-navigation key and is not part of the vi-sql keybindings.
 func (s *Session) FormNext() {
 	s.t.Helper()
-	s.Send("Ctrl+j")
+	s.sendAction(s.mustKeys().Navigation.FocusDown)
 }
 
 // WriteToEditor pastes sql into the active SQL editor via the system clipboard.
@@ -372,7 +378,7 @@ func (s *Session) WriteToEditor(sql string) {
 	if err := weztermSetClipboard(sql); err != nil {
 		s.t.Fatalf("WriteToEditor: clipboard: %v", err)
 	}
-	s.Send("Ctrl+v")
+	s.sendAction(s.mustKeys().Common.Paste)
 }
 
 // RunQuery executes the current editor content using the mode-aware Confirm key.
@@ -386,7 +392,7 @@ func (s *Session) RunQuery() {
 // afterward to assert on success or failure.
 func (s *Session) RunQueryInNewTab(sql string) {
 	s.t.Helper()
-	s.Send("Ctrl+t")
+	s.sendAction(s.mustKeys().Main.NewTab)
 	s.AssertPaneContains("Query")
 	s.WriteToEditor(sql)
 	s.RunQuery()
@@ -429,13 +435,13 @@ func (s *Session) GoToTable(schema, table string) {
 // OpenExportModal opens the export modal. A data tab must be active.
 func (s *Session) OpenExportModal() {
 	s.t.Helper()
-	s.Send("Alt+m")
+	s.sendAction(s.mustKeys().Data.ExportData)
 }
 
 // OpenImportModal opens the CSV import modal.
 func (s *Session) OpenImportModal() {
 	s.t.Helper()
-	s.Send("Alt+i")
+	s.sendAction(s.mustKeys().Main.ImportData)
 }
 
 // AssertPaneNotContains fails the test if substr is still visible in the pane
@@ -489,6 +495,78 @@ func (s *Session) logContains(substr string) bool {
 		}
 	}
 	return false
+}
+
+// GetFocusedElement returns the identifier of the most recently focused element
+// by scanning the log for "focus changed element=<id>" lines.
+// Returns "" when no focus-change entry has been logged yet.
+func (s *Session) GetFocusedElement() string {
+	f, err := os.Open(s.logPath)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.Seek(s.logStart, 0); err != nil {
+		return ""
+	}
+	last := ""
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.Contains(line, "focus changed") {
+			continue
+		}
+		// zerolog ConsoleWriter format: "... element=<id> ..."
+		for _, field := range strings.Fields(line) {
+			if strings.HasPrefix(field, "element=") {
+				last = strings.TrimPrefix(field, "element=")
+			}
+		}
+	}
+	return last
+}
+
+// WaitForFocus blocks until the element with the given identifier is focused
+// or fails the test after timeout. This is useful before sending keystrokes
+// that depend on a specific component having focus.
+func (s *Session) WaitForFocus(element string, timeout time.Duration) {
+	s.t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if s.GetFocusedElement() == element {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	s.t.Fatalf("WaitForFocus: element %q not focused within %v (currently focused: %q)", element, timeout, s.GetFocusedElement())
+}
+
+// LogFocus logs the currently focused element identifier. Drop this anywhere in
+// a test to see what has focus at that point.
+func (s *Session) LogFocus() {
+	s.t.Helper()
+	s.t.Logf("focus: %q", s.GetFocusedElement())
+}
+
+// SpawnWithTable starts vi-sql with --jump pre-opening a table and waits for
+// the data grid to load. Returns the session and table name. Skips the test
+// when no connection or valid jump target is available.
+func SpawnWithTable(t *testing.T) (*Session, string) {
+	t.Helper()
+	conn := DefaultConnection()
+	if conn == "" {
+		t.Skip("no connection available — skipping scenario")
+		return nil, ""
+	}
+	jump := DefaultJump()
+	_, table, ok := ParseJump(jump)
+	if !ok {
+		t.Skipf("jump target %q is not in schema.table format", jump)
+		return nil, ""
+	}
+	s := Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
+	s.WaitForPane("⏱", 10*time.Second)
+	return s, table
 }
 
 func currentFileSize(path string) int64 {
@@ -555,7 +633,7 @@ func CurrentConnectionName() string {
 	if err != nil {
 		return ""
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		if !strings.HasPrefix(strings.TrimSpace(line), "*") {
 			continue
 		}

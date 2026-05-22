@@ -5,6 +5,7 @@ import (
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
+	"github.com/rs/zerolog/log"
 )
 
 type Pages struct {
@@ -40,7 +41,16 @@ func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, vis
 // focus is restored when the page is dismissed via RemoveModalPage.
 func (p *Pages) AddModalPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
 	p.app.SnapshotFocus()
-	return p.Pages.AddPage(string(view), page, resize, visible)
+	p.Pages.AddPage(string(view), page, resize, visible)
+	if visible {
+		// page is typically a wrapper Flex (for centering), which never reports
+		// HasFocus() = true. Broadcast with the page name so focus tracking sees
+		// which modal opened. The caller then calls SetFocusOnly(innerComponent).
+		p.app.keys.Reset()
+		log.Trace().Str("element", string(view)).Msg("focus changed")
+		p.app.manager.Broadcast(manager.NewFocusChangedMsg(view))
+	}
+	return p.Pages
 }
 
 // RemovePage is a plain pass-through. Used to dismiss pages added via AddPage.

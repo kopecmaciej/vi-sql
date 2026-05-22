@@ -21,7 +21,7 @@ func TestModalActions(t *testing.T) {
 
 	s.OpenActionsModal()
 	s.AssertPaneContains(" Actions ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Actions ")
 }
 
@@ -35,7 +35,7 @@ func TestModalServerInfo(t *testing.T) {
 
 	s.OpenServerInfo()
 	s.AssertPaneContains(" Server Info ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Server Info ")
 }
 
@@ -49,19 +49,19 @@ func TestModalStyleChange(t *testing.T) {
 
 	s.ChangeStyle()
 	s.AssertPaneContains(" Change Style ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Change Style ")
 }
 
 func TestModalExport(t *testing.T) {
-	s, _ := spawnWithTable(t)
+	s, _ := harness.SpawnWithTable(t)
 	if s == nil {
 		return
 	}
 
 	s.OpenExportModal()
 	s.AssertPaneContains(" Export ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Export ")
 }
 
@@ -75,7 +75,7 @@ func TestModalImport(t *testing.T) {
 
 	s.OpenImportModal()
 	s.AssertPaneContains(" Import CSV ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Import CSV ")
 }
 
@@ -92,7 +92,7 @@ func TestModalHistory(t *testing.T) {
 
 	s.OpenHistory()
 	s.AssertPaneContains(" SQL History ")
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" SQL History ")
 }
 
@@ -109,21 +109,31 @@ func TestModalGoToTable(t *testing.T) {
 	s.Type("go to")
 	s.Select()
 	s.WaitForPane(" Go to table ", 5*time.Second)
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Go to table ")
 }
 
 func TestModalInlineEdit(t *testing.T) {
-	s, _ := spawnWithTable(t)
+	s, _ := harness.SpawnWithTable(t)
 	if s == nil {
 		return
 	}
 
 	s.MoveDown(1)
 	s.EditRow()
-	s.AssertPaneContains(" Inline Edit ")
-	s.Dismiss()
-	s.AssertPaneNotContains(" Inline Edit ")
+	if s.IsVimMode() {
+		s.AssertPaneContains(" Edit Normal ")
+	} else {
+		s.AssertPaneContains(" Edit ")
+		s.AssertPaneNotContains(" Edit Normal ")
+	}
+	s.Close()
+
+	if s.IsVimMode() {
+		s.AssertPaneNotContains(" Edit Normal ")
+	} else {
+		s.AssertPaneNotContains(" Edit ")
+	}
 }
 
 func TestModalErrorOnBadQuery(t *testing.T) {
@@ -137,6 +147,6 @@ func TestModalErrorOnBadQuery(t *testing.T) {
 	s.RunQueryInNewTab("THIS IS NOT VALID SQL")
 
 	s.WaitForPane(" Error ", 5*time.Second)
-	s.Dismiss()
+	s.Close()
 	s.AssertPaneNotContains(" Error ")
 }

@@ -26,11 +26,6 @@ import (
 //  3. Navigate to the 3rd schema (Down x2) and expand it (e).
 //  4. Navigate to the 2nd table (Down x2) and open it (Enter).
 //  5. Apply a WHERE filter (/) with the clause "1=1".
-//
-// Prerequisites:
-//   - VI_SQL_WEZTERM_CONNECTION (or active connection) must be available.
-//   - The connection must expose at least 3 schemas, and the 3rd schema must
-//     have at least 2 tables.
 func TestSchemaTableFilter(t *testing.T) {
 	conn := harness.DefaultConnection()
 	if conn == "" {
@@ -57,7 +52,7 @@ func TestSchemaTableFilter(t *testing.T) {
 
 	// Wait for the results bar — confirms data loaded (SELECT queries are not
 	// written to the log, so we assert on pane content instead).
-	s.WaitForPane(" rows", 10*time.Second)
+	s.WaitForPane("⏱", 10*time.Second)
 
 	// Open the filter bar and type the WHERE clause.
 	s.Filter()

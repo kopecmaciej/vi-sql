@@ -22,9 +22,12 @@ func weztermCheckAvailable() error {
 }
 
 // weztermSpawn launches binary with args in a new wezterm pane and returns
-// the numeric pane-id printed on stdout.
+// the numeric pane-id printed on stdout. VI_SQL_LOG_LEVEL=trace is set so
+// focus-change events are written to the log for harness assertions.
 func weztermSpawn(binary string, args []string) (string, error) {
-	cmdArgs := []string{"cli", "spawn", "--"}
+	// Use `env` to inject VI_SQL_LOG_LEVEL=trace into the spawned process
+	// without touching the user's shell environment.
+	cmdArgs := []string{"cli", "spawn", "--", "env", "VI_SQL_LOG_LEVEL=trace"}
 	cmdArgs = append(cmdArgs, binary)
 	cmdArgs = append(cmdArgs, args...)
 	out, err := exec.Command("wezterm", cmdArgs...).Output()
@@ -39,8 +42,11 @@ func weztermSpawn(binary string, args []string) (string, error) {
 }
 
 // weztermSendText injects raw bytes into a pane, bypassing bracketed-paste mode.
+// Text is passed via stdin so NUL bytes (e.g. Ctrl+Space → \x00) aren't rejected
+// by the OS exec layer, which disallows NUL in argv strings.
 func weztermSendText(paneID, text string) error {
-	cmd := exec.Command("wezterm", "cli", "send-text", "--pane-id", paneID, "--no-paste", text)
+	cmd := exec.Command("wezterm", "cli", "send-text", "--pane-id", paneID, "--no-paste")
+	cmd.Stdin = strings.NewReader(text)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("wezterm send-text (pane %s): %w", paneID, err)
 	}

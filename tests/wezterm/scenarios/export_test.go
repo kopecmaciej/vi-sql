@@ -11,29 +11,19 @@ import (
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
 
-// TestExportCSV opens a table via --jump, opens the export modal, sets a temp
-// output path, exports as CSV, and verifies the file was created.
 func TestExportModal(t *testing.T) {
-	s, _ := spawnWithTable(t)
-	if s == nil {
-		return
-	}
+	s, _ := harness.SpawnWithTable(t)
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ", 2*time.Second)
 
-	s.Dismiss()
+	s.Close()
 
 	s.AssertPaneNotContains(" Export ")
 }
 
-// Prerequisites:
-//   - VI_SQL_WEZTERM_CONNECTION and VI_SQL_WEZTERM_JUMP must be set.
 func TestExportCSV(t *testing.T) {
-	s, _ := spawnWithTable(t)
-	if s == nil {
-		return
-	}
+	s, _ := harness.SpawnWithTable(t)
 
 	tmp := t.TempDir()
 
@@ -70,14 +60,8 @@ func TestExportCSV(t *testing.T) {
 
 // TestExportJSON opens the export modal, picks JSON format, and verifies the
 // exported file starts with a JSON array.
-//
-// Prerequisites:
-//   - VI_SQL_WEZTERM_CONNECTION and VI_SQL_WEZTERM_JUMP must be set.
 func TestExportJSON(t *testing.T) {
-	s, _ := spawnWithTable(t)
-	if s == nil {
-		return
-	}
+	s, _ := harness.SpawnWithTable(t)
 
 	tmp := t.TempDir()
 
@@ -108,26 +92,4 @@ func TestExportJSON(t *testing.T) {
 	if !strings.HasPrefix(strings.TrimSpace(string(data)), "[") {
 		t.Errorf("JSON export: expected file to start with '[', got: %.50s", string(data))
 	}
-}
-
-// spawnWithTable starts vi-sql with --jump pre-opening a table, waits for the
-// data grid, and returns the session and table name. Returns nil if no
-// connection or valid jump target is available.
-func spawnWithTable(t *testing.T) (*harness.Session, string) {
-	t.Helper()
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping scenario")
-		return nil, ""
-	}
-	jump := harness.DefaultJump()
-	_, table, ok := harness.ParseJump(jump)
-	if !ok {
-		t.Skipf("jump target %q is not in schema.table format", jump)
-		return nil, ""
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
-	return s, table
 }

@@ -164,7 +164,11 @@ func (a *App) RestoreFocus() {
 
 func (a *App) FocusChanged(p tview.Primitive) {
 	a.keys.Reset()
-	a.manager.Broadcast(manager.NewFocusChangedMsg(p.GetIdentifier()))
+	id := p.GetIdentifier()
+	if id != "" {
+		log.Trace().Str("element", string(id)).Msg("focus changed")
+	}
+	a.manager.Broadcast(manager.NewFocusChangedMsg(id))
 	a.lastFocusedPrimitive = p
 }
 

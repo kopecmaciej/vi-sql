@@ -12,11 +12,6 @@ import (
 
 // TestJumpFlag verifies that --jump schema/table bypasses the schema tree and
 // opens the named table directly.
-//
-// Prerequisites:
-//   - VI_SQL_WEZTERM_CONNECTION must be set to a pre-configured connection name.
-//   - VI_SQL_WEZTERM_JUMP must be set to a valid "schema/table" target, e.g.:
-//     export VI_SQL_WEZTERM_JUMP=public/users
 func TestJumpFlag(t *testing.T) {
 	conn := os.Getenv("VI_SQL_WEZTERM_CONNECTION")
 	if conn == "" {
