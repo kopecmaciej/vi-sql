@@ -15,9 +15,11 @@
 //
 // Environment variables:
 //
-//	VI_SQL_WEZTERM_BINARY      path to vi-sql binary (default: .build/vi-sql)
-//	VI_SQL_WEZTERM_LOG_PATH    path to vi-sql log file (default: /tmp/vi-sql.log)
-//	VI_SQL_WEZTERM_KEY_DELAY_MS delay in ms between keystrokes (default: 40)
+//	VI_SQL_TESTS_DSN          database DSN for SpawnWithTable (required; e.g. postgresql://user:pass@host/db)
+//	VI_SQL_TESTS_JUMP         schema.table to open (default: auth.users)
+//	VI_SQL_TESTS_BINARY       path to vi-sql binary (default: .build/vi-sql)
+//	VI_SQL_TESTS_LOG_PATH     path to vi-sql log file (default: /tmp/vi-sql.log)
+//	VI_SQL_TESTS_KEY_DELAY_MS delay in ms between keystrokes (default: 40)
 package harness
 
 import (
@@ -65,28 +67,138 @@ type Session struct {
 func Spawn(t *testing.T, args ...string) *Session {
 	t.Helper()
 
-	if err := weztermCheckAvailable(); err != nil {
-		t.Skipf("skipping wezterm: %v", err)
+	binary := requireBinary(t)
+
+	logPath := os.Getenv(EnvLogPath)
+	if logPath == "" {
+		logPath = defaultLogPath
+	}
+	logStart := currentFileSize(logPath)
+
+	// Inject a test-local config (trace level, plain JSON logs, isolated log file)
+	// unless the caller already provided --config/-c.
+	if !hasArg(args, "--config", "-c") {
+		configPath, testLogPath := newTestConfig(t)
+		args = append([]string{"--config", configPath}, args...)
+		logPath = testLogPath
+		logStart = 0
 	}
 
-	binary := os.Getenv("VI_SQL_WEZTERM_BINARY")
+	return spawnSession(t, binary, args, logPath, logStart)
+}
+
+// NewTestConfig creates a fresh isolated test config and returns its path and
+// log path. Use it when a test needs to share one config across multiple Spawn
+// calls (e.g. to test reconnect behaviour). Pass the paths to SpawnWithConfig.
+func NewTestConfig(t *testing.T) (configPath, logPath string) {
+	t.Helper()
+	return newTestConfig(t)
+}
+
+// SpawnWithConfig spawns vi-sql using an already-created config at configPath,
+// tracking logs at logPath from the current file offset. Use together with
+// NewTestConfig when multiple sessions must share the same config.
+func SpawnWithConfig(t *testing.T, configPath, logPath string, args ...string) *Session {
+	t.Helper()
+	binary := requireBinary(t)
+	logStart := currentFileSize(logPath)
+	args = append([]string{"--config", configPath}, args...)
+	return spawnSession(t, binary, args, logPath, logStart)
+}
+
+// SpawnConnected spawns vi-sql connected directly via VI_SQL_TESTS_DSN.
+// Skips if the env var is unset. Use this for tests that need a live DB
+// but don't care about the connection-list UI.
+func SpawnConnected(t *testing.T, args ...string) *Session {
+	t.Helper()
+	dsn := os.Getenv(EnvDSN)
+	if dsn == "" {
+		t.Skipf("%s not set — skipping test", EnvDSN)
+		return nil
+	}
+	return Spawn(t, append([]string{"--connect", dsn}, args...)...)
+}
+
+// SpawnWithSavedConnection spawns vi-sql with a test config that has a saved
+// connection seeded from VI_SQL_TESTS_DSN. The app shows the connection list
+// on startup rather than the pick-driver page. Skips if the DSN env var is unset.
+func SpawnWithSavedConnection(t *testing.T, args ...string) *Session {
+	t.Helper()
+
+	dsn := os.Getenv(EnvDSN)
+	if dsn == "" {
+		t.Skipf("%s not set — skipping test", EnvDSN)
+		return nil
+	}
+
+	binary := requireBinary(t)
+	configPath, logPath := newTestConfigWithDSN(t, dsn)
+	args = append([]string{"--config", configPath}, args...)
+	return spawnSession(t, binary, args, logPath, 0)
+}
+
+// findBinary returns the vi-sql binary path, skipping the test if not found.
+func findBinary(t *testing.T) string {
+	t.Helper()
+	binary := os.Getenv(EnvBinary)
 	if binary == "" {
 		binary = filepath.Join(projectRoot(), ".build", "vi-sql")
 	}
 	abs, err := filepath.Abs(binary)
 	if err != nil || !fileExists(abs) {
-		t.Skipf("skipping wezterm: binary %q not found (run 'make build' first)", binary)
+		t.Skipf("binary %q not found (run 'make build' first)", binary)
 	}
+	return abs
+}
 
-	logPath := os.Getenv("VI_SQL_WEZTERM_LOG_PATH")
-	if logPath == "" {
-		logPath = defaultLogPath
+// requireBinary is like findBinary but also verifies wezterm is available.
+func requireBinary(t *testing.T) string {
+	t.Helper()
+	if err := weztermCheckAvailable(); err != nil {
+		t.Skipf("skipping wezterm: %v", err)
 	}
+	return findBinary(t)
+}
 
-	// Snapshot log size before spawning so assertions only scan new lines.
-	logStart := currentFileSize(logPath)
+// RunBinary runs the vi-sql binary with args and returns combined stdout+stderr.
+// A fresh isolated test config is injected via --config unless already provided.
+// Skips the test if the binary is not found.
+func RunBinary(t *testing.T, args ...string) string {
+	t.Helper()
+	binary := findBinary(t)
+	if !hasArg(args, "--config", "-c") {
+		configPath, _ := newTestConfig(t)
+		args = append([]string{"--config", configPath}, args...)
+	}
+	cmd := exec.Command(binary, args...)
+	out, _ := cmd.CombinedOutput()
+	return string(out)
+}
 
-	paneID, err := weztermSpawn(abs, args)
+// RunBinaryWithSavedConnection runs the vi-sql binary with a test config that
+// has a saved connection seeded from VI_SQL_TESTS_DSN. Use for CLI commands
+// that read the connection list (e.g. -l). Skips if the DSN env var is unset.
+func RunBinaryWithSavedConnection(t *testing.T, args ...string) string {
+	t.Helper()
+	dsn := os.Getenv(EnvDSN)
+	if dsn == "" {
+		t.Skipf("%s not set — skipping test", EnvDSN)
+		return ""
+	}
+	binary := findBinary(t)
+	configPath, _ := newTestConfigWithDSN(t, dsn)
+	args = append([]string{"--config", configPath}, args...)
+	cmd := exec.Command(binary, args...)
+	out, _ := cmd.CombinedOutput()
+	return string(out)
+}
+
+// spawnSession creates the wezterm pane, builds a Session, and waits for the
+// app to be ready. Binary and config args must already be resolved.
+func spawnSession(t *testing.T, binary string, args []string, logPath string, logStart int64) *Session {
+	t.Helper()
+
+	paneID, err := weztermSpawn(binary, args)
 	if err != nil {
 		t.Fatalf("Spawn: %v", err)
 	}
@@ -107,14 +219,14 @@ func Spawn(t *testing.T, args ...string) *Session {
 
 	s.WaitForLog(readyMarker, startupTimeout)
 
-	// When --connection-name/-n is passed, wait for the DB connection result.
+	// When a connection flag is passed, wait for the DB connection result.
 	// "Vi-SQL started" is logged before the tview event loop runs; the actual
 	// connection attempt is async and happens later.
 	for i, a := range args {
-		if (a == "--connection-name" || a == "-n") && i+1 < len(args) {
+		if (a == "--connection-name" || a == "-n" || a == "--connect") && i+1 < len(args) {
 			found := s.waitForOneOf(startupTimeout, connectedMarker, "Failed to connect to database")
 			if found != connectedMarker {
-				s.t.Fatalf("Spawn: DB connection failed for %q — check stored password or config", args[i+1])
+				s.t.Fatalf("Spawn: DB connection failed — check DSN or stored password")
 			}
 			break
 		}
@@ -498,8 +610,7 @@ func (s *Session) logContains(substr string) bool {
 }
 
 // GetFocusedElement returns the identifier of the most recently focused element
-// by scanning the log for "focus changed element=<id>" lines.
-// Returns "" when no focus-change entry has been logged yet.
+// by scanning the log for focus-change JSON lines. Returns "" when none found.
 func (s *Session) GetFocusedElement() string {
 	f, err := os.Open(s.logPath)
 	if err != nil {
@@ -513,13 +624,12 @@ func (s *Session) GetFocusedElement() string {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if !strings.Contains(line, "focus changed") {
+		if !strings.Contains(line, `"focus changed"`) {
 			continue
 		}
-		// zerolog ConsoleWriter format: "... element=<id> ..."
-		for _, field := range strings.Fields(line) {
-			if strings.HasPrefix(field, "element=") {
-				last = strings.TrimPrefix(field, "element=")
+		if _, after, ok := strings.Cut(line, `"element":"`); ok {
+			if val, _, ok := strings.Cut(after, `"`); ok && val != "" {
+				last = val
 			}
 		}
 	}
@@ -548,14 +658,27 @@ func (s *Session) LogFocus() {
 	s.t.Logf("focus: %q", s.GetFocusedElement())
 }
 
-// SpawnWithTable starts vi-sql with --jump pre-opening a table and waits for
-// the data grid to load. Returns the session and table name. Skips the test
-// when no connection or valid jump target is available.
+// WaitForFile blocks until the file at path exists or fails the test after timeout.
+func (s *Session) WaitForFile(path string, timeout time.Duration) {
+	s.t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	s.t.Fatalf("WaitForFile: %q not created within %v", path, timeout)
+}
+
+// SpawnWithTable starts vi-sql connected via VI_SQL_TESTS_DSN and jumps
+// directly to VI_SQL_TESTS_JUMP (default: auth.users). Skips the test when
+// either variable is unset or the jump format is invalid.
 func SpawnWithTable(t *testing.T) (*Session, string) {
 	t.Helper()
-	conn := DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping scenario")
+	dsn := os.Getenv(EnvDSN)
+	if dsn == "" {
+		t.Skipf("%s not set — skipping scenario", EnvDSN)
 		return nil, ""
 	}
 	jump := DefaultJump()
@@ -564,7 +687,7 @@ func SpawnWithTable(t *testing.T) (*Session, string) {
 		t.Skipf("jump target %q is not in schema.table format", jump)
 		return nil, ""
 	}
-	s := Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
+	s := Spawn(t, "--connect", dsn, "--jump", jump)
 	s.WaitForPane("⏱", 10*time.Second)
 	return s, table
 }
@@ -589,20 +712,20 @@ func projectRoot() string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "..")
 }
 
-// DefaultConnection returns the value of VI_SQL_WEZTERM_CONNECTION, falling
+// DefaultConnection returns the value of VI_SQL_TESTS_CONNECTION, falling
 // back to the currently active connection from `vi-sql -l` when the variable
 // is unset. Returns "" when no connection is available.
 func DefaultConnection() string {
-	if v := os.Getenv("VI_SQL_WEZTERM_CONNECTION"); v != "" {
+	if v := os.Getenv(EnvConnection); v != "" {
 		return v
 	}
 	return CurrentConnectionName()
 }
 
-// DefaultJump returns the value of VI_SQL_WEZTERM_JUMP, falling back to
+// DefaultJump returns the value of VI_SQL_TESTS_JUMP, falling back to
 // "auth.users" when the variable is unset.
 func DefaultJump() string {
-	if v := os.Getenv("VI_SQL_WEZTERM_JUMP"); v != "" {
+	if v := os.Getenv(EnvJump); v != "" {
 		return v
 	}
 	return "auth.users"
@@ -621,7 +744,7 @@ func ParseJump(jump string) (schema, table string, ok bool) {
 // active in vi-sql's config (the one shown with * in `vi-sql -l`). Returns an
 // empty string if the binary is unavailable or no current connection is found.
 func CurrentConnectionName() string {
-	binary := os.Getenv("VI_SQL_WEZTERM_BINARY")
+	binary := os.Getenv(EnvBinary)
 	if binary == "" {
 		binary = filepath.Join(projectRoot(), ".build", "vi-sql")
 	}
@@ -646,10 +769,10 @@ func CurrentConnectionName() string {
 }
 
 func keyDelayFromEnv() time.Duration {
-	if os.Getenv("VI_SQL_WEZTERM_SLOW") == "1" {
+	if os.Getenv(EnvSlow) == "1" {
 		return slowKeyDelay
 	}
-	if v := os.Getenv("VI_SQL_WEZTERM_KEY_DELAY_MS"); v != "" {
+	if v := os.Getenv(EnvKeyDelayMS); v != "" {
 		var ms int
 		if _, err := fmt.Sscan(v, &ms); err == nil && ms > 0 {
 			return time.Duration(ms) * time.Millisecond

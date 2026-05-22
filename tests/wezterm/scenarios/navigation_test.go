@@ -12,12 +12,7 @@ import (
 
 // TestSchemaTreeExpandCollapse verifies expand/collapse of a schema node.
 func TestSchemaTreeExpandCollapse(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping navigation scenario")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.FocusSchemaTree()
 	s.ExpandSchemaNode()
@@ -28,16 +23,12 @@ func TestSchemaTreeExpandCollapse(t *testing.T) {
 
 // TestSchemaTreeFilterByTable verifies the schema-tree filter matches table names.
 func TestSchemaTreeFilterByTable(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping navigation scenario")
-	}
-	table := os.Getenv("VI_SQL_WEZTERM_FILTER_TABLE")
+	table := os.Getenv(harness.EnvFilterTable)
 	if table == "" {
 		table = "users"
 	}
 
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.FocusSchemaTree()
 	s.Filter()
@@ -49,12 +40,8 @@ func TestSchemaTreeFilterByTable(t *testing.T) {
 
 // TestOpenTableViaTree uses --jump to pre-open a table and verifies the data grid loads.
 func TestOpenTableViaTree(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping open-table-via-tree scenario")
-	}
 	jump := harness.DefaultJump()
 
-	s := harness.Spawn(t, "--connection-name", conn, "--jump", jump, "--debug")
+	s := harness.SpawnConnected(t, "--jump", jump, "--debug")
 	s.WaitForPane("⏱", 10*time.Second)
 }

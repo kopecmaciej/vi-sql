@@ -23,9 +23,15 @@ func Encode(name string) (string, error) {
 			return string([]byte{ch & 0x1f}), nil
 		}
 	}
-	// Alt+<single-char>: ESC prefix.
-	if strings.HasPrefix(name, "Alt+") && len(name) == 5 {
-		return "\x1b" + string(name[4]), nil
+	// Alt+<key>: ESC prefix on the character or named-key sequence.
+	if strings.HasPrefix(name, "Alt+") {
+		rest := name[4:]
+		if len([]rune(rest)) == 1 {
+			return "\x1b" + rest, nil
+		}
+		if seq, ok := specialKeys[rest]; ok {
+			return "\x1b" + seq, nil
+		}
 	}
 	// Single rune (letter, digit, punctuation).
 	if len([]rune(name)) == 1 {
@@ -51,6 +57,7 @@ var specialKeys = map[string]string{
 	// Ctrl + non-letter specials
 	"Ctrl+/":     "\x1f",
 	"Ctrl+Space": "\x00",
+	"Ctrl+Enter": "\x1b[13;5u", // kitty keyboard protocol (wezterm default)
 	// Function keys (xterm/VT100 sequences)
 	"F1":  "\x1bOP",
 	"F2":  "\x1bOQ",

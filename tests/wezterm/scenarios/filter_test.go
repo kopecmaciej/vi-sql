@@ -1,16 +1,5 @@
 //go:build wezterm
 
-// Package wezterm_test contains end-to-end scenarios for vi-sql, driven by
-// wezterm keystroke injection. Scenarios are guarded by the "wezterm" build
-// tag so they never run as part of the default test suite.
-//
-// Run with:
-//
-//	VI_SQL_WEZTERM_CONNECTION=<name> make test-wezterm
-//
-// or:
-//
-//	VI_SQL_WEZTERM_CONNECTION=<name> go test -tags=wezterm -count=1 -v ./tests/wezterm/scenarios/
 package wezterm_test
 
 import (
@@ -21,18 +10,13 @@ import (
 )
 
 // TestSchemaTableFilter simulates a manual navigation session:
-//  1. Connect to the database named in VI_SQL_WEZTERM_CONNECTION.
-//  2. Focus the schema tree (Ctrl+/).
-//  3. Navigate to the 3rd schema (Down x2) and expand it (e).
-//  4. Navigate to the 2nd table (Down x2) and open it (Enter).
+//  1. Connect via VI_SQL_TESTS_DSN.
+//  2. Focus the schema tree.
+//  3. Navigate to the 3rd schema (Down x2) and expand it.
+//  4. Navigate to the 2nd table (Down x2) and open it.
 //  5. Apply a WHERE filter (/) with the clause "1=1".
 func TestSchemaTableFilter(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping filter scenario")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	// Focus the schema tree (mode-aware: "ge" sequence in vim, Ctrl+/ in normal).
 	s.FocusSchemaTree()

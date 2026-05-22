@@ -22,12 +22,9 @@ func weztermCheckAvailable() error {
 }
 
 // weztermSpawn launches binary with args in a new wezterm pane and returns
-// the numeric pane-id printed on stdout. VI_SQL_LOG_LEVEL=trace is set so
-// focus-change events are written to the log for harness assertions.
+// the numeric pane-id printed on stdout.
 func weztermSpawn(binary string, args []string) (string, error) {
-	// Use `env` to inject VI_SQL_LOG_LEVEL=trace into the spawned process
-	// without touching the user's shell environment.
-	cmdArgs := []string{"cli", "spawn", "--", "env", "VI_SQL_LOG_LEVEL=trace"}
+	cmdArgs := []string{"cli", "spawn", "--"}
 	cmdArgs = append(cmdArgs, binary)
 	cmdArgs = append(cmdArgs, args...)
 	out, err := exec.Command("wezterm", cmdArgs...).Output()

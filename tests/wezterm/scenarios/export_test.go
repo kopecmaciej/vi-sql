@@ -16,6 +16,7 @@ func TestExportModal(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ", 2*time.Second)
+	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	s.Close()
 
@@ -29,6 +30,7 @@ func TestExportCSV(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ", 2*time.Second)
+	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	// Form order: Format (0) → Filename (1) → Path (2) → Include Headers (3) →
 	// Compress (4) → [Export button].
@@ -44,12 +46,9 @@ func TestExportCSV(t *testing.T) {
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
+	s.WaitForFile(tmp+"/export.csv", 3*time.Second)
 
-	outFile := tmp + "/export.csv"
-	if _, err := os.Stat(outFile); err != nil {
-		t.Fatalf("export file %q not created: %v", outFile, err)
-	}
-	data, err := os.ReadFile(outFile)
+	data, err := os.ReadFile(tmp + "/export.csv")
 	if err != nil {
 		t.Fatalf("cannot read export file: %v", err)
 	}
@@ -58,8 +57,6 @@ func TestExportCSV(t *testing.T) {
 	}
 }
 
-// TestExportJSON opens the export modal, picks JSON format, and verifies the
-// exported file starts with a JSON array.
 func TestExportJSON(t *testing.T) {
 	s, _ := harness.SpawnWithTable(t)
 
@@ -67,6 +64,7 @@ func TestExportJSON(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ", 5*time.Second)
+	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	// Navigate format dropdown from CSV (0) to JSON (1).
 	s.MoveDown(1)
@@ -83,9 +81,9 @@ func TestExportJSON(t *testing.T) {
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
+	s.WaitForFile(tmp+"/export.json", 3*time.Second)
 
-	outFile := tmp + "/export.json"
-	data, err := os.ReadFile(outFile)
+	data, err := os.ReadFile(tmp + "/export.json")
 	if err != nil {
 		t.Fatalf("cannot read JSON export file: %v", err)
 	}

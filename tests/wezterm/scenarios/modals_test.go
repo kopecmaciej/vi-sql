@@ -12,12 +12,7 @@ import (
 )
 
 func TestModalActions(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.OpenActionsModal()
 	s.AssertPaneContains(" Actions ")
@@ -26,12 +21,7 @@ func TestModalActions(t *testing.T) {
 }
 
 func TestModalServerInfo(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.OpenServerInfo()
 	s.AssertPaneContains(" Server Info ")
@@ -40,12 +30,7 @@ func TestModalServerInfo(t *testing.T) {
 }
 
 func TestModalStyleChange(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.ChangeStyle()
 	s.AssertPaneContains(" Change Style ")
@@ -55,9 +40,6 @@ func TestModalStyleChange(t *testing.T) {
 
 func TestModalExport(t *testing.T) {
 	s, _ := harness.SpawnWithTable(t)
-	if s == nil {
-		return
-	}
 
 	s.OpenExportModal()
 	s.AssertPaneContains(" Export ")
@@ -66,12 +48,7 @@ func TestModalExport(t *testing.T) {
 }
 
 func TestModalImport(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.OpenImportModal()
 	s.AssertPaneContains(" Import CSV ")
@@ -80,12 +57,7 @@ func TestModalImport(t *testing.T) {
 }
 
 func TestModalHistory(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.NewTab()
 	s.AssertPaneContains("Query")
@@ -97,12 +69,7 @@ func TestModalHistory(t *testing.T) {
 }
 
 func TestModalGoToTable(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.OpenActionsModal()
 	s.AssertPaneContains(" Actions ")
@@ -113,36 +80,28 @@ func TestModalGoToTable(t *testing.T) {
 	s.AssertPaneNotContains(" Go to table ")
 }
 
-func TestModalInlineEdit(t *testing.T) {
+func TestModalEditRow(t *testing.T) {
 	s, _ := harness.SpawnWithTable(t)
-	if s == nil {
-		return
-	}
 
 	s.MoveDown(1)
 	s.EditRow()
 	if s.IsVimMode() {
-		s.AssertPaneContains(" Edit Normal ")
+		s.AssertPaneContains(" Edit Row Normal ")
 	} else {
-		s.AssertPaneContains(" Edit ")
-		s.AssertPaneNotContains(" Edit Normal ")
+		s.AssertPaneContains(" Edit Row ")
+		s.AssertPaneNotContains(" Edit Row Normal ")
 	}
 	s.Close()
 
 	if s.IsVimMode() {
-		s.AssertPaneNotContains(" Edit Normal ")
+		s.AssertPaneNotContains(" Edit Row Normal ")
 	} else {
-		s.AssertPaneNotContains(" Edit ")
+		s.AssertPaneNotContains(" Edit Row ")
 	}
 }
 
 func TestModalErrorOnBadQuery(t *testing.T) {
-	conn := harness.DefaultConnection()
-	if conn == "" {
-		t.Skip("no connection available — skipping modal smoke")
-	}
-
-	s := harness.Spawn(t, "--connection-name", conn, "--debug")
+	s := harness.SpawnConnected(t, "--debug")
 
 	s.RunQueryInNewTab("THIS IS NOT VALID SQL")
 
