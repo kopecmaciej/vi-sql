@@ -2,6 +2,7 @@ BUILD_DIR := .build
 SVC_NAME := vi-sql
 REPOSITORY := github.com/kopecmaciej/vi-sql
 VERSION ?= $(shell git describe --tags --always --dirty)
+DB_URL ?= postgres://postgres:postgres@localhost:5432/tui_sample_db?sslmode=disable
 
 .PHONY: build run test-wezterm test-wezterm-slow
 
@@ -39,10 +40,10 @@ test-all:
 	go test -race -tags integration -timeout 120s ./...
 
 test-wezterm: build
-	go test -tags=wezterm -count=1 -v -timeout 120s ./tests/wezterm/scenarios/
+	VI_SQL_TESTS_DSN=$(DB_URL) go test -tags=wezterm -count=1 -v -timeout 120s ./tests/wezterm/scenarios/
 
 test-wezterm-slow: build
-	VI_SQL_WEZTERM_SLOW=1 go test -tags=wezterm -count=1 -v -timeout 300s ./tests/wezterm/scenarios/
+	VI_SQL_TESTS_DSN=$(DB_URL) VI_SQL_TESTS_SLOW=1 go test -tags=wezterm -count=1 -v -timeout 300s ./tests/wezterm/scenarios/
 
 debug:
 	if [ -f /proc/sys/kernel/yama/ptrace_scope ]; then \

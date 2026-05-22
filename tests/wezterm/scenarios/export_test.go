@@ -32,17 +32,15 @@ func TestExportCSV(t *testing.T) {
 	s.WaitForPane(" Export ", 2*time.Second)
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
-	// Form order: Format (0) → Filename (1) → Path (2) → Include Headers (3) →
-	// Compress (4) → [Export button].
-	s.FormNext() // Format → Filename
+	s.FormNext() // → Filename
 	s.ClearField()
 	s.Paste("export.csv")
-	s.FormNext() // Filename → Path
+	s.FormNext() // → Path
 	s.ClearField()
 	s.Paste(tmp + "/")
-	s.FormNext() // Path → Include Headers checkbox
-	s.FormNext() // Include Headers → Compress checkbox
-	s.FormNext() // Compress → Export button
+	s.FormNext() // → Include Headers
+	s.FormNext() // → Compress
+	s.FormNext() // → Export button
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
@@ -66,18 +64,16 @@ func TestExportJSON(t *testing.T) {
 	s.WaitForPane(" Export ", 5*time.Second)
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
-	// Navigate format dropdown from CSV (0) to JSON (1).
-	s.MoveDown(1)
-	// Form order for JSON: Format → Filename → Path → Pretty Print → Compress → [Export button].
-	s.FormNext() // Format → Filename
+	s.MoveDown(1) // Format: CSV → JSON
+	s.FormNext()  // → Filename
 	s.ClearField()
 	s.Paste("export.json")
-	s.FormNext() // Filename → Path
+	s.FormNext() // → Path
 	s.ClearField()
 	s.Paste(tmp + "/")
-	s.FormNext() // Path → Pretty Print checkbox
-	s.FormNext() // Pretty Print → Compress checkbox
-	s.FormNext() // Compress → Export button
+	s.FormNext() // → Pretty Print
+	s.FormNext() // → Compress
+	s.FormNext() // → Export button
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")

@@ -11,8 +11,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// newTestConfig creates a minimal vi-sql config in t.TempDir() with trace-level
-// plain JSON logging and no connections. Returns (configPath, logPath).
 func newTestConfig(t *testing.T) (configPath, logPath string) {
 	t.Helper()
 
@@ -39,8 +37,6 @@ func newTestConfig(t *testing.T) (configPath, logPath string) {
 	return configPath, logPath
 }
 
-// newTestConfigWithDSN is like newTestConfig but also writes a saved connection
-// seeded from dsn so the app shows the connection list rather than the pick-driver page.
 func newTestConfigWithDSN(t *testing.T, dsn string) (configPath, logPath string) {
 	t.Helper()
 
@@ -76,7 +72,6 @@ func newTestConfigWithDSN(t *testing.T, dsn string) (configPath, logPath string)
 	return configPath, logPath
 }
 
-// hasArg reports whether any of the given flag names appear in args.
 func hasArg(args []string, flags ...string) bool {
 	for _, a := range args {
 		for _, f := range flags {

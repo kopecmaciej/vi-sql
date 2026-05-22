@@ -1,7 +1,5 @@
 //go:build wezterm
 
-// Package wezterm_test modal smoke tests: open each modal, assert its title
-// appears, close it with Esc, assert it's gone.
 package wezterm_test
 
 import (
