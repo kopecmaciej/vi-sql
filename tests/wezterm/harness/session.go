@@ -424,6 +424,11 @@ func (s *Session) CollapseAll() {
 	s.sendAction(s.mustKeys().Schema.CollapseAll)
 }
 
+func (s *Session) ExpandAll() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.ExpandAll)
+}
+
 func (s *Session) Edit() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Common.Edit)
@@ -432,6 +437,37 @@ func (s *Session) Edit() {
 func (s *Session) EditRow() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Data.EditRow)
+}
+
+func (s *Session) DuplicateRow() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.DuplicateRow)
+}
+
+// Add sends Common.Add: opens the Add Row editor in a data view, or the
+// Create Table modal when the schema tree is focused.
+func (s *Session) Add() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Add)
+}
+
+// Delete sends Common.Delete: deletes the selected row in a data view, or
+// opens the drop-table confirmation when the schema tree is focused.
+func (s *Session) Delete() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Delete)
+}
+
+// Confirm sends Common.Confirm, which executes the form-style editor modals
+// (Add/Edit/Duplicate Row, Create Table).
+func (s *Session) Confirm() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Confirm)
+}
+
+func (s *Session) RenameTable() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.RenameTable)
 }
 
 // WriteToEditor pastes sql via clipboard. TextArea is always in insert mode — no mode switch needed.
