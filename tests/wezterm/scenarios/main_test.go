@@ -12,6 +12,7 @@ import (
 // TestMain sweeps schemas leaked by crashed prior runs before any test runs,
 // so fixture schemas never accumulate in the test database.
 func TestMain(m *testing.M) {
+	harness.InitTestLogger()
 	harness.SweepFixtureSchemas()
 	os.Exit(m.Run())
 }

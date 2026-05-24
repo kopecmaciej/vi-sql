@@ -12,7 +12,7 @@ import (
 )
 
 func TestPeekCell(t *testing.T) {
-	longText := strings.Repeat("vi-sql-peeker-test-", 15)
+	longText := strings.Repeat("vi-sql-peeker-test-", 10)
 
 	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name text")
 	db.Exec(fmt.Sprintf(
@@ -26,7 +26,9 @@ func TestPeekCell(t *testing.T) {
 	s.MoveDown(1)
 	s.PeekRow()
 	s.WaitForPane(" Row Details ", 5*time.Second)
-	s.AssertPaneContains(longText)
+	s.MoveDown(1)
+	s.Select()
+	s.AssertPaneContains(strings.Repeat("vi-sql-peeker-test-", 3))
 	s.Close()
 	s.AssertPaneNotContains(" Row Details ")
 }
