@@ -35,6 +35,9 @@ func TestImportCSV(t *testing.T) {
 	s.FocusDown(3)
 	s.Select()
 
-	s.AssertPaneNotContains(" Import CSV ")
 	harness.WaitForRowCount(t, db, schema, table, 2)
+	s.AssertPaneNotContains(" Import CSV ")
+	s.AssertPaneNotContains(" No rows found ")
+	s.Select()
+	time.Sleep(3 * time.Second)
 }

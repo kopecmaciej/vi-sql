@@ -103,19 +103,6 @@ func TestConnectionFormAddDuplicatedNameConnection(t *testing.T) {
 	s.AssertPaneContains("Failed to save connection")
 }
 
-func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
-	// diver picker first
-	s.MoveRight(3) // -> for now it's postgres
-	s.Select()
-
-	// connection corm
-	s.WaitForPane("Name", 3*time.Second)
-	s.Paste(name)
-	s.FocusDown(1)
-	s.Paste(dsn)
-	s.RunQuery()
-}
-
 func TestConnectionFormAddSQLite(t *testing.T) {
 	configPath, logPath := harness.NewTestConfig(t)
 	s := harness.SpawnWithConfig(t, configPath, logPath)
@@ -149,6 +136,19 @@ func TestConnectionFormDelete(t *testing.T) {
 	if strings.Contains(string(raw), "delme") {
 		t.Errorf("deleted connection 'delme' still found in config")
 	}
+}
+
+func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
+	// diver picker first
+	s.MoveRight(3) // -> for now it's postgres
+	s.Select()
+
+	// connection corm
+	s.WaitForPane("Name", 3*time.Second)
+	s.Paste(name)
+	s.FocusDown(1)
+	s.Paste(dsn)
+	s.RunQuery()
 }
 
 func AddSQLiteConnectionByForm(s *harness.Session, name, dbPath string) {
