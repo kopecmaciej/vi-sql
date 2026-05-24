@@ -58,6 +58,8 @@ var specialKeys = map[string]string{
 	"Ctrl+/":     "\x1f",
 	"Ctrl+Space": "\x00",
 	"Ctrl+Enter": "\x1b[13;5u", // kitty keyboard protocol (wezterm default)
+	"Ctrl+End":   "\x1b[1;5F",  // xterm modifier extension
+	"Ctrl+Home":  "\x1b[1;5H",  // xterm modifier extension
 	// Function keys (xterm/VT100 sequences)
 	"F1":  "\x1bOP",
 	"F2":  "\x1bOQ",

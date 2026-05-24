@@ -1,0 +1,32 @@
+//go:build wezterm
+
+package wezterm_test
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
+)
+
+func TestPeekCell(t *testing.T) {
+	longText := strings.Repeat("vi-sql-peeker-test-", 15)
+
+	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name text")
+	db.Exec(fmt.Sprintf(
+		"INSERT INTO %s (name) VALUES ('%s')",
+		db.Qualified(schema, table), longText,
+	))
+
+	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
+	s.WaitForPane("⏱", 10*time.Second)
+
+	s.MoveDown(1)
+	s.PeekRow()
+	s.WaitForPane(" Row Details ", 5*time.Second)
+	s.AssertPaneContains(longText)
+	s.Close()
+	s.AssertPaneNotContains(" Row Details ")
+}

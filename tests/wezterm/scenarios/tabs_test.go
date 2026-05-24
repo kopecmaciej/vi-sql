@@ -18,3 +18,27 @@ func TestQueryTabLifecycle(t *testing.T) {
 
 	s.CloseTab()
 }
+
+func TestMultipleTabsSwitching(t *testing.T) {
+	s := harness.SpawnConnected(t, "--debug")
+
+	s.NewTab()
+	s.WriteToEditor("UNIQUETAB1")
+	s.NewTab()
+	s.WriteToEditor("UNIQUETAB2")
+	s.NewTab()
+	s.WriteToEditor("UNIQUETAB3")
+
+	s.AssertPaneContains("UNIQUETAB3")
+
+	s.PrevTab()
+	s.AssertPaneContains("UNIQUETAB2")
+	s.AssertPaneNotContains("UNIQUETAB3")
+
+	s.PrevTab()
+	s.AssertPaneContains("UNIQUETAB1")
+	s.AssertPaneNotContains("UNIQUETAB2")
+
+	s.NextTab()
+	s.AssertPaneContains("UNIQUETAB2")
+}

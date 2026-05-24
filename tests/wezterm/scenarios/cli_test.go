@@ -5,6 +5,7 @@ package wezterm_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -50,4 +51,9 @@ func TestCLIOptionsPage(t *testing.T) {
 func TestCLIConnectionPage(t *testing.T) {
 	s := harness.SpawnWithSavedConnection(t, "--connection-page", "--debug")
 	s.AssertPaneContains("Connection")
+}
+
+func TestCLIJumpToMissingTable(t *testing.T) {
+	s := harness.SpawnConnected(t, "--jump", "nonexistent_schema.nonexistent_table", "--debug")
+	s.WaitForPane("Unable to jump", 10*time.Second)
 }

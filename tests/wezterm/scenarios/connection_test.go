@@ -5,6 +5,7 @@ package wezterm_test
 import (
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -112,5 +113,53 @@ func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
 	s.Paste(name)
 	s.FocusDown(1)
 	s.Paste(dsn)
+	s.RunQuery()
+}
+
+func TestConnectionFormAddSQLite(t *testing.T) {
+	configPath, logPath := harness.NewTestConfig(t)
+	s := harness.SpawnWithConfig(t, configPath, logPath)
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	AddSQLiteConnectionByForm(s, "sqliteconn", dbPath)
+
+	s.AssertPaneContains("sqliteconn")
+
+	raw, _ := os.ReadFile(configPath)
+	cfg := string(raw)
+	for _, want := range []string{"driver: sqlite", "name: sqliteconn"} {
+		if !strings.Contains(cfg, want) {
+			t.Errorf("config missing %q", want)
+		}
+	}
+}
+
+func TestConnectionFormDelete(t *testing.T) {
+	configPath, logPath := harness.NewTestConfig(t)
+	s := harness.SpawnWithConfig(t, configPath, logPath)
+
+	AddPsqlConnectionByForm(s, "delme", "postgresql://testuser:testpass@db.example.com:5432/testdb")
+	s.WaitForPane("delme", 3*time.Second)
+
+	s.Delete()
+	s.AssertPaneNotContains("delme")
+	s.KillPane()
+
+	raw, _ := os.ReadFile(configPath)
+	if strings.Contains(string(raw), "delme") {
+		t.Errorf("deleted connection 'delme' still found in config")
+	}
+}
+
+func AddSQLiteConnectionByForm(s *harness.Session, name, dbPath string) {
+	s.WaitForPane("Pick Driver", 5*time.Second)
+	// drivers sorted alphabetically: cockroachdb=0, mariadb=1, mysql=2, postgres=3, sqlite=4
+	s.MoveRight(4)
+	s.Select()
+
+	s.WaitForPane("Name", 3*time.Second)
+	s.Paste(name)
+	s.FocusDown(1) // → Path / URI
+	s.Paste(dbPath)
 	s.RunQuery()
 }

@@ -532,6 +532,36 @@ func (s *Session) OpenImportModal() {
 	s.sendAction(s.mustKeys().Main.ImportData)
 }
 
+func (s *Session) OpenStructure() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.OpenStructure)
+}
+
+func (s *Session) OpenIndexes() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Schema.OpenIndexes)
+}
+
+func (s *Session) PeekRow() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.PeekRow)
+}
+
+func (s *Session) NextTab() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Navigation.FocusRight)
+}
+
+func (s *Session) PrevTab() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Navigation.FocusLeft)
+}
+
+func (s *Session) GoBottom() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Navigation.GoBottom)
+}
+
 func (s *Session) AssertPaneNotContains(substr string) {
 	s.t.Helper()
 	deadline := time.Now().Add(assertionTimeout)

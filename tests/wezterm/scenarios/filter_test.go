@@ -25,3 +25,20 @@ func TestSchemaTableFilter(t *testing.T) {
 	s.Select()
 	s.AssertPaneContains("WHERE: 1=1")
 }
+
+func TestFilterClear(t *testing.T) {
+	schema, table, _ := harness.NewFixtureTable(t, "id serial primary key, name text")
+
+	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
+	s.WaitForPane("⏱", 10*time.Second)
+
+	s.Filter()
+	s.Paste("1=1")
+	s.Confirm()
+	s.AssertPaneContains("WHERE: 1=1")
+
+	s.Filter()
+	s.ClearField()
+	s.Confirm()
+	s.AssertPaneNotContains("WHERE:")
+}
