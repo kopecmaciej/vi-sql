@@ -23,11 +23,7 @@ func TestSchemaTreeExpandCollapse(t *testing.T) {
 
 // TestSchemaTreeFilterByTable verifies the schema-tree filter matches table names.
 func TestSchemaTreeFilterByTable(t *testing.T) {
-	table := os.Getenv(harness.EnvFilterTable)
-	if table == "" {
-		table = "users"
-	}
-
+	table := "users"
 	s := harness.SpawnConnected(t, "--debug")
 
 	s.FocusSchemaTree()

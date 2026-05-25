@@ -39,5 +39,4 @@ func TestImportCSV(t *testing.T) {
 	s.AssertPaneNotContains(" Import CSV ")
 	s.AssertPaneNotContains(" No rows found ")
 	s.Select()
-	time.Sleep(3 * time.Second)
 }

@@ -1,4 +1,4 @@
-# Scenarios not yet covered by e2e tests
+# Scenarios to cover
 
 - Master password: setup, unlock on startup, reset flow
 - MCP HTTP endpoints: start server, execute_query, open_query_in_tab (needs HTTP client in test)

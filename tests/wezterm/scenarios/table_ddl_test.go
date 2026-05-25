@@ -46,6 +46,7 @@ func TestRenameTable(t *testing.T) {
 
 	s.RenameTable()
 	s.WaitForPane("Rename table", 5*time.Second)
+	s.ClearField()
 	s.Type("fixture_renamed")
 	s.Send("Enter")
 

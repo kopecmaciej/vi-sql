@@ -1,13 +1,5 @@
 //go:build wezterm
 
-// Package harness drives vi-sql via wezterm keystroke injection. Requires the "wezterm" build tag.
-//
-// Environment variables:
-//
-//	VI_SQL_TESTS_DSN          database DSN (required for DB tests; e.g. postgresql://user:pass@host/db)
-//	VI_SQL_TESTS_JUMP         schema.table to open (default: auth.users)
-//	VI_SQL_TESTS_BINARY       path to vi-sql binary (default: .build/vi-sql)
-//	VI_SQL_TESTS_KEY_DELAY_MS delay in ms between keystrokes (default: 40)
 package harness
 
 import (
@@ -27,6 +19,7 @@ import (
 
 const (
 	defaultLogPath   = "/tmp/vi-sql.log"
+	defaultTable     = "auth.users"
 	defaultKeyDelay  = 40 * time.Millisecond
 	slowKeyDelay     = 200 * time.Millisecond
 	readyMarker      = "Vi-SQL started"
@@ -547,6 +540,21 @@ func (s *Session) PeekRow() {
 	s.sendAction(s.mustKeys().Data.PeekRow)
 }
 
+func (s *Session) FollowForeignKey() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.FollowForeignKey)
+}
+
+func (s *Session) FindReferences() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.FindReferences)
+}
+
+func (s *Session) RenameTab() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Main.RenameTab)
+}
+
 func (s *Session) NextTab() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Navigation.FocusRight)
@@ -705,7 +713,7 @@ func DefaultJump() string {
 	if v := os.Getenv(EnvJump); v != "" {
 		return v
 	}
-	return "auth.users"
+	return defaultTable
 }
 
 func ParseJump(jump string) (schema, table string, ok bool) {

@@ -15,20 +15,13 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 
-	// Side-effect import: registers the Postgres connector so the fixture
-	// helpers can open a direct connection. Fixtures are Postgres-only;
-	// other DSNs are skipped.
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
 )
 
-// fixtureSchemaPrefix marks every schema created by the test harness.
-// SweepFixtureSchemas drops anything carrying this prefix, so a run that
-// crashes before t.Cleanup leaks at most one run's worth of schemas.
-const fixtureSchemaPrefix = "vi_sql_test_"
-
-// fixtureTableName is the table NewFixtureTable creates. The schema is unique
-// per test, so a fixed table name is unambiguous.
-const fixtureTableName = "fixture"
+const (
+	fixtureSchemaPrefix = "vi_sql_test_"
+	fixtureTableName    = "fixture"
+)
 
 var fixtureSeq atomic.Int64
 
