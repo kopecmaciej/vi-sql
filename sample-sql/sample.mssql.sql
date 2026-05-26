@@ -4,6 +4,7 @@
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+SET QUOTED_IDENTIFIER ON;
 GO
 
 -- ============================================================
@@ -45,11 +46,16 @@ GO
 
 -- ============================================================
 -- SCHEMAS
+-- CREATE SCHEMA must be the only statement in its batch.
 -- ============================================================
 CREATE SCHEMA auth;
+GO
 CREATE SCHEMA catalog;
+GO
 CREATE SCHEMA [orders];
+GO
 CREATE SCHEMA shipping;
+GO
 CREATE SCHEMA audit;
 GO
 
@@ -558,13 +564,13 @@ GO
 SET IDENTITY_INSERT auth.roles ON;
 BULK INSERT auth.roles
 FROM '/data/roles.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT auth.roles OFF;
 
 SET IDENTITY_INSERT auth.permissions ON;
 BULK INSERT auth.permissions
 FROM '/data/permissions.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT auth.permissions OFF;
 
 BULK INSERT auth.role_permissions
@@ -586,16 +592,30 @@ WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n',
 SET IDENTITY_INSERT catalog.categories ON;
 BULK INSERT catalog.categories
 FROM '/data/categories.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT catalog.categories OFF;
 
--- products.csv omits spec_sheet and search_vector columns; use a format file
--- or a staging table. Here we stage then insert to map columns explicitly.
-SELECT TOP 0 *
-INTO #products_stage
-FROM catalog.products;
+-- products.csv omits spec_sheet; load via a real staging table (BULK INSERT
+-- does not support temp tables with FORMAT='CSV').
+DROP TABLE IF EXISTS dbo._products_stage;
+CREATE TABLE dbo._products_stage (
+    id            UNIQUEIDENTIFIER NOT NULL,
+    category_id   INT,
+    created_by    UNIQUEIDENTIFIER,
+    sku           NVARCHAR(100),
+    name          NVARCHAR(500),
+    slug          NVARCHAR(500),
+    description   NVARCHAR(MAX),
+    short_desc    NVARCHAR(1000),
+    status        NVARCHAR(20),
+    weight_kg     DECIMAL(8,3),
+    attributes    NVARCHAR(MAX),
+    tags          NVARCHAR(MAX),
+    created_at    DATETIME2,
+    updated_at    DATETIME2
+);
 
-BULK INSERT #products_stage
+BULK INSERT dbo._products_stage
 FROM '/data/products.csv'
 WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
 
@@ -605,9 +625,9 @@ INSERT INTO catalog.products
 SELECT
     id, category_id, created_by, sku, name, slug, description, short_desc,
     status, weight_kg, attributes, tags, created_at, updated_at
-FROM #products_stage;
+FROM dbo._products_stage;
 
-DROP TABLE #products_stage;
+DROP TABLE dbo._products_stage;
 
 BULK INSERT catalog.product_variants
 FROM '/data/product_variants.csv'
@@ -620,13 +640,13 @@ WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n',
 SET IDENTITY_INSERT catalog.price_rules ON;
 BULK INSERT catalog.price_rules
 FROM '/data/price_rules.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT catalog.price_rules OFF;
 
 SET IDENTITY_INSERT shipping.carriers ON;
 BULK INSERT shipping.carriers
 FROM '/data/carriers.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT shipping.carriers OFF;
 
 BULK INSERT shipping.addresses
@@ -665,20 +685,20 @@ WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n',
 SET IDENTITY_INSERT shipping.shipment_events ON;
 BULK INSERT shipping.shipment_events
 FROM '/data/shipment_events.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT shipping.shipment_events OFF;
 
 -- audit_events.csv maps to audit.events; changed_fields stored as JSON string.
 SET IDENTITY_INSERT audit.events ON;
 BULK INSERT audit.events
 FROM '/data/audit_events.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT audit.events OFF;
 
 SET IDENTITY_INSERT audit.api_logs ON;
 BULK INSERT audit.api_logs
 FROM '/data/api_logs.csv'
-WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', TABLOCK);
+WITH (FORMAT = 'CSV', FIRSTROW = 2, FIELDTERMINATOR = ',', ROWTERMINATOR = '\n', KEEPIDENTITY, TABLOCK);
 SET IDENTITY_INSERT audit.api_logs OFF;
 
 -- ============================================================

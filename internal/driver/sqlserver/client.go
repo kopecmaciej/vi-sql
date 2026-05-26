@@ -50,40 +50,46 @@ func (c *Client) Connect(ctx context.Context) error {
 }
 
 func (c *Client) buildDSN() (string, error) {
+	// $ENV_VAR — expand and use the URL as-is (preserves any extra params like TrustServerCertificate).
 	raw := c.Config.DSN
-	if raw != "" {
-		if envKey, ok := strings.CutPrefix(raw, "$"); ok {
-			if resolved := os.Getenv(envKey); resolved != "" {
-				raw = resolved
+	if envKey, ok := strings.CutPrefix(strings.TrimSpace(raw), "$"); ok && envKey != "" {
+		if resolved := os.Getenv(envKey); resolved != "" {
+			return resolved, nil
+		}
+	}
+
+	// Field-based path: preferred whenever Host is available.
+	// When the user enters a URL in the form, register.go parses it into Host/Port/etc.
+	// and stores only a masked display DSN — so we always rebuild from the live fields.
+	if c.Config.Host != "" {
+		password := c.Config.Password
+		if util.IsEncrypted(password) {
+			if config.EncryptionKey == "" {
+				return "", fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
 			}
+			decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
+			if err != nil {
+				return "", err
+			}
+			password = decrypted
 		}
-		if strings.HasPrefix(raw, "sqlserver://") {
-			return raw, nil
+		port := c.Config.Port
+		if port == 0 {
+			port = 1433
 		}
+		encrypt := c.Config.SSLMode
+		if encrypt == "" {
+			encrypt = "disable"
+		}
+		return util.BuildSQLServerDSN(c.Config.Host, port, c.Config.Database, c.Config.Username, password, encrypt), nil
 	}
 
-	password := c.Config.Password
-	if util.IsEncrypted(password) {
-		if config.EncryptionKey == "" {
-			return "", fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
-		}
-		decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
-		if err != nil {
-			return "", err
-		}
-		password = decrypted
+	// Raw URL fallback (Host not parsed — should not normally happen).
+	if strings.HasPrefix(raw, "sqlserver://") {
+		return raw, nil
 	}
 
-	port := c.Config.Port
-	if port == 0 {
-		port = 1433
-	}
-	encrypt := c.Config.SSLMode
-	if encrypt == "" {
-		encrypt = "disable"
-	}
-
-	return util.BuildSQLServerDSN(c.Config.Host, port, c.Config.Database, c.Config.Username, password, encrypt), nil
+	return "", fmt.Errorf("no host or DSN configured for SQL Server connection")
 }
 
 func (c *Client) Close() {

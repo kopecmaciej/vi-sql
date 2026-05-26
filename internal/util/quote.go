@@ -46,6 +46,21 @@ func (q Quoter) WhereEqAnon(cols map[string]any) ([]string, []any) {
 	return parts, args
 }
 
+// WhereEqMSSql builds `<col> = @pN` WHERE clauses for SQL Server, numbering
+// parameters starting at startIdx. Returns clauses, matching args, and the
+// next available parameter index (startIdx + len(cols)).
+func (q Quoter) WhereEqMSSql(cols map[string]any, startIdx int) (parts []string, args []any, nextIdx int) {
+	parts = make([]string, 0, len(cols))
+	args = make([]any, 0, len(cols))
+	i := startIdx
+	for col, val := range cols {
+		parts = append(parts, fmt.Sprintf("%s = @p%d", q.Ident(col), i))
+		args = append(args, val)
+		i++
+	}
+	return parts, args, i
+}
+
 // WhereEqIndexed builds `<col> = $N` clauses for each entry in cols,
 // returning the clauses alongside matching args. Use for drivers with
 // 1-based indexed placeholders (Postgres).

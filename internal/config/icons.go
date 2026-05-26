@@ -97,7 +97,7 @@ func (s *IconStyle) TypeSymbol(dataType string) string {
 		strings.Contains(dt, "real") || strings.Contains(dt, "double") ||
 		strings.Contains(dt, "float") || strings.Contains(dt, "money"):
 		return string(s.TypeNumber)
-	case strings.Contains(dt, "bool"):
+	case strings.Contains(dt, "bool") || dt == "bit":
 		return string(s.TypeBool)
 	case strings.Contains(dt, "json"):
 		return string(s.TypeJSON)

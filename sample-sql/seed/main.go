@@ -577,7 +577,7 @@ func generateProductImages() {
 				productIDs[gs],
 				"", // variant_id: NULL
 				fmt.Sprintf("https://cdn.example.com/products/SKU-%06d-%d.jpg", gs, img),
-				fmt.Sprintf("Product %d — view %d", gs, img),
+				fmt.Sprintf("Product %d - view %d", gs, img),
 				itoa(img - 1),
 				b01(img == 1),
 				"", "", // width, height: NULL

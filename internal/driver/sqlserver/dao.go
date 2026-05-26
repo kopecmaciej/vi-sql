@@ -108,7 +108,7 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 
 	args := []any{}
 	if nameFilter != "" {
-		query += " AND (s.name LIKE ? OR t.name LIKE ?)"
+		query += " AND (s.name LIKE @p1 OR t.name LIKE @p2)"
 		args = append(args, "%"+nameFilter+"%", "%"+nameFilter+"%")
 	}
 	query += " GROUP BY s.name ORDER BY s.name"
@@ -148,11 +148,11 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 		       END AS column_type,
 		       c.is_nullable,
 		       dc.definition AS column_default,
-		       CASE WHEN EXISTS (
+		       CAST(CASE WHEN EXISTS (
 		           SELECT 1 FROM sys.index_columns ic
 		           JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
 		           WHERE ic.object_id = c.object_id AND ic.column_id = c.column_id AND i.is_primary_key = 1
-		       ) THEN 1 ELSE 0 END AS is_pk,
+		       ) THEN 1 ELSE 0 END AS BIT) AS is_pk,
 		       c.column_id,
 		       ''
 		FROM sys.columns c
@@ -160,7 +160,7 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 		JOIN sys.schemas s ON t.schema_id = s.schema_id
 		JOIN sys.types tp ON c.user_type_id = tp.user_type_id
 		LEFT JOIN sys.default_constraints dc ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
-		WHERE s.name = ? AND t.name = ?
+		WHERE s.name = @p1 AND t.name = @p2
 		ORDER BY c.column_id`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table columns: %w", err)
@@ -171,12 +171,16 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 	for rows.Next() {
 		var col database.ColumnInfo
 		var isNullable, isPK bool
+		var defaultVal sql.NullString
 		if err := rows.Scan(&col.Name, &col.DataType, &isNullable,
-			&col.Default, &isPK, &col.Ordinal, &col.Comment); err != nil {
+			&defaultVal, &isPK, &col.Ordinal, &col.Comment); err != nil {
 			return nil, err
 		}
 		col.IsNullable = isNullable
 		col.IsPK = isPK
+		if defaultVal.Valid {
+			col.Default = &defaultVal.String
+		}
 		columns = append(columns, col)
 	}
 	return columns, rows.Err()
@@ -192,7 +196,7 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 		JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 		JOIN sys.tables t ON tc.parent_object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id = s.schema_id
-		WHERE s.name = ? AND t.name = ? AND tc.type IN ('PK','UQ')
+		WHERE s.name = @p1 AND t.name = @p2 AND tc.type IN ('PK','UQ')
 		GROUP BY tc.name, tc.type
 		ORDER BY tc.type, tc.name`, schema, table)
 	if err != nil {
@@ -232,7 +236,7 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 		JOIN sys.schemas s  ON t.schema_id            = s.schema_id
 		JOIN sys.tables rt  ON fk.referenced_object_id = rt.object_id
 		JOIN sys.schemas rs ON rt.schema_id            = rs.schema_id
-		WHERE s.name = ? AND t.name = ?
+		WHERE s.name = @p1 AND t.name = @p2
 		GROUP BY fk.name, rs.name, rt.name, fk.update_referential_action_desc, fk.delete_referential_action_desc
 		ORDER BY fk.name`, schema, table)
 	if err != nil {
@@ -271,7 +275,7 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 		JOIN sys.schemas ps ON pt.schema_id              = ps.schema_id
 		JOIN sys.tables rt  ON fk.referenced_object_id  = rt.object_id
 		JOIN sys.schemas rs ON rt.schema_id              = rs.schema_id
-		WHERE rs.name = ? AND rt.name = ?
+		WHERE rs.name = @p1 AND rt.name = @p2
 		GROUP BY fk.name, ps.name, pt.name
 		ORDER BY ps.name, pt.name`, schema, table)
 	if err != nil {
@@ -301,7 +305,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 		FROM sys.partitions p
 		JOIN sys.tables t  ON p.object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id  = s.schema_id
-		WHERE s.name = ? AND t.name = ? AND p.index_id IN (0, 1)`, schema, table).Scan(&count)
+		WHERE s.name = @p1 AND t.name = @p2 AND p.index_id IN (0, 1)`, schema, table).Scan(&count)
 	if err != nil {
 		return 0, false, err
 	}
@@ -327,9 +331,9 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 	query += " ORDER BY " + order
 
 	offset := int64(state.RowCount())
-	displayQuery := query + fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, state.BatchSize)
-	query += " OFFSET ? ROWS FETCH NEXT ? ROWS ONLY"
-	args = append(args, offset, state.BatchSize)
+	// go-mssqldb does not substitute ? in OFFSET/FETCH; inline as integer literals (safe: internal int64 values).
+	query += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, state.BatchSize)
+	displayQuery := query
 
 	rows, err := d.client.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -355,10 +359,12 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	cols := make([]string, 0, len(row))
 	placeholders := make([]string, 0, len(row))
 	args := make([]any, 0, len(row))
+	i := 1
 	for col, val := range row {
 		cols = append(cols, quote.Ident(col))
-		placeholders = append(placeholders, "?")
+		placeholders = append(placeholders, fmt.Sprintf("@p%d", i))
 		args = append(args, val)
+		i++
 	}
 
 	// Use OUTPUT INSERTED to retrieve the generated PK without relying on LastInsertId.
@@ -395,25 +401,24 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 
 	setClauses := []string{}
 	args := []any{}
+	idx := 1
 	for col, newVal := range updated {
 		if col == "_pk" || pkSet[col] {
 			continue
 		}
 		oldVal, exists := original[col]
 		if !exists || fmt.Sprint(oldVal) != fmt.Sprint(newVal) {
-			setClauses = append(setClauses, fmt.Sprintf("%s = ?", quote.Ident(col)))
+			setClauses = append(setClauses, fmt.Sprintf("%s = @p%d", quote.Ident(col), idx))
 			args = append(args, newVal)
+			idx++
 		}
 	}
 	if len(setClauses) == 0 {
 		return nil
 	}
 
-	whereParts := []string{}
-	for col, val := range pk.Columns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = ?", quote.Ident(col)))
-		args = append(args, val)
-	}
+	whereParts, pkArgs, _ := quote.WhereEqMSSql(pk.Columns, idx)
+	args = append(args, pkArgs...)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		quote.Table(schema, table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
@@ -431,7 +436,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []database.PrimaryKey) error {
 	log.Info().Str("schema", schema).Str("table", table).Int("count", len(pks)).Msg("Deleting rows")
 	for _, pk := range pks {
-		whereParts, args := quote.WhereEqAnon(pk.Columns)
+		whereParts, args, _ := quote.WhereEqMSSql(pk.Columns, 1)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s",
 			quote.Table(schema, table), strings.Join(whereParts, " AND "))
 
@@ -494,7 +499,7 @@ func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, er
 		JOIN sys.tables t  ON c.object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id  = s.schema_id
 		JOIN sys.types tp  ON c.user_type_id = tp.user_type_id
-		WHERE s.name = ? AND t.name = ?
+		WHERE s.name = @p1 AND t.name = @p2
 		ORDER BY c.column_id`, schema, table)
 	if err != nil {
 		return "", fmt.Errorf("failed to get table DDL: %w", err)
@@ -539,7 +544,7 @@ func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, er
 		JOIN sys.columns c        ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 		JOIN sys.tables t         ON kc.parent_object_id = t.object_id
 		JOIN sys.schemas s        ON t.schema_id = s.schema_id
-		WHERE s.name = ? AND t.name = ? AND kc.type = 'PK'
+		WHERE s.name = @p1 AND t.name = @p2 AND kc.type = 'PK'
 		GROUP BY kc.name`, schema, table)
 	if err == nil {
 		defer func() { _ = pkRows.Close() }()
@@ -624,7 +629,7 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 		JOIN sys.columns c        ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 		JOIN sys.tables t         ON i.object_id = t.object_id
 		JOIN sys.schemas s        ON t.schema_id = s.schema_id
-		WHERE s.name = ? AND t.name = ? AND i.is_hypothetical = 0 AND ic.is_included_column = 0
+		WHERE s.name = @p1 AND t.name = @p2 AND i.is_hypothetical = 0 AND ic.is_included_column = 0
 		GROUP BY i.name, i.is_unique, i.is_primary_key, i.type_desc
 		ORDER BY i.is_primary_key DESC, i.name`, schema, table)
 	if err != nil {
@@ -680,7 +685,7 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 		SELECT t.name FROM sys.indexes i
 		JOIN sys.tables t  ON i.object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id  = s.schema_id
-		WHERE s.name = ? AND i.name = ?`, schema, indexName).Scan(&tableName)
+		WHERE s.name = @p1 AND i.name = @p2`, schema, indexName).Scan(&tableName)
 	if err != nil {
 		return fmt.Errorf("failed to locate index %q: %w", indexName, err)
 	}
@@ -696,28 +701,19 @@ func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
 func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset int64) (string, []database.Row, []database.ColumnInfo, error) {
 	bypassSubquery := sqlpkg.IsExplainQuery(rawSQL) || sqlpkg.IsReturningDML(rawSQL)
 
-	var displayQuery, paramQuery string
+	var query string
 	if bypassSubquery {
-		displayQuery = rawSQL
-		paramQuery = rawSQL
+		query = rawSQL
 	} else {
-		// SQL Server requires ORDER BY for OFFSET/FETCH; (SELECT NULL) satisfies
-		// the syntax without imposing an order.
-		displayQuery = fmt.Sprintf(
+		// go-mssqldb does not substitute ? in OFFSET/FETCH; inline as integer literals (safe: internal int64 values).
+		// SQL Server requires ORDER BY for OFFSET/FETCH; (SELECT NULL) satisfies the syntax without imposing an order.
+		query = fmt.Sprintf(
 			"SELECT * FROM (%s) AS _q ORDER BY (SELECT NULL) OFFSET %d ROWS FETCH NEXT %d ROWS ONLY",
 			rawSQL, offset, limit)
-		paramQuery = fmt.Sprintf(
-			"SELECT * FROM (%s) AS _q ORDER BY (SELECT NULL) OFFSET ? ROWS FETCH NEXT ? ROWS ONLY",
-			rawSQL)
 	}
+	displayQuery := query
 
-	var sqlRows *sql.Rows
-	var err error
-	if bypassSubquery {
-		sqlRows, err = d.client.DB.QueryContext(ctx, paramQuery)
-	} else {
-		sqlRows, err = d.client.DB.QueryContext(ctx, paramQuery, offset, limit)
-	}
+	sqlRows, err := d.client.DB.QueryContext(ctx, query)
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -841,7 +837,7 @@ func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]
 		FROM sys.columns c
 		JOIN sys.tables t  ON c.object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id  = s.schema_id
-		WHERE s.name = ? AND t.name = ?
+		WHERE s.name = @p1 AND t.name = @p2
 		ORDER BY c.column_id`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get column names: %w", err)
@@ -867,7 +863,7 @@ func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([
 		JOIN sys.columns c        ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 		JOIN sys.tables t         ON kc.parent_object_id = t.object_id
 		JOIN sys.schemas s        ON t.schema_id = s.schema_id
-		WHERE s.name = ? AND t.name = ? AND kc.type = 'PK'
+		WHERE s.name = @p1 AND t.name = @p2 AND kc.type = 'PK'
 		ORDER BY ic.key_ordinal`, schema, table)
 	if err != nil {
 		return nil, err
@@ -892,6 +888,14 @@ func scanRows(rows *sql.Rows) ([]database.Row, error) {
 		return nil, err
 	}
 
+	// go-mssqldb returns UNIQUEIDENTIFIER as raw []byte (16 bytes, mixed-endian).
+	// Track which columns need UUID formatting to avoid treating them as strings.
+	colTypes, _ := rows.ColumnTypes()
+	isUUID := make([]bool, len(cols))
+	for i, ct := range colTypes {
+		isUUID[i] = ct.DatabaseTypeName() == "UNIQUEIDENTIFIER"
+	}
+
 	var result []database.Row
 	for rows.Next() {
 		vals := make([]any, len(cols))
@@ -908,7 +912,11 @@ func scanRows(rows *sql.Rows) ([]database.Row, error) {
 			case nil:
 				row[col] = nil
 			case []byte:
-				row[col] = string(v)
+				if isUUID[i] && len(v) == 16 {
+					row[col] = formatUUID(v)
+				} else {
+					row[col] = string(v)
+				}
 			case time.Time:
 				row[col] = v.Format(time.RFC3339Nano)
 			default:
@@ -918,4 +926,16 @@ func scanRows(rows *sql.Rows) ([]database.Row, error) {
 		result = append(result, row)
 	}
 	return result, rows.Err()
+}
+
+// formatUUID converts a 16-byte UNIQUEIDENTIFIER from go-mssqldb's mixed-endian
+// representation to the standard UUID string format (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+// SQL Server stores the first three groups little-endian and the last two big-endian.
+func formatUUID(b []byte) string {
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		uint32(b[3])<<24|uint32(b[2])<<16|uint32(b[1])<<8|uint32(b[0]),
+		uint16(b[5])<<8|uint16(b[4]),
+		uint16(b[7])<<8|uint16(b[6]),
+		b[8:10],
+		b[10:16])
 }

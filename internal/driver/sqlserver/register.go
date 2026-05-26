@@ -23,7 +23,7 @@ func init() {
 		},
 		FormSpec: []database.FieldSpec{
 			{Kind: database.FieldTextArea, Label: "DSN", Rows: 3},
-			{Kind: database.FieldLabel, Label: "Example", Default: "sqlserver://user:password@host:1433?database=db"},
+			{Kind: database.FieldLabel, Label: "Example", Default: "sqlserver://user:password@host:1433?database=db&encrypt=disable"},
 			{Kind: database.FieldLabel, Label: " ", Default: "----------------------------------------------"},
 			{Kind: database.FieldInput, Label: "Host"},
 			{Kind: database.FieldInput, Label: "Port", Default: "1433"},
