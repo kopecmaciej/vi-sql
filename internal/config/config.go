@@ -434,6 +434,12 @@ func (m *SQLConfig) buildDSNFromFields(password string) string {
 			params["tls"] = m.SSLMode
 		}
 		return util.BuildDSN(m.GetDriver(), m.Host, m.Port, m.Database, m.Username, password, params)
+	case "sqlserver":
+		encrypt := m.SSLMode
+		if encrypt == "" {
+			encrypt = "disable"
+		}
+		return util.BuildSQLServerDSN(m.Host, m.Port, m.Database, m.Username, password, encrypt)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {

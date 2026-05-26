@@ -16,6 +16,7 @@ import (
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlite"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlserver"
 	"github.com/kopecmaciej/vi-sql/internal/tui"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog"

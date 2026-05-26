@@ -6,18 +6,24 @@ import (
 )
 
 // Quoter applies a SQL dialect's identifier-quoting rules. Use the
-// predefined ANSIQuoter (Postgres, SQLite) or BacktickQuoter (MySQL).
+// predefined ANSIQuoter (Postgres, SQLite), BacktickQuoter (MySQL), or
+// BracketQuoter (SQL Server).
 type Quoter byte
 
 const (
 	ANSIQuoter     Quoter = '"' // PostgreSQL, SQLite
-	BacktickQuoter Quoter = '`' // MySQL
+	BacktickQuoter Quoter = '`' // MySQL, MariaDB
+	BracketQuoter  Quoter = '[' // SQL Server
 )
 
 // Ident wraps name in the dialect's quote character, doubling any embedded
 // quote characters so reserved words and special characters in identifiers
 // are safe to interpolate.
 func (q Quoter) Ident(name string) string {
+	if q == BracketQuoter {
+		// SQL Server bracket quoting: [name], with ] escaped as ]]
+		return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
+	}
 	s := string(q)
 	return s + strings.ReplaceAll(name, s, s+s) + s
 }

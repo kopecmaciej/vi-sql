@@ -51,6 +51,53 @@ func ParseMySQLDSN(dsn string) (*ParsedDSN, error) {
 	return parseURLDSN(dsn, "3306", "tls")
 }
 
+// ParseSQLServerDSN parses a sqlserver:// URL into its components.
+// The database name is read from the ?database= query parameter.
+func ParseSQLServerDSN(dsn string) (*ParsedDSN, error) {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse DSN: %w", err)
+	}
+	result := &ParsedDSN{
+		Host:     u.Hostname(),
+		Port:     u.Port(),
+		Database: u.Query().Get("database"),
+		SSLMode:  u.Query().Get("encrypt"),
+	}
+	if u.User != nil {
+		result.Username = u.User.Username()
+		result.Password, _ = u.User.Password()
+	}
+	if result.Port == "" {
+		result.Port = "1433"
+	}
+	return result, nil
+}
+
+// BuildSQLServerDSN constructs a sqlserver:// connection URL.
+func BuildSQLServerDSN(host string, port int, database, username, password, encrypt string) string {
+	var userInfo string
+	if username != "" {
+		if password != "" {
+			userInfo = url.PathEscape(username) + ":" + url.PathEscape(password) + "@"
+		} else {
+			userInfo = url.PathEscape(username) + "@"
+		}
+	}
+	params := url.Values{}
+	if database != "" {
+		params.Set("database", database)
+	}
+	if encrypt != "" {
+		params.Set("encrypt", encrypt)
+	}
+	dsn := fmt.Sprintf("sqlserver://%s%s:%d", userInfo, host, port)
+	if len(params) > 0 {
+		dsn += "?" + params.Encode()
+	}
+	return dsn
+}
+
 // BuildDSN constructs a connection URL from individual components.
 func BuildDSN(scheme, host string, port int, database, username, password string, params map[string]string) string {
 	var userInfo string
@@ -110,6 +157,8 @@ func DetectDriverFromDSN(dsn string) (string, error) {
 		return "mysql", nil
 	case strings.HasPrefix(lower, "mariadb://"):
 		return "mariadb", nil
+	case strings.HasPrefix(lower, "sqlserver://"):
+		return "sqlserver", nil
 	case strings.HasPrefix(lower, "sqlite://"),
 		strings.HasPrefix(lower, ":memory:"),
 		strings.HasPrefix(lower, "file:"):
