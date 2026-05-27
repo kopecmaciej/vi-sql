@@ -16,6 +16,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/util"
 
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlserver"
 )
 
 const (
@@ -29,8 +30,9 @@ var fixtureSeq atomic.Int64
 // independently of the vi-sql UI under test. Tests arrange via this connection,
 // act through the UI, then assert via this connection.
 type FixtureDB struct {
-	t      *testing.T
-	driver database.Driver
+	t          *testing.T
+	driver     database.Driver
+	driverName string
 }
 
 func fixtureCtx() (context.Context, context.CancelFunc) {
@@ -38,7 +40,7 @@ func fixtureCtx() (context.Context, context.CancelFunc) {
 }
 
 // NewFixtureSchema creates an empty, uniquely-named schema and registers a
-// CASCADE drop as test cleanup. The drop runs on pass or fail, but not on
+// teardown as test cleanup. The teardown runs on pass or fail, but not on
 // SIGKILL/timeout — SweepFixtureSchemas covers that case on the next run.
 func NewFixtureSchema(t *testing.T) (schema string, db *FixtureDB) {
 	t.Helper()
@@ -47,12 +49,13 @@ func NewFixtureSchema(t *testing.T) (schema string, db *FixtureDB) {
 	if dsn == "" {
 		t.Skipf("%s not set — skipping fixture test", EnvDSN)
 	}
-	if drv, err := util.DetectDriverFromDSN(dsn); err != nil || drv != "postgres" {
-		t.Skipf("fixture helpers require a Postgres DSN — skipping")
+	driverName, err := util.DetectDriverFromDSN(dsn)
+	if err != nil || (driverName != "postgres" && driverName != "sqlserver") {
+		t.Skipf("fixture helpers require a Postgres or SQL Server DSN — skipping")
 	}
 
 	driver := openFixtureDriver(t, dsn)
-	db = &FixtureDB{t: t, driver: driver}
+	db = &FixtureDB{t: t, driver: driver, driverName: driverName}
 
 	schema = fmt.Sprintf("%s%d_%d", fixtureSchemaPrefix, time.Now().Unix(), fixtureSeq.Add(1))
 	db.Exec("CREATE SCHEMA " + schema)
@@ -60,7 +63,7 @@ func NewFixtureSchema(t *testing.T) (schema string, db *FixtureDB) {
 	t.Cleanup(func() {
 		ctx, cancel := fixtureCtx()
 		defer cancel()
-		if _, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+		if err := dropSchema(ctx, driver, driverName, schema); err != nil {
 			t.Errorf("fixture cleanup: drop schema %s: %v", schema, err)
 		}
 		_ = driver.Close(context.Background())
@@ -71,12 +74,14 @@ func NewFixtureSchema(t *testing.T) (schema string, db *FixtureDB) {
 
 // NewFixtureTable creates a fixture schema with one empty table inside it.
 // columns is the body of the CREATE TABLE column list, e.g.
-// "id serial primary key, name text, email text". Seed rows via db.Exec.
+// "id serial primary key, name text, email text". Postgres-specific syntax
+// ("serial") is translated to the SQL Server equivalent automatically.
+// Seed rows via db.Exec.
 func NewFixtureTable(t *testing.T, columns string) (schema, table string, db *FixtureDB) {
 	t.Helper()
 	schema, db = NewFixtureSchema(t)
 	table = fixtureTableName
-	db.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", db.Qualified(schema, table), columns))
+	db.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", db.Qualified(schema, table), db.translateColumns(columns)))
 	return schema, table, db
 }
 
@@ -89,7 +94,8 @@ func SweepFixtureSchemas() {
 	if dsn == "" {
 		return
 	}
-	if drv, err := util.DetectDriverFromDSN(dsn); err != nil || drv != "postgres" {
+	driverName, err := util.DetectDriverFromDSN(dsn)
+	if err != nil || (driverName != "postgres" && driverName != "sqlserver") {
 		return
 	}
 
@@ -120,7 +126,7 @@ func SweepFixtureSchemas() {
 		if !strings.HasPrefix(s.Schema, fixtureSchemaPrefix) {
 			continue
 		}
-		if _, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+s.Schema+" CASCADE"); err != nil {
+		if err := dropSchema(ctx, driver, driverName, s.Schema); err != nil {
 			fmt.Fprintf(os.Stderr, "fixture sweep: drop %s: %v\n", s.Schema, err)
 		}
 	}
@@ -128,7 +134,43 @@ func SweepFixtureSchemas() {
 
 // Qualified returns a quoted, schema-qualified identifier for use in SQL.
 func (db *FixtureDB) Qualified(schema, table string) string {
-	return fmt.Sprintf("%q.%q", schema, table)
+	if db.driverName == "sqlserver" {
+		return util.BracketQuoter.Table(schema, table)
+	}
+	return util.ANSIQuoter.Table(schema, table)
+}
+
+// translateColumns rewrites Postgres-specific column syntax to the equivalent
+// for the target driver. Currently translates "serial" → "int identity(1,1)"
+// for SQL Server so callers can write portable column lists.
+func (db *FixtureDB) translateColumns(columns string) string {
+	if db.driverName != "sqlserver" {
+		return columns
+	}
+	return strings.ReplaceAll(columns, "serial", "int identity(1,1)")
+}
+
+// dropSchema drops schema and all its tables. Postgres supports CASCADE;
+// SQL Server requires dropping every table first.
+func dropSchema(ctx context.Context, driver database.Driver, driverName, schema string) error {
+	if driverName != "sqlserver" {
+		_, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+schema+" CASCADE")
+		return err
+	}
+	rows, _, err := driver.ExecuteQuery(ctx,
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = '"+
+			strings.ReplaceAll(schema, "'", "''")+"'")
+	if err != nil {
+		return fmt.Errorf("list tables: %w", err)
+	}
+	for _, row := range rows {
+		tbl := fmt.Sprintf("%v", row["table_name"])
+		if _, err := driver.ExecuteStatement(ctx, "DROP TABLE "+util.BracketQuoter.Table(schema, tbl)); err != nil {
+			return fmt.Errorf("drop table %s: %w", tbl, err)
+		}
+	}
+	_, err = driver.ExecuteStatement(ctx, "DROP SCHEMA ["+schema+"]")
+	return err
 }
 
 // Exec runs a non-row-returning statement (DDL, INSERT/UPDATE/DELETE) and
