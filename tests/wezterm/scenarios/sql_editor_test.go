@@ -3,6 +3,7 @@
 package wezterm_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -63,4 +64,19 @@ func TestSQLEditorTypeAndRun(t *testing.T) {
 	if !strings.Contains(pane, "information_schema") {
 		t.Errorf("expected result pane to contain 'information_schema', got:\n%s", pane)
 	}
+}
+
+func TestSQLEditorDelete(t *testing.T) {
+	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name text")
+	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('to_delete')", db.Qualified(schema, table)))
+
+	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
+	s.WaitForPane("⏱", 10*time.Second)
+
+	s.RunQueryInNewTab(fmt.Sprintf("DELETE FROM %s WHERE id = 1", db.Qualified(schema, table)))
+	s.WaitForPane("Execute this statement?", 5*time.Second)
+	s.Send("Enter")
+	s.WaitForQueryResult(10 * time.Second)
+
+	harness.WaitForRowCount(t, db, schema, table, 0)
 }
