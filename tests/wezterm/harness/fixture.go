@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/util"
 
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/sqlserver"
 )
@@ -50,8 +51,8 @@ func NewFixtureSchema(t *testing.T) (schema string, db *FixtureDB) {
 		t.Skipf("%s not set — skipping fixture test", EnvDSN)
 	}
 	driverName, err := util.DetectDriverFromDSN(dsn)
-	if err != nil || (driverName != "postgres" && driverName != "sqlserver") {
-		t.Skipf("fixture helpers require a Postgres or SQL Server DSN — skipping")
+	if err != nil || (driverName != "postgres" && driverName != "sqlserver" && driverName != "mysql") {
+		t.Skipf("fixture helpers require a Postgres, SQL Server, or MySQL DSN — skipping")
 	}
 
 	driver := openFixtureDriver(t, dsn)
@@ -95,7 +96,7 @@ func SweepFixtureSchemas() {
 		return
 	}
 	driverName, err := util.DetectDriverFromDSN(dsn)
-	if err != nil || (driverName != "postgres" && driverName != "sqlserver") {
+	if err != nil || (driverName != "postgres" && driverName != "sqlserver" && driverName != "mysql") {
 		return
 	}
 
@@ -134,43 +135,87 @@ func SweepFixtureSchemas() {
 
 // Qualified returns a quoted, schema-qualified identifier for use in SQL.
 func (db *FixtureDB) Qualified(schema, table string) string {
-	if db.driverName == "sqlserver" {
+	switch db.driverName {
+	case "sqlserver":
 		return util.BracketQuoter.Table(schema, table)
+	case "mysql":
+		return util.BacktickQuoter.Table(schema, table)
+	default:
+		return util.ANSIQuoter.Table(schema, table)
 	}
-	return util.ANSIQuoter.Table(schema, table)
 }
 
 // translateColumns rewrites Postgres-specific column syntax to the equivalent
-// for the target driver. Currently translates "serial" → "int identity(1,1)"
-// for SQL Server so callers can write portable column lists.
+// for the target driver. Callers write portable column lists using Postgres
+// syntax (e.g. "id serial primary key") and this function adapts them.
 func (db *FixtureDB) translateColumns(columns string) string {
-	if db.driverName != "sqlserver" {
+	switch db.driverName {
+	case "sqlserver":
+		columns = strings.ReplaceAll(columns, "serial", "int identity(1,1)")
+		columns = strings.ReplaceAll(columns, "timestamptz", "datetimeoffset")
+		return columns
+	case "mysql":
+		columns = strings.ReplaceAll(columns, "serial", "INT AUTO_INCREMENT")
+		columns = strings.ReplaceAll(columns, "timestamptz", "datetime")
+		return columns
+	default:
 		return columns
 	}
-	return strings.ReplaceAll(columns, "serial", "int identity(1,1)")
 }
 
-// dropSchema drops schema and all its tables. Postgres supports CASCADE;
+// dropSchema drops schema and all its tables.
+// Postgres supports CASCADE; MySQL drops all tables implicitly;
 // SQL Server requires dropping every table first.
 func dropSchema(ctx context.Context, driver database.Driver, driverName, schema string) error {
-	if driverName != "sqlserver" {
+	switch driverName {
+	case "mysql":
+		_, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+util.BacktickQuoter.Ident(schema))
+		return err
+	case "sqlserver":
+		rows, _, err := driver.ExecuteQuery(ctx,
+			"SELECT table_name FROM information_schema.tables WHERE table_schema = '"+
+				strings.ReplaceAll(schema, "'", "''")+"'")
+		if err != nil {
+			return fmt.Errorf("list tables: %w", err)
+		}
+		for _, row := range rows {
+			tbl := fmt.Sprintf("%v", row["table_name"])
+			if _, err := driver.ExecuteStatement(ctx, "DROP TABLE "+util.BracketQuoter.Table(schema, tbl)); err != nil {
+				return fmt.Errorf("drop table %s: %w", tbl, err)
+			}
+		}
+		_, err = driver.ExecuteStatement(ctx, "DROP SCHEMA ["+schema+"]")
+		return err
+	default: // postgres
 		_, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+schema+" CASCADE")
 		return err
 	}
-	rows, _, err := driver.ExecuteQuery(ctx,
-		"SELECT table_name FROM information_schema.tables WHERE table_schema = '"+
-			strings.ReplaceAll(schema, "'", "''")+"'")
-	if err != nil {
-		return fmt.Errorf("list tables: %w", err)
+}
+
+// CreateTable creates a table in schema using the portable column list syntax.
+// Portable means callers write Postgres-style ("id serial primary key, name text")
+// and translateColumns adapts it to the target driver automatically.
+func (db *FixtureDB) CreateTable(schema, table, columns string) {
+	db.t.Helper()
+	db.Exec(fmt.Sprintf("CREATE TABLE %s (%s)", db.Qualified(schema, table), db.translateColumns(columns)))
+}
+
+// InsertDefault inserts one row using all-default column values.
+// Postgres/SQL Server: DEFAULT VALUES; MySQL: VALUES ().
+func (db *FixtureDB) InsertDefault(schema, table string) {
+	db.t.Helper()
+	if db.driverName == "mysql" {
+		db.Exec(fmt.Sprintf("INSERT INTO %s VALUES ()", db.Qualified(schema, table)))
+	} else {
+		db.Exec(fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", db.Qualified(schema, table)))
 	}
-	for _, row := range rows {
-		tbl := fmt.Sprintf("%v", row["table_name"])
-		if _, err := driver.ExecuteStatement(ctx, "DROP TABLE "+util.BracketQuoter.Table(schema, tbl)); err != nil {
-			return fmt.Errorf("drop table %s: %w", tbl, err)
-		}
-	}
-	_, err = driver.ExecuteStatement(ctx, "DROP SCHEMA ["+schema+"]")
-	return err
+}
+
+// FKConstraint returns a table-level FOREIGN KEY clause suitable for use
+// inside a CREATE TABLE column list. This works across all three supported
+// drivers; MySQL ignores inline REFERENCES but honours table-level FK syntax.
+func (db *FixtureDB) FKConstraint(col, refSchema, refTable, refCol string) string {
+	return fmt.Sprintf("FOREIGN KEY (%s) REFERENCES %s(%s)", col, db.Qualified(refSchema, refTable), refCol)
 }
 
 // Exec runs a non-row-returning statement (DDL, INSERT/UPDATE/DELETE) and

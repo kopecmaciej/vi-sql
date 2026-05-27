@@ -166,6 +166,7 @@ func spawnSession(t *testing.T, binary string, args []string, logPath string, lo
 		vimMode:  vm,
 		keys:     loadKeyBindings(vm),
 	}
+	t.Logf("vi-sql log: %s", logPath)
 	t.Cleanup(s.KillPane)
 
 	s.WaitForLog(readyMarker, startupTimeout)

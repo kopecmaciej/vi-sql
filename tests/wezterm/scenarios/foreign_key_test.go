@@ -13,10 +13,12 @@ import (
 
 func TestFollowForeignKey(t *testing.T) {
 	schema, db := harness.NewFixtureSchema(t)
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".parent (id serial primary key, name text)`, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".child (id serial primary key, parent_id int references "%s".parent(id))`, schema, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".parent (name) VALUES ('fk_target_alpha')`, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".child (parent_id) VALUES (1)`, schema))
+	db.CreateTable(schema, "parent", "id serial primary key, name text")
+	db.CreateTable(schema, "child",
+		"id serial primary key, parent_id int, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('fk_target_alpha')", db.Qualified(schema, "parent")))
+	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id) VALUES (1)", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".child", "--debug")
 	s.WaitForPane("⏱", 10*time.Second)
@@ -30,10 +32,12 @@ func TestFollowForeignKey(t *testing.T) {
 
 func TestFindReferencesSingleTable(t *testing.T) {
 	schema, db := harness.NewFixtureSchema(t)
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".parent (id serial primary key)`, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".child (id serial primary key, parent_id int references "%s".parent(id), tag text)`, schema, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".parent DEFAULT VALUES`, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".child (parent_id, tag) VALUES (1, 'ref_marker_xyz')`, schema))
+	db.CreateTable(schema, "parent", "id serial primary key")
+	db.CreateTable(schema, "child",
+		"id serial primary key, parent_id int, tag text, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.InsertDefault(schema, "parent")
+	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'ref_marker_xyz')", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
 	s.WaitForPane("⏱", 10*time.Second)
@@ -46,12 +50,16 @@ func TestFindReferencesSingleTable(t *testing.T) {
 
 func TestFindReferencesMultipleTablesList(t *testing.T) {
 	schema, db := harness.NewFixtureSchema(t)
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".parent (id serial primary key)`, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".ref_alpha (id serial primary key, parent_id int references "%s".parent(id), tag text)`, schema, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".ref_beta (id serial primary key, parent_id int references "%s".parent(id), tag text)`, schema, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".parent DEFAULT VALUES`, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".ref_alpha (parent_id, tag) VALUES (1, 'alpha_marker')`, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".ref_beta (parent_id, tag) VALUES (1, 'beta_marker')`, schema))
+	db.CreateTable(schema, "parent", "id serial primary key")
+	db.CreateTable(schema, "ref_alpha",
+		"id serial primary key, parent_id int, tag text, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.CreateTable(schema, "ref_beta",
+		"id serial primary key, parent_id int, tag text, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.InsertDefault(schema, "parent")
+	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'alpha_marker')", db.Qualified(schema, "ref_alpha")))
+	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'beta_marker')", db.Qualified(schema, "ref_beta")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
 	s.WaitForPane("⏱", 10*time.Second)
@@ -73,10 +81,14 @@ func TestFindReferencesMultipleTablesList(t *testing.T) {
 
 func TestFindReferencesListCancel(t *testing.T) {
 	schema, db := harness.NewFixtureSchema(t)
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".parent (id serial primary key)`, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".ref_one (id serial primary key, parent_id int references "%s".parent(id))`, schema, schema))
-	db.Exec(fmt.Sprintf(`CREATE TABLE "%s".ref_two (id serial primary key, parent_id int references "%s".parent(id))`, schema, schema))
-	db.Exec(fmt.Sprintf(`INSERT INTO "%s".parent DEFAULT VALUES`, schema))
+	db.CreateTable(schema, "parent", "id serial primary key")
+	db.CreateTable(schema, "ref_one",
+		"id serial primary key, parent_id int, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.CreateTable(schema, "ref_two",
+		"id serial primary key, parent_id int, "+
+			db.FKConstraint("parent_id", schema, "parent", "id"))
+	db.InsertDefault(schema, "parent")
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
 	s.WaitForPane("⏱", 10*time.Second)

@@ -11,7 +11,7 @@ import (
 )
 
 func TestIndexView(t *testing.T) {
-	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name text")
+	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name varchar(255)")
 	db.Exec(fmt.Sprintf(
 		"CREATE INDEX vi_sql_test_idx ON %s (name)",
 		db.Qualified(schema, table),

@@ -4,6 +4,7 @@ package wezterm_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,9 +13,13 @@ import (
 
 func TestScrollLoadsMoreRows(t *testing.T) {
 	schema, table, db := harness.NewFixtureTable(t, "id serial primary key, name text")
+	vals := make([]string, 150)
+	for i := range vals {
+		vals[i] = fmt.Sprintf("('%d')", i+1)
+	}
 	db.Exec(fmt.Sprintf(
-		"INSERT INTO %s (name) SELECT i::text FROM generate_series(1, 150) AS t(i)",
-		db.Qualified(schema, table),
+		"INSERT INTO %s (name) VALUES %s",
+		db.Qualified(schema, table), strings.Join(vals, ","),
 	))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")

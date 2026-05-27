@@ -13,11 +13,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// appLogPath is the shared log file for all wezterm test sessions.
+// os.TempDir() keeps it in /tmp without the per-test cleanup t.TempDir() would register.
+var appLogPath = filepath.Join(os.TempDir(), "vi-sql-test-harness.log")
+
 func newTestConfig(t *testing.T) (configPath, logPath string) {
 	t.Helper()
 
 	dir := t.TempDir()
-	logPath = filepath.Join(dir, "vi-sql.log")
+	logPath = appLogPath
 	configPath = filepath.Join(dir, "config.yaml")
 
 	raw := map[string]any{
@@ -48,7 +52,7 @@ func newTestConfigWithDSN(t *testing.T, dsn string) (configPath, logPath string)
 	}
 
 	dir := t.TempDir()
-	logPath = filepath.Join(dir, "vi-sql.log")
+	logPath = appLogPath
 	configPath = filepath.Join(dir, "config.yaml")
 
 	raw := map[string]any{
@@ -108,7 +112,7 @@ func NewTestConfigWithMasterPassword(t *testing.T, password string) (configPath,
 	}
 
 	dir := t.TempDir()
-	logPath = filepath.Join(dir, "vi-sql.log")
+	logPath = appLogPath
 	configPath = filepath.Join(dir, "config.yaml")
 
 	raw := map[string]any{
@@ -145,7 +149,7 @@ func NewTestConfigWithSecurityMethod(t *testing.T, method string) (configPath, l
 	t.Helper()
 
 	dir := t.TempDir()
-	logPath = filepath.Join(dir, "vi-sql.log")
+	logPath = appLogPath
 	configPath = filepath.Join(dir, "config.yaml")
 
 	raw := map[string]any{

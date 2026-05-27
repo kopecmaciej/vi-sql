@@ -58,7 +58,6 @@ func TestSecurityEnv(t *testing.T) {
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn)
 
 	s.WaitForPane("Schemas", 10*time.Second)
-	time.Sleep(2 * time.Second)
 	s.AssertPaneNotContains("master password")
 }
 
@@ -71,6 +70,5 @@ func TestSecurityOff(t *testing.T) {
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn)
 
 	s.WaitForPane("Schemas", 10*time.Second)
-	time.Sleep(2 * time.Second)
 	s.AssertPaneNotContains("master password")
 }
