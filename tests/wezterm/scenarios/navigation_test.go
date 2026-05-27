@@ -3,7 +3,6 @@
 package wezterm_test
 
 import (
-	"os"
 	"testing"
 	"time"
 

@@ -52,13 +52,13 @@ func TestConnectSameNameDifferentDSNErrors(t *testing.T) {
 	if err != nil || u.Scheme == "" {
 		t.Skipf("cannot build conflicting DSN from %q", dsn)
 	}
-	u.Path = "/vis_sql_conflict_test"
+	u.Host = "someotherhost"
 	conflictDSN := u.String()
 
 	configPath, logPath := harness.NewTestConfig(t)
 
 	s1 := harness.SpawnWithConfig(t, configPath, logPath, "--connect", "test-conn="+dsn, "--jump", jump)
-	s1.WaitForPane("⏱", 10*time.Second)
+	s1.WaitForPane("Schemas", 3*time.Second)
 	s1.AssertPaneContains(table)
 	s1.KillPane()
 
