@@ -26,6 +26,7 @@ const (
 	connectedMarker  = "Connected to database"
 	startupTimeout   = 15 * time.Second
 	assertionTimeout = 3 * time.Second
+	defaultPaneWait  = 5 * time.Second
 )
 
 // Session represents a running vi-sql instance in a wezterm pane.
@@ -35,7 +36,7 @@ type Session struct {
 	logPath  string
 	logStart int64
 	keyDelay time.Duration
-	keys     *config.KeyBindings // nil if config loading failed
+	keys     *config.KeyBindings
 	vimMode  bool
 }
 
@@ -248,9 +249,13 @@ func (s *Session) AssertPaneContains(substr string) {
 	s.waitForPane(substr, assertionTimeout, false)
 }
 
-// WaitForPane is like AssertPaneContains but with a caller-specified timeout.
-// Use it when the operation may take several seconds (e.g. a DB query).
-func (s *Session) WaitForPane(substr string, timeout time.Duration) {
+// WaitForPane waits for pane with default 5s
+func (s *Session) WaitForPane(substr string) {
+	s.t.Helper()
+	s.waitForPane(substr, defaultPaneWait, true)
+}
+
+func (s *Session) WaitForPaneTimeout(substr string, timeout time.Duration) {
 	s.t.Helper()
 	s.waitForPane(substr, timeout, true)
 }
@@ -489,7 +494,7 @@ func (s *Session) RunQueryInNewTab(sql string) {
 
 func (s *Session) WaitForQueryResult(timeout time.Duration) {
 	s.t.Helper()
-	s.WaitForPane("⏱", timeout)
+	s.WaitForPaneTimeout("⏱", timeout)
 }
 
 func (s *Session) FocusSchemaTree() {
@@ -510,10 +515,20 @@ func (s *Session) GoToTable(schema, table string) {
 	s.AssertPaneContains("Actions")
 	s.Type("go to")
 	s.Send("Enter")
-	s.WaitForPane("Go to table", 5*time.Second)
+	s.WaitForPane("Go to table")
 	s.Type(schema + "." + table)
 	s.sendAction(s.mustKeys().Common.Confirm)
-	s.WaitForPane(schema+"."+table, 10*time.Second)
+	s.WaitForPane(schema + "." + table)
+}
+
+func (s *Session) ExplainQuery() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.ExplainQuery)
+}
+
+func (s *Session) ClearEditor() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Common.Clear)
 }
 
 func (s *Session) OpenExportModal() {
@@ -569,6 +584,28 @@ func (s *Session) PrevTab() {
 func (s *Session) GoBottom() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Navigation.GoBottom)
+}
+
+// CloseError waits for the Error modal, optionally asserts it contains wantText
+// (pass "" to skip the text check), closes it, then waits until it's gone.
+func (s *Session) CloseError(wantText string) {
+	s.t.Helper()
+	s.WaitForPane(" Error ")
+	if wantText != "" {
+		s.AssertPaneContains(wantText)
+	}
+	s.Close()
+	s.AssertPaneNotContains(" Error ")
+}
+
+func (s *Session) MultipleSelect() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.MultipleSelect)
+}
+
+func (s *Session) CopyRow() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.CopyRow)
 }
 
 func (s *Session) AssertPaneNotContains(substr string) {
@@ -688,7 +725,7 @@ func SpawnWithTable(t *testing.T) (*Session, string) {
 		return nil, ""
 	}
 	s := Spawn(t, "--connect", dsn, "--jump", jump)
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 	return s, table
 }
 

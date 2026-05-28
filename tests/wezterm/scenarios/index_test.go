@@ -5,7 +5,6 @@ package wezterm_test
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -20,7 +19,7 @@ func TestIndexView(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.OpenIndexes()
-	s.WaitForPane(" Indexes ", 5*time.Second)
+	s.WaitForPane(" Indexes ")
 	s.AssertPaneContains("vi_sql_test_idx")
 	s.CloseTab()
 	s.AssertPaneNotContains(" Indexes ")

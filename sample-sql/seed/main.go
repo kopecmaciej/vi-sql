@@ -174,10 +174,44 @@ var (
 	auditOps     = []string{"INSERT", "UPDATE", "UPDATE", "DELETE"}
 )
 
-const (
-	numRegularUsers = 1000
-	adminIdx        = 1001 // admin is user index 1001
+const adminIdx = 1001 // admin is user index 1001
+
+// Counts are set by init() and can be overridden to "small" via SEED_SIZE=small.
+var (
+	numRegularUsers int
+	numProducts     int
+	numOrders       int
+	numAuditEvents  int
+	numAPILogs      int
+	maxSessions     int
+	maxAddresses    int
+	maxCarts        int
+	maxCartItems    int
 )
+
+func init() {
+	if os.Getenv("SEED_SIZE") == "small" {
+		numRegularUsers = 15
+		numProducts = 50
+		numOrders = 50
+		numAuditEvents = 50
+		numAPILogs = 50
+		maxSessions = 30
+		maxAddresses = 30
+		maxCarts = 30
+		maxCartItems = 60
+	} else {
+		numRegularUsers = 1000
+		numProducts = 500
+		numOrders = 2000
+		numAuditEvents = 5000
+		numAPILogs = 10000
+		maxSessions = 1500
+		maxAddresses = 1600
+		maxCarts = 200
+		maxCartItems = 400
+	}
+}
 
 func userUUID(gs int) string { return uuidFor("user", gs) }
 
@@ -196,10 +230,14 @@ func userStatus(gs int) string {
 	}
 }
 
-// activeUserUUIDs returns UUIDs of all active users ordered by email (gs 1..800 + admin).
+// activeUserUUIDs returns UUIDs of active regular users (gs 1..min(numRegularUsers,800)) plus admin.
 func activeUserUUIDs() []string {
-	uids := make([]string, 0, 801)
-	for gs := 1; gs <= 800; gs++ {
+	limit := numRegularUsers
+	if limit > 800 {
+		limit = 800 // userStatus marks gs>800 as inactive
+	}
+	uids := make([]string, 0, limit+1)
+	for gs := 1; gs <= limit; gs++ {
 		uids = append(uids, userUUID(gs))
 	}
 	uids = append(uids, userUUID(adminIdx))
@@ -356,13 +394,17 @@ func generateUserRoles() {
 
 	// admin → admin role
 	rows = append(rows, []string{userUUID(adminIdx), "1", ts(epoch), ""})
-	// is_staff users (gs 1..20) → staff role
-	for gs := 1; gs <= 20; gs++ {
+	// is_staff users (gs 1..min(20,numRegularUsers)) → staff role
+	staffLimit := numRegularUsers
+	if staffLimit > 20 {
+		staffLimit = 20
+	}
+	for gs := 1; gs <= staffLimit; gs++ {
 		rows = append(rows, []string{userUUID(gs), "2", ts(epoch), ""})
 	}
 	// active non-staff users → viewer role (first 400)
 	count := 0
-	for gs := 21; gs <= 800 && count < 400; gs++ {
+	for gs := 21; gs <= numRegularUsers && count < 400; gs++ {
 		rows = append(rows, []string{userUUID(gs), "5", ts(epoch), ""})
 		count++
 	}
@@ -380,7 +422,7 @@ func generateSessions() {
 outer:
 	for _, uid := range activeUsers {
 		for s := 0; s <= 1; s++ {
-			if n >= 1500 {
+			if n >= maxSessions {
 				break outer
 			}
 			h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", uid, s)))
@@ -454,7 +496,7 @@ func generateProducts() {
 	}
 
 	var rows [][]string
-	for gs := 1; gs <= 500; gs++ {
+	for gs := 1; gs <= numProducts; gs++ {
 		productIDs[gs] = uuidFor("product", gs)
 
 		// cycle through 13 leaf categories (IDs 7-19)
@@ -525,7 +567,7 @@ func generateProductVariants() {
 	variantPrices = nil
 	var rows [][]string
 	rn := 1
-	for gs := 1; gs <= 500; gs++ {
+	for gs := 1; gs <= numProducts; gs++ {
 		// SKU-000001…SKU-000500; last digit = gs%10.
 		// Postgres condition: sku ~ '[0-4]$' → last digit ∈ {0,1,2,3,4}
 		numV := 1
@@ -569,7 +611,7 @@ func generateProductImages() {
 	}
 	var rows [][]string
 	n := 0
-	for gs := 1; gs <= 500; gs++ {
+	for gs := 1; gs <= numProducts; gs++ {
 		// SKU length is always 10 (e.g. SKU-000001) → length%2 == 0 → 2 images
 		for img := 1; img <= 2; img++ {
 			rows = append(rows, []string{
@@ -633,8 +675,8 @@ func generateAddresses() {
 		"city", "state", "postal_code", "country", "phone", "is_default",
 		"created_at", "updated_at",
 	}
-	activeGS := make([]int, 0, 801)
-	for gs := 1; gs <= 800; gs++ {
+	activeGS := make([]int, 0, numRegularUsers+1)
+	for gs := 1; gs <= numRegularUsers; gs++ {
 		activeGS = append(activeGS, gs)
 	}
 	activeGS = append(activeGS, adminIdx)
@@ -650,7 +692,7 @@ outerAddr:
 			fullName = "System Admin"
 		}
 		for g := 1; g <= 2; g++ {
-			if rn >= 1600 {
+			if rn >= maxAddresses {
 				break outerAddr
 			}
 			rn++
@@ -688,7 +730,7 @@ func generateCarts() {
 	}
 	activeUsers := activeUserUUIDs()
 	var rows [][]string
-	for gs := 1; gs <= 200; gs++ {
+	for gs := 1; gs <= maxCarts; gs++ {
 		cartIDs[gs] = uuidFor("cart", gs)
 		userID, sessionID := "", ""
 		if gs%3 == 0 {
@@ -714,7 +756,7 @@ func generateCartItems() {
 	seen := make(map[string]bool)
 	var rows [][]string
 	n := 0
-	for cRN := 1; cRN <= 200 && n < 400; cRN++ {
+	for cRN := 1; cRN <= maxCarts && n < maxCartItems; cRN++ {
 		cid := cartIDs[cRN]
 		start := (cRN % 50)
 		end := start + 2
@@ -769,7 +811,7 @@ func generateOrders() {
 	cancelReasons := []string{"Customer request", "Out of stock", "Duplicate order", "Payment failed"}
 
 	var rows [][]string
-	for gs := 1; gs <= 2000; gs++ {
+	for gs := 1; gs <= numOrders; gs++ {
 		oid := uuidFor("order", gs)
 		uid := activeUsers[((gs*7)%numActive+numActive)%numActive]
 		status := []string{"draft", "pending_payment", "paid", "processing", "shipped", "delivered", "cancelled", "refunded"}[gs%8]
@@ -838,7 +880,7 @@ func generateOrderItems() {
 	numV := len(variantIDs)
 	var rows [][]string
 	n := 0
-	for gs := 1; gs <= 2000; gs++ {
+	for gs := 1; gs <= numOrders; gs++ {
 		o := orderRows[gs]
 		qty := gs%4 + 1
 		start := (gs * 3) % numV
@@ -897,7 +939,7 @@ func generatePayments() {
 	allPayments = nil
 	var rows [][]string
 	rn := 0
-	for gs := 1; gs <= 2000; gs++ {
+	for gs := 1; gs <= numOrders; gs++ {
 		o := orderRows[gs]
 		pStatus := orderToPayStatus[o.status]
 		if pStatus == "" {
@@ -984,7 +1026,7 @@ func generateShipments() {
 	allShipments = nil
 	var rows [][]string
 	rn := 0
-	for gs := 1; gs <= 2000; gs++ {
+	for gs := 1; gs <= numOrders; gs++ {
 		o := orderRows[gs]
 		sStatus, ok := shipStatusMap[o.status]
 		if !ok {
@@ -1063,7 +1105,7 @@ func generateAuditEvents() {
 		"performed_by", "ip_address", "occurred_at",
 	}
 	var rows [][]string
-	for gs := 1; gs <= 5000; gs++ {
+	for gs := 1; gs <= numAuditEvents; gs++ {
 		oldData := ""
 		if gs%3 != 0 {
 			oldData = `{"status":"prev_value"}`
@@ -1078,7 +1120,7 @@ func generateAuditEvents() {
 			oldData,
 			`{"status":"new_value"}`,
 			`{status,updated_at}`,
-			userUUID(gs%20 + 1),
+			userUUID((gs % numRegularUsers) + 1),
 			fmt.Sprintf("10.0.%d.%d", gs%255, (gs*3)%255),
 			ts(occurred),
 		})
@@ -1094,7 +1136,7 @@ func generateAPILogs() {
 	}
 	activeUsers := activeUserUUIDs()
 	var rows [][]string
-	for gs := 1; gs <= 10000; gs++ {
+	for gs := 1; gs <= numAPILogs; gs++ {
 		queryParams := ""
 		if gs%4 == 0 {
 			queryParams = fmt.Sprintf(`{"page":%d,"per_page":25,"sort":"created_at"}`, gs%20)

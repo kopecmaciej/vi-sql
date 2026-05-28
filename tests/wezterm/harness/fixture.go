@@ -153,6 +153,8 @@ func (db *FixtureDB) translateColumns(columns string) string {
 	case "sqlserver":
 		columns = strings.ReplaceAll(columns, "serial", "int identity(1,1)")
 		columns = strings.ReplaceAll(columns, "timestamptz", "datetimeoffset")
+		columns = strings.ReplaceAll(columns, "now()", "SYSDATETIMEOFFSET()")
+		columns = strings.ReplaceAll(columns, " text", " nvarchar(max)")
 		return columns
 	case "mysql":
 		columns = strings.ReplaceAll(columns, "serial", "INT AUTO_INCREMENT")
@@ -172,9 +174,22 @@ func dropSchema(ctx context.Context, driver database.Driver, driverName, schema 
 		_, err := driver.ExecuteStatement(ctx, "DROP SCHEMA "+util.BacktickQuoter.Ident(schema))
 		return err
 	case "sqlserver":
+		escapedSchema := strings.ReplaceAll(schema, "'", "''")
+		fkRows, _, err := driver.ExecuteQuery(ctx,
+			"SELECT tc.table_name, tc.constraint_name FROM information_schema.table_constraints tc "+
+				"WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = '"+escapedSchema+"'")
+		if err != nil {
+			return fmt.Errorf("list fk constraints: %w", err)
+		}
+		for _, row := range fkRows {
+			tbl := fmt.Sprintf("%v", row["table_name"])
+			con := fmt.Sprintf("%v", row["constraint_name"])
+			if _, err := driver.ExecuteStatement(ctx, "ALTER TABLE "+util.BracketQuoter.Table(schema, tbl)+" DROP CONSTRAINT ["+con+"]"); err != nil {
+				return fmt.Errorf("drop fk constraint %s: %w", con, err)
+			}
+		}
 		rows, _, err := driver.ExecuteQuery(ctx,
-			"SELECT table_name FROM information_schema.tables WHERE table_schema = '"+
-				strings.ReplaceAll(schema, "'", "''")+"'")
+			"SELECT table_name FROM information_schema.tables WHERE table_schema = '"+escapedSchema+"'")
 		if err != nil {
 			return fmt.Errorf("list tables: %w", err)
 		}

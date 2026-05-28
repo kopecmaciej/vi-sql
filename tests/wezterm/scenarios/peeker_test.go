@@ -21,11 +21,11 @@ func TestPeekCell(t *testing.T) {
 	))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.PeekRow()
-	s.WaitForPane(" Row Details ", 5*time.Second)
+	s.WaitForPane(" Row Details ")
 	s.MoveDown(1)
 	s.Select()
 	s.AssertPaneContains(strings.Repeat("vi-sql-peeker-test-", 3))

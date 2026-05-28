@@ -15,7 +15,7 @@ func TestExportModal(t *testing.T) {
 	s, _ := harness.SpawnWithTable(t)
 
 	s.OpenExportModal()
-	s.WaitForPane(" Export ", 2*time.Second)
+	s.WaitForPane(" Export ")
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	s.Close()
@@ -29,7 +29,7 @@ func TestExportCSV(t *testing.T) {
 	tmp := t.TempDir()
 
 	s.OpenExportModal()
-	s.WaitForPane(" Export ", 2*time.Second)
+	s.WaitForPane(" Export ")
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	s.FocusDown(1) // → Filename
@@ -59,7 +59,7 @@ func TestExportJSON(t *testing.T) {
 	tmp := t.TempDir()
 
 	s.OpenExportModal()
-	s.WaitForPane(" Export ", 5*time.Second)
+	s.WaitForPane(" Export ")
 	s.WaitForFocus("ExportModal", 2*time.Second)
 
 	s.MoveDown(1)  // Format: CSV → JSON

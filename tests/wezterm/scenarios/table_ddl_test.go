@@ -31,7 +31,7 @@ func TestCreateTable(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.Add()
-	s.WaitForPane(" Create Table ", 5*time.Second)
+	s.WaitForPane(" Create Table ")
 	s.Type("created_tbl")
 	s.FocusDown(1)
 	s.Confirm()
@@ -45,7 +45,7 @@ func TestRenameTable(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.RenameTable()
-	s.WaitForPane("Rename table", 5*time.Second)
+	s.WaitForPane("Rename table")
 	s.ClearField()
 	s.Type("fixture_renamed")
 	s.Send("Enter")
@@ -59,7 +59,7 @@ func TestDropTable(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.Delete()
-	s.WaitForPane("drop", 5*time.Second)
+	s.WaitForPane("drop")
 	s.Send("Enter")
 
 	waitForTable(t, db, schema, table, false)
@@ -70,7 +70,7 @@ func TestDropTableCancel(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.Delete()
-	s.WaitForPane("drop", 5*time.Second)
+	s.WaitForPane("drop")
 	s.MoveRight(1)
 	s.Send("Enter")
 	s.AssertPaneNotContains("Are you sure")

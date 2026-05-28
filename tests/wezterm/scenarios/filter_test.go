@@ -18,7 +18,7 @@ func TestSchemaTableFilter(t *testing.T) {
 	s.MoveDown(2) // 2nd table
 	s.Select()    // open as data tab
 	// SELECT queries aren't logged, so we assert on pane content.
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.Filter()
 	s.Type("1=1")
@@ -30,7 +30,7 @@ func TestFilterClear(t *testing.T) {
 	schema, table, _ := harness.NewFixtureTable(t, "id serial primary key, name text")
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.Filter()
 	s.Paste("1=1")

@@ -15,16 +15,16 @@ func TestRowLifecycle(t *testing.T) {
 		"id serial primary key, name text, email text")
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.Add()
-	s.WaitForPane(" Add Row ", 5*time.Second)
+	s.WaitForPane(" Add Row ")
 	s.Confirm()
 	harness.WaitForRowCount(t, db, schema, table, 1)
 
 	s.MoveRight(1)
 	s.Edit()
-	s.WaitForPane(" Inline Edit ", 5*time.Second)
+	s.WaitForPane(" Inline Edit ")
 	s.ClearField()
 	s.Paste("lifecycle_edit")
 	s.Send("Enter")
@@ -36,12 +36,12 @@ func TestRowLifecycle(t *testing.T) {
 	s.AssertPaneContains("lifecycle_edit")
 
 	s.DuplicateRow()
-	s.WaitForPane(" Duplicate Row ", 5*time.Second)
+	s.WaitForPane(" Duplicate Row ")
 	s.Confirm()
 	harness.WaitForRowCount(t, db, schema, table, 2)
 
 	s.Delete()
-	s.WaitForPane("delete this row", 5*time.Second)
+	s.WaitForPane("delete this row")
 	s.Send("Enter")
 	harness.WaitForRowCount(t, db, schema, table, 1)
 }
@@ -51,11 +51,11 @@ func TestRowDeleteCancel(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('keep_me')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.Delete()
-	s.WaitForPane("delete this row", 5*time.Second)
+	s.WaitForPane("delete this row")
 	s.MoveRight(1)
 	s.Send("Enter")
 	s.AssertPaneNotContains("delete this row")

@@ -23,9 +23,9 @@ func TestScrollLoadsMoreRows(t *testing.T) {
 	))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.GoBottom()
 
-	s.WaitForPane("150 rows", 10*time.Second)
+	s.WaitForPaneTimeout("150 rows", 10*time.Second)
 }

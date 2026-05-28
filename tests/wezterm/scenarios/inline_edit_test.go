@@ -16,11 +16,11 @@ func TestInlineEditShortValueEnter(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('old_value')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveRight(1)
 	s.Edit()
-	s.WaitForPane(" Inline Edit ", 5*time.Second)
+	s.WaitForPane(" Inline Edit ")
 
 	s.ClearField()
 	s.Paste("new_value")
@@ -39,11 +39,11 @@ func TestInlineEditShortValueConfirmKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('old_value')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveRight(1)
 	s.Edit()
-	s.WaitForPane(" Inline Edit ", 5*time.Second)
+	s.WaitForPane(" Inline Edit ")
 
 	s.ClearField()
 	s.Paste("new_value")
@@ -62,11 +62,11 @@ func TestInlineEditShortValueCancel(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('original_name')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveRight(1)
 	s.Edit()
-	s.WaitForPane(" Inline Edit ", 5*time.Second)
+	s.WaitForPane(" Inline Edit ")
 
 	s.ClearField()
 	s.Paste("discarded")
@@ -85,11 +85,11 @@ func TestInlineEditLongValueConfirmKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (content) VALUES ('%s')", db.Qualified(schema, table), longX))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveRight(1)
 	s.Edit()
-	s.WaitForPane(" Inline Edit ", 5*time.Second)
+	s.WaitForPane(" Inline Edit ")
 
 	// Enter inserts a newline in TextArea — modal must stay open.
 	s.Send("Enter")

@@ -4,7 +4,6 @@ package wezterm_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -21,13 +20,13 @@ func TestFollowForeignKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id) VALUES (1)", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".child", "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.MoveRight(1)
 	s.FollowForeignKey()
 
-	s.WaitForPane("fk_target_alpha", 10*time.Second)
+	s.WaitForPaneTimeout("fk_target_alpha", 10*time.Second)
 }
 
 func TestFindReferencesSingleTable(t *testing.T) {
@@ -40,12 +39,12 @@ func TestFindReferencesSingleTable(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'ref_marker_xyz')", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.FindReferences()
 
-	s.WaitForPane("ref_marker_xyz", 10*time.Second)
+	s.WaitForPaneTimeout("ref_marker_xyz", 10*time.Second)
 }
 
 func TestFindReferencesMultipleTablesList(t *testing.T) {
@@ -62,21 +61,17 @@ func TestFindReferencesMultipleTablesList(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'beta_marker')", db.Qualified(schema, "ref_beta")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.FindReferences()
-	s.WaitForPane(" Referenced by ", 5*time.Second)
+	s.WaitForPane(" Referenced by ")
 	s.AssertPaneContains("ref_alpha")
 	s.AssertPaneContains("ref_beta")
 
 	s.Send("Enter")
 	s.AssertPaneNotContains(" Referenced by ")
-
-	pane := s.GetPaneText()
-	if !strings.Contains(pane, "alpha_marker") && !strings.Contains(pane, "beta_marker") {
-		t.Errorf("expected new tab to show one of the referencing tables, pane:\n%s", pane)
-	}
+	s.WaitForPaneTimeout("alpha_marker", 10*time.Second)
 }
 
 func TestFindReferencesListCancel(t *testing.T) {
@@ -91,11 +86,11 @@ func TestFindReferencesListCancel(t *testing.T) {
 	db.InsertDefault(schema, "parent")
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.MoveDown(1)
 	s.FindReferences()
-	s.WaitForPane(" Referenced by ", 5*time.Second)
+	s.WaitForPane(" Referenced by ")
 
 	s.Close()
 	s.AssertPaneNotContains(" Referenced by ")

@@ -4,7 +4,6 @@ package wezterm_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -16,7 +15,7 @@ func TestStructureView(t *testing.T) {
 	s := openSchemaTreeAtFixture(t, schema)
 
 	s.OpenStructure()
-	s.WaitForPane(" Structure ", 5*time.Second)
+	s.WaitForPane(" Structure ")
 	s.AssertPaneContains("id")
 	s.AssertPaneContains("name")
 	s.AssertPaneContains("created_at")

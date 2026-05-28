@@ -22,10 +22,10 @@ func TestImportCSV(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPane("⏱", 10*time.Second)
+	s.WaitForPaneTimeout("⏱", 10*time.Second)
 
 	s.OpenImportModal()
-	s.WaitForPane(" Import CSV ", 3*time.Second)
+	s.WaitForPaneTimeout(" Import CSV ", 3*time.Second)
 
 	s.ClearField()
 	s.Paste(fmt.Sprintf("%s.%s", schema, table))

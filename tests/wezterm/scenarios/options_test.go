@@ -21,7 +21,7 @@ func TestStyleChangePersists(t *testing.T) {
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn, "--debug")
 
 	s.ChangeStyle()
-	s.WaitForPane(" Change Style ", 3*time.Second)
+	s.WaitForPaneTimeout(" Change Style ", 3*time.Second)
 	s.MoveDown(1)
 	s.Send("Enter")
 	s.AssertPaneNotContains(" Change Style ")

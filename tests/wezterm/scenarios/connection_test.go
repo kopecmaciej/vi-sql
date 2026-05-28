@@ -8,12 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
 
-// via --connect
 func TestConnectTwiceSameDSN(t *testing.T) {
 	dsn := os.Getenv(harness.EnvDSN)
 	if dsn == "" {
@@ -28,12 +26,12 @@ func TestConnectTwiceSameDSN(t *testing.T) {
 	configPath, logPath := harness.NewTestConfig(t)
 
 	s1 := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn, "--jump", jump, "--debug")
-	s1.WaitForPane("⏱", 10*time.Second)
+	s1.WaitForPane("⏱")
 	s1.AssertPaneContains(table)
 	s1.KillPane()
 
 	s2 := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn, "--jump", jump, "--debug")
-	s2.WaitForPane("⏱", 10*time.Second)
+	s2.WaitForPane("⏱")
 	s2.AssertPaneContains(table)
 }
 
@@ -58,7 +56,7 @@ func TestConnectSameNameDifferentDSNErrors(t *testing.T) {
 	configPath, logPath := harness.NewTestConfig(t)
 
 	s1 := harness.SpawnWithConfig(t, configPath, logPath, "--connect", "test-conn="+dsn, "--jump", jump)
-	s1.WaitForPane("Schemas", 3*time.Second)
+	s1.WaitForPane("Schemas")
 	s1.AssertPaneContains(table)
 	s1.KillPane()
 
@@ -91,14 +89,14 @@ func TestConnectionFormAddDuplicatedNameConnection(t *testing.T) {
 	configPath, logPath := harness.NewTestConfig(t)
 	s := harness.SpawnWithConfig(t, configPath, logPath)
 
-	s.WaitForPane("Pick Driver", 5*time.Second)
+	s.WaitForPane("Pick Driver")
 	AddPsqlConnectionByForm(s, "myconn", "postgresql://testuser:testpass@db.example.com:5432/testdb")
 	s.KillPane()
 
 	s = harness.SpawnWithConfig(t, configPath, logPath)
-	s.WaitForPane("Saved Connections", 5*time.Second)
+	s.WaitForPane("Saved Connections")
 	s.Send("a")
-	s.WaitForPane("Pick Driver", 5*time.Second)
+	s.WaitForPane("Pick Driver")
 	AddPsqlConnectionByForm(s, "myconn", "postgresql://testuser:testpass@db.example.com:5431/testdb")
 	s.AssertPaneContains("Failed to save connection")
 }
@@ -126,7 +124,7 @@ func TestConnectionFormDelete(t *testing.T) {
 	s := harness.SpawnWithConfig(t, configPath, logPath)
 
 	AddPsqlConnectionByForm(s, "delme", "postgresql://testuser:testpass@db.example.com:5432/testdb")
-	s.WaitForPane("delme", 3*time.Second)
+	s.WaitForPane("delme")
 
 	s.Delete()
 	s.AssertPaneNotContains("delme")
@@ -143,8 +141,7 @@ func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
 	s.MoveRight(3) // -> for now it's postgres
 	s.Select()
 
-	// connection corm
-	s.WaitForPane("Name", 3*time.Second)
+	s.WaitForPane("Name")
 	s.Paste(name)
 	s.FocusDown(1)
 	s.Paste(dsn)
@@ -152,12 +149,12 @@ func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
 }
 
 func AddSQLiteConnectionByForm(s *harness.Session, name, dbPath string) {
-	s.WaitForPane("Pick Driver", 5*time.Second)
+	s.WaitForPane("Pick Driver")
 	// drivers sorted alphabetically: cockroachdb=0, mariadb=1, mysql=2, postgres=3, sqlite=4
 	s.MoveRight(4)
 	s.Select()
 
-	s.WaitForPane("Name", 3*time.Second)
+	s.WaitForPane("Name")
 	s.Paste(name)
 	s.FocusDown(1) // → Path / URI
 	s.Paste(dbPath)
