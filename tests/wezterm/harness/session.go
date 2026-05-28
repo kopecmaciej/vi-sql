@@ -586,6 +586,16 @@ func (s *Session) GoBottom() {
 	s.sendAction(s.mustKeys().Navigation.GoBottom)
 }
 
+func (s *Session) RenameColumn() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Structure.RenameColumn)
+}
+
+func (s *Session) ToggleSQLMode() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().IndexAddForm.ToggleSQLMode)
+}
+
 // CloseError waits for the Error modal, optionally asserts it contains wantText
 // (pass "" to skip the text check), closes it, then waits until it's gone.
 func (s *Session) CloseError(wantText string) {

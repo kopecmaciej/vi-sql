@@ -275,6 +275,49 @@ func (db *FixtureDB) TableExists(schema, table string) bool {
 	return len(rows) > 0
 }
 
+// ColumnExists reports whether schema.table has a column named column.
+func (db *FixtureDB) ColumnExists(schema, table, column string) bool {
+	db.t.Helper()
+	rows := db.Query(fmt.Sprintf(
+		"SELECT 1 FROM information_schema.columns WHERE table_schema = %s AND table_name = %s AND column_name = %s",
+		fixtureLiteral(schema), fixtureLiteral(table), fixtureLiteral(column)))
+	return len(rows) > 0
+}
+
+// DropIndexSQL returns a driver-appropriate DROP INDEX statement.
+func (db *FixtureDB) DropIndexSQL(schema, table, indexName string) string {
+	switch db.driverName {
+	case "mysql":
+		return fmt.Sprintf("DROP INDEX %s ON %s", util.BacktickQuoter.Ident(indexName), db.Qualified(schema, table))
+	case "sqlserver":
+		return fmt.Sprintf("DROP INDEX %s ON %s", util.BracketQuoter.Ident(indexName), db.Qualified(schema, table))
+	default: // postgres
+		return fmt.Sprintf("DROP INDEX %s", util.ANSIQuoter.Table(schema, indexName))
+	}
+}
+
+// IndexExists reports whether an index named indexName exists on schema.table.
+func (db *FixtureDB) IndexExists(schema, table, indexName string) bool {
+	db.t.Helper()
+	var q string
+	switch db.driverName {
+	case "mysql":
+		q = fmt.Sprintf(
+			"SELECT 1 FROM information_schema.statistics WHERE table_schema = %s AND table_name = %s AND index_name = %s LIMIT 1",
+			fixtureLiteral(schema), fixtureLiteral(table), fixtureLiteral(indexName))
+	case "sqlserver":
+		q = fmt.Sprintf(
+			"SELECT TOP 1 1 FROM sys.indexes si JOIN sys.objects so ON si.object_id = so.object_id JOIN sys.schemas ss ON so.schema_id = ss.schema_id WHERE ss.name = %s AND so.name = %s AND si.name = %s",
+			fixtureLiteral(schema), fixtureLiteral(table), fixtureLiteral(indexName))
+	default: // postgres
+		q = fmt.Sprintf(
+			"SELECT 1 FROM pg_indexes WHERE schemaname = %s AND tablename = %s AND indexname = %s",
+			fixtureLiteral(schema), fixtureLiteral(table), fixtureLiteral(indexName))
+	}
+	rows := db.Query(q)
+	return len(rows) > 0
+}
+
 func openFixtureDriver(t *testing.T, dsn string) database.Driver {
 	t.Helper()
 	cfg, err := database.BuildConfigFromDSN("fixture", dsn)

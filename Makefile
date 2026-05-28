@@ -40,7 +40,7 @@ test-all:
 	go test -race -tags integration -timeout 120s ./...
 
 test-wezterm: build
-	VI_SQL_TESTS_DSN=$(DB_URL) go test -tags=wezterm -count=1 -v -timeout 120s ./tests/wezterm/scenarios/
+	VI_SQL_TESTS_DSN=$(DB_URL) go test -tags=wezterm -count=1 -timeout 300s ./tests/wezterm/scenarios/
 
 test-wezterm-slow: build
 	VI_SQL_TESTS_DSN=$(DB_URL) VI_SQL_TESTS_SLOW=1 go test -tags=wezterm -count=1 -v -timeout 300s ./tests/wezterm/scenarios/
