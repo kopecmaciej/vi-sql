@@ -34,14 +34,14 @@ func TestAddIndex(t *testing.T) {
 	s.WaitForPane(" Indexes ")
 	s.Add()
 	s.WaitForPane("Column 1")
-	s.Type("name")
+	s.Paste("name")
 	s.FocusDown(1) // order
 	s.Select()     // order dropdown
 	s.MoveDown(1)
 	s.Select()
 	s.WaitForPane("DESC")
 	s.FocusDown(1)
-	s.Type("vi_sql_test_new_idx")
+	s.Paste("vi_sql_test_new_idx")
 	s.Confirm()
 
 	harness.WaitFor(t, 8*time.Second, fmt.Sprintf("index vi_sql_test_new_idx on %s.%s", schema, table),
@@ -58,9 +58,15 @@ func TestDeleteIndex(t *testing.T) {
 
 	s.OpenIndexes()
 	s.WaitForPane("vi_sql_test_del_idx")
+	s.MoveDown(1)
 	s.Delete()
 	s.WaitForPane("Drop index")
-	s.Send("Enter")
+	s.Select()
+
+	s.Delete()
+	s.WaitForPane("Drop index")
+	s.Select()
+	s.CloseError("Error dropping index") // primary index cannot be dropped
 
 	s.AssertPaneNotContains("vi_sql_test_del_idx")
 	harness.WaitFor(t, 8*time.Second, fmt.Sprintf("index vi_sql_test_del_idx dropped from %s.%s", schema, table),
