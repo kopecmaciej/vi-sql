@@ -128,6 +128,7 @@ func (m *CreateTableModal) focusTarget(t focusTarget) {
 }
 
 func (m *CreateTableModal) setKeybindings() {
+	m.preview.SetVimKeys(m.App.GetConfig().UI.VimMode)
 	k := m.App.GetKeys()
 
 	m.tableNameInput.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

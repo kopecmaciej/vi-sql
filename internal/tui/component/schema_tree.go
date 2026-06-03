@@ -121,6 +121,7 @@ func (s *SchemaTree) setStyle() {
 }
 
 func (s *SchemaTree) setKeybindings() {
+	s.tree.SetVimKeys(s.App.GetConfig().UI.VimMode)
 	k := s.App.GetKeys()
 	ctx := context.Background()
 

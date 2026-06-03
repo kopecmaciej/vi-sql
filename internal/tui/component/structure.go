@@ -93,6 +93,9 @@ func (s *Structure) setLayout() {
 }
 
 func (s *Structure) setKeybindings() {
+	vimMode := s.App.GetConfig().UI.VimMode
+	s.table.SetVimKeys(vimMode)
+	s.ddlView.SetVimKeys(vimMode)
 	k := s.App.GetKeys()
 	s.table.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {

@@ -144,6 +144,9 @@ func (h *History) rebuildLayout() {
 }
 
 func (h *History) setKeybindings() {
+	vimMode := h.App.GetConfig().UI.VimMode
+	h.table.SetVimKeys(vimMode)
+	h.preview.SetVimKeys(vimMode)
 	keys := h.App.GetKeys()
 
 	h.table.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

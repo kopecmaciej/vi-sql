@@ -318,6 +318,7 @@ func (c *Data) setLayout() {
 }
 
 func (c *Data) setKeybindings(ctx context.Context) {
+	c.resultGrid.SetVimKeys(c.App.GetConfig().UI.VimMode)
 	k := c.App.GetKeys()
 
 	c.resultGrid.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {

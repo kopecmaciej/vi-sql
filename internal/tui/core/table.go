@@ -16,6 +16,11 @@ func NewTable() *Table {
 	}
 }
 
+func (t *Table) SetVimKeys(v bool) *Table {
+	t.Table.SetVimKeys(v)
+	return t
+}
+
 func (t *Table) SetStyle(style *config.Styles) {
 	t.SetBackgroundColor(style.Global.BackgroundColor.Color())
 	t.SetBorderColor(style.Global.BorderColor.Color())

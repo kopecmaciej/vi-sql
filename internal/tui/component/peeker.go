@@ -148,6 +148,7 @@ func (p *Peeker) openValueViewer() {
 	styles := p.App.GetStyles()
 	k := p.App.GetKeys()
 	viewer := core.NewTextView()
+	viewer.SetVimKeys(p.App.GetConfig().UI.VimMode)
 	viewer.SetScrollable(true)
 	viewer.SetWrap(true)
 	viewer.SetBorderPadding(0, 0, 1, 1)

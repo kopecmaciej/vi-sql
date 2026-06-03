@@ -59,6 +59,7 @@ func (s *ServerInfoModal) setStyle() {
 }
 
 func (s *ServerInfoModal) setKeybindings() {
+	s.content.SetVimKeys(s.App.GetConfig().UI.VimMode)
 	keys := s.App.GetKeys()
 	s.content.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {

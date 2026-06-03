@@ -91,6 +91,11 @@ func NewTreeView() *TreeView {
 	return &TreeView{TreeView: tview.NewTreeView()}
 }
 
+func (t *TreeView) SetVimKeys(v bool) *TreeView {
+	t.TreeView.SetVimKeys(v)
+	return t
+}
+
 func NewInputField() *InputField {
 	return &InputField{InputField: tview.NewInputField()}
 }
@@ -113,6 +118,11 @@ func (l *List) SetStyle(style *config.Styles) {
 	fg := style.Global.TextColor.Color()
 	l.SetMainTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
 	l.SetSecondaryTextStyle(tcell.StyleDefault.Background(bg).Foreground(fg))
+}
+
+func (t *TextView) SetVimKeys(v bool) *TextView {
+	t.TextView.SetVimKeys(v)
+	return t
 }
 
 func (t *TextView) SetStyle(style *config.Styles) {
