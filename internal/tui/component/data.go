@@ -965,13 +965,14 @@ func (c *Data) handleOrderByColumn(col int) *tcell.EventKey {
 	if columnName == "" {
 		return nil
 	}
+	quotedName := c.App.GetQuoter().Ident(columnName)
 	currentOrder := c.state.OrderBy
 
 	var newOrder string
-	if currentOrder == columnName+" ASC" {
-		newOrder = columnName + " DESC"
+	if currentOrder == quotedName+" ASC" {
+		newOrder = quotedName + " DESC"
 	} else {
-		newOrder = columnName + " ASC"
+		newOrder = quotedName + " ASC"
 	}
 
 	if c.mode == QueryMode && c.state.RawSQL != "" {
