@@ -99,9 +99,10 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 		'db_accessadmin','db_backupoperator','db_datareader','db_datawriter',
 		'db_ddladmin','db_denydatareader','db_denydatawriter','db_owner','db_securityadmin'`
 
+	// One row per (schema, table); grouped in Go. Avoids STRING_AGG, which
+	// requires SQL Server 2017+ — this project also supports 2016.
 	query := fmt.Sprintf(`
-		SELECT s.name,
-		       STRING_AGG(t.name, ',') WITHIN GROUP (ORDER BY t.name)
+		SELECT s.name, t.name
 		FROM sys.schemas s
 		LEFT JOIN sys.tables t ON s.schema_id = t.schema_id
 		WHERE s.name NOT IN (%s)`, systemSchemas)
@@ -111,7 +112,7 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 		query += " AND (s.name LIKE @p1 OR t.name LIKE @p2)"
 		args = append(args, "%"+nameFilter+"%", "%"+nameFilter+"%")
 	}
-	query += " GROUP BY s.name ORDER BY s.name"
+	query += " ORDER BY s.name, t.name"
 
 	rows, err := d.client.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -120,17 +121,22 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 	defer func() { _ = rows.Close() }()
 
 	var result []database.Schema
+	idx := make(map[string]int)
 	for rows.Next() {
 		var schemaName string
-		var tableStr *string
-		if err := rows.Scan(&schemaName, &tableStr); err != nil {
+		var tableName *string
+		if err := rows.Scan(&schemaName, &tableName); err != nil {
 			return nil, err
 		}
-		var tables []string
-		if tableStr != nil && *tableStr != "" {
-			tables = strings.Split(*tableStr, ",")
+		i, ok := idx[schemaName]
+		if !ok {
+			i = len(result)
+			idx[schemaName] = i
+			result = append(result, database.Schema{Schema: schemaName})
 		}
-		result = append(result, database.Schema{Schema: schemaName, Tables: tables})
+		if tableName != nil && *tableName != "" {
+			result[i].Tables = append(result[i].Tables, *tableName)
+		}
 	}
 	return result, rows.Err()
 }
@@ -192,14 +198,16 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 	rows, err := d.client.DB.QueryContext(ctx, `
 		SELECT tc.name AS constraint_name,
 		       CASE tc.type WHEN 'PK' THEN 'PRIMARY KEY' WHEN 'UQ' THEN 'UNIQUE' ELSE tc.type END,
-		       STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal)
+		       STUFF((SELECT ',' + c.name
+		              FROM sys.index_columns ic
+		              JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+		              WHERE ic.object_id = tc.parent_object_id AND ic.index_id = tc.unique_index_id
+		              ORDER BY ic.key_ordinal
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '')
 		FROM sys.key_constraints tc
-		JOIN sys.index_columns ic ON tc.parent_object_id = ic.object_id AND tc.unique_index_id = ic.index_id
-		JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
 		JOIN sys.tables t ON tc.parent_object_id = t.object_id
 		JOIN sys.schemas s ON t.schema_id = s.schema_id
 		WHERE s.name = @p1 AND t.name = @p2 AND tc.type IN ('PK','UQ')
-		GROUP BY tc.name, tc.type
 		ORDER BY tc.type, tc.name`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table constraints: %w", err)
@@ -224,22 +232,28 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx, `
 		SELECT fk.name,
-		       STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id),
+		       STUFF((SELECT ',' + c.name
+		              FROM sys.foreign_key_columns fkc
+		              JOIN sys.columns c ON fkc.parent_object_id = c.object_id AND fkc.parent_column_id = c.column_id
+		              WHERE fkc.constraint_object_id = fk.object_id
+		              ORDER BY fkc.constraint_column_id
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
 		       rs.name AS ref_schema,
 		       rt.name AS ref_table,
-		       STRING_AGG(rc.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id),
+		       STUFF((SELECT ',' + rc.name
+		              FROM sys.foreign_key_columns fkc
+		              JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
+		              WHERE fkc.constraint_object_id = fk.object_id
+		              ORDER BY fkc.constraint_column_id
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
 		       fk.update_referential_action_desc,
 		       fk.delete_referential_action_desc
 		FROM sys.foreign_keys fk
-		JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
-		JOIN sys.columns c  ON fkc.parent_object_id  = c.object_id  AND fkc.parent_column_id  = c.column_id
-		JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
 		JOIN sys.tables t   ON fk.parent_object_id    = t.object_id
 		JOIN sys.schemas s  ON t.schema_id            = s.schema_id
 		JOIN sys.tables rt  ON fk.referenced_object_id = rt.object_id
 		JOIN sys.schemas rs ON rt.schema_id            = rs.schema_id
 		WHERE s.name = @p1 AND t.name = @p2
-		GROUP BY fk.name, rs.name, rt.name, fk.update_referential_action_desc, fk.delete_referential_action_desc
 		ORDER BY fk.name`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get foreign keys: %w", err)
@@ -267,18 +281,24 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) ([]database.IncomingForeignKeyInfo, error) {
 	rows, err := d.client.DB.QueryContext(ctx, `
 		SELECT ps.name, pt.name,
-		       STRING_AGG(pc.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id),
-		       STRING_AGG(rc.name, ',') WITHIN GROUP (ORDER BY fkc.constraint_column_id)
+		       STUFF((SELECT ',' + pc.name
+		              FROM sys.foreign_key_columns fkc
+		              JOIN sys.columns pc ON fkc.parent_object_id = pc.object_id AND fkc.parent_column_id = pc.column_id
+		              WHERE fkc.constraint_object_id = fk.object_id
+		              ORDER BY fkc.constraint_column_id
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, ''),
+		       STUFF((SELECT ',' + rc.name
+		              FROM sys.foreign_key_columns fkc
+		              JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
+		              WHERE fkc.constraint_object_id = fk.object_id
+		              ORDER BY fkc.constraint_column_id
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '')
 		FROM sys.foreign_keys fk
-		JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
-		JOIN sys.columns pc ON fkc.parent_object_id     = pc.object_id AND fkc.parent_column_id     = pc.column_id
-		JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id AND fkc.referenced_column_id = rc.column_id
 		JOIN sys.tables pt  ON fk.parent_object_id      = pt.object_id
 		JOIN sys.schemas ps ON pt.schema_id              = ps.schema_id
 		JOIN sys.tables rt  ON fk.referenced_object_id  = rt.object_id
 		JOIN sys.schemas rs ON rt.schema_id              = rs.schema_id
 		WHERE rs.name = @p1 AND rt.name = @p2
-		GROUP BY fk.name, ps.name, pt.name
 		ORDER BY ps.name, pt.name`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get incoming foreign keys: %w", err)
@@ -542,14 +562,16 @@ func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, er
 	// Append PRIMARY KEY constraint.
 	pkRows, err := d.client.DB.QueryContext(ctx, `
 		SELECT kc.name,
-		       STRING_AGG(c.name, ', ') WITHIN GROUP (ORDER BY ic.key_ordinal)
+		       STUFF((SELECT ', ' + c.name
+		              FROM sys.index_columns ic
+		              JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+		              WHERE ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+		              ORDER BY ic.key_ordinal
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
 		FROM sys.key_constraints kc
-		JOIN sys.index_columns ic ON kc.parent_object_id = ic.object_id AND kc.unique_index_id = ic.index_id
-		JOIN sys.columns c        ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-		JOIN sys.tables t         ON kc.parent_object_id = t.object_id
-		JOIN sys.schemas s        ON t.schema_id = s.schema_id
-		WHERE s.name = @p1 AND t.name = @p2 AND kc.type = 'PK'
-		GROUP BY kc.name`, schema, table)
+		JOIN sys.tables t  ON kc.parent_object_id = t.object_id
+		JOIN sys.schemas s ON t.schema_id = s.schema_id
+		WHERE s.name = @p1 AND t.name = @p2 AND kc.type = 'PK'`, schema, table)
 	if err == nil {
 		defer func() { _ = pkRows.Close() }()
 		if pkRows.Next() {
@@ -627,14 +649,16 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 		       i.is_unique,
 		       i.is_primary_key,
 		       i.type_desc,
-		       STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal)
+		       STUFF((SELECT ',' + c.name
+		              FROM sys.index_columns ic
+		              JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+		              WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.is_included_column = 0
+		              ORDER BY ic.key_ordinal
+		              FOR XML PATH(''), TYPE).value('.', 'NVARCHAR(MAX)'), 1, 1, '')
 		FROM sys.indexes i
-		JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-		JOIN sys.columns c        ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-		JOIN sys.tables t         ON i.object_id = t.object_id
-		JOIN sys.schemas s        ON t.schema_id = s.schema_id
-		WHERE s.name = @p1 AND t.name = @p2 AND i.is_hypothetical = 0 AND ic.is_included_column = 0
-		GROUP BY i.name, i.is_unique, i.is_primary_key, i.type_desc
+		JOIN sys.tables t  ON i.object_id = t.object_id
+		JOIN sys.schemas s ON t.schema_id = s.schema_id
+		WHERE s.name = @p1 AND t.name = @p2 AND i.is_hypothetical = 0 AND i.index_id > 0
 		ORDER BY i.is_primary_key DESC, i.name`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get indexes: %w", err)
