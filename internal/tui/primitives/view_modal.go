@@ -486,7 +486,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 				if visualLine >= maxVisualLines {
 					break
 				}
-				valueLine := fmt.Sprintf("[%s]%s%s", m.valueColor.CSS(), indent, wl)
+				valueLine := fmt.Sprintf("[%s]%s%s", m.valueColor.CSS(), indent, tview.Escape(wl))
 				if isSelected {
 					valueLine = fmt.Sprintf("[-:%s:b] %s[-:-:-]", m.highlightColor.CSS(), valueLine)
 				} else {
@@ -505,7 +505,7 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 			line := fmt.Sprintf("[%s]%-*s  [%s]%-*s  [%s]%s",
 				m.keyColor.CSS(), maxKeyLen, rl.Key,
 				m.typeColor.CSS(), maxTypeLen, displayType,
-				m.valueColor.CSS(), displayValue,
+				m.valueColor.CSS(), tview.Escape(displayValue),
 			)
 
 			if isSelected {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
@@ -176,10 +177,10 @@ func (r *ResultsBar) build(state *database.TableState, execTime time.Duration) s
 
 	var filters []string
 	if whereVal != "" {
-		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, whereVal))
+		filters = append(filters, fmt.Sprintf("[%s]⚑ WHERE:[-] [%s]%s[-]", accentColor, textColor, tview.Escape(whereVal)))
 	}
 	if orderByVal != "" {
-		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, orderByVal))
+		filters = append(filters, fmt.Sprintf("[%s]↕ ORDER BY:[-] [%s]%s[-]", blueColor, textColor, tview.Escape(orderByVal)))
 	}
 
 	if len(filters) == 0 {

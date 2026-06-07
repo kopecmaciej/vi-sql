@@ -279,6 +279,8 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 			}
 			if isNull {
 				cellText = fmt.Sprintf("[%s]NULL[-:-:-]", styles.Global.DimColor)
+			} else {
+				cellText = tview.Escape(cellText)
 			}
 			g.SetCell(row+1, col+1, tview.NewTableCell(cellText).
 				SetAlign(tview.AlignLeft).
