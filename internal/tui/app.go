@@ -404,9 +404,50 @@ func (a *App) checkForUpdate() {
 	a.Application.QueueUpdateDraw(func() {
 		a.latestVersion = latest
 		if a.main.App != nil {
-			a.main.SetUpdateAvailable()
+			a.main.SetUpdateHandler(func() { a.startSelfUpdate(latest) })
 		}
 	})
+}
+
+func (a *App) startSelfUpdate(tag string) {
+	confirmModal := modal.NewConfirm("SelfUpdateConfirm")
+	if err := confirmModal.Init(a.App); err != nil {
+		modal.ShowError(a.Pages, "Failed to init update modal", err)
+		return
+	}
+	confirmModal.SetText(fmt.Sprintf("Update vi-sql from %s to %s?", build.Version, tag))
+	confirmModal.SetConfirmButtonLabel("Update")
+	confirmModal.SetOnConfirm(func() {
+		a.Pages.RemovePage("SelfUpdateConfirm")
+
+		progress := tview.NewModal()
+		progress.SetTitle(" Updating vi-sql ")
+		progress.SetText("Starting update…")
+		progress.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+		a.Pages.AddPage("SelfUpdateProgress", progress, true, true)
+
+		go func() {
+			err := util.ApplyUpdate(context.Background(), tag, func(step string) {
+				a.Application.QueueUpdateDraw(func() { progress.SetText(step) })
+			})
+			a.Application.QueueUpdateDraw(func() {
+				a.Pages.RemovePage("SelfUpdateProgress")
+				if err != nil {
+					modal.ShowError(a.Pages, "Update failed", err)
+					return
+				}
+				done := tview.NewModal()
+				done.SetTitle(" Update complete ")
+				done.SetText(fmt.Sprintf("Updated to %s! Please restart vi-sql.", tag))
+				done.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+				done.AddButtons([]string{"Exit"})
+				done.SetDoneFunc(func(_ int, _ string) { os.Exit(0) })
+				a.Pages.AddPage("SelfUpdateDone", done, true, true)
+			})
+		}()
+	})
+	a.Pages.AddPage("SelfUpdateConfirm", confirmModal, true, true)
+	a.App.SetFocusOnly(confirmModal)
 }
 
 func (a *App) initAndRenderMain() {
@@ -432,7 +473,7 @@ func (a *App) initAndRenderMain() {
 	a.main.Render()
 
 	if a.latestVersion != "" {
-		a.main.SetUpdateAvailable()
+		a.main.SetUpdateHandler(func() { a.startSelfUpdate(a.latestVersion) })
 	}
 
 	if jumpInto := a.GetConfig().JumpInto; jumpInto != "" {

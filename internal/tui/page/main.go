@@ -53,6 +53,8 @@ type Main struct {
 	serverInfoModal *modal.ServerInfoModal
 	goToTableModal  *modal.GoToTableModal
 	renameModal     *core.InputField
+
+	updateHandler func()
 }
 
 func NewMain() *Main {
@@ -395,7 +397,8 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.rebuildInnerFlex()
 }
 
-func (m *Main) SetUpdateAvailable() {
+func (m *Main) SetUpdateHandler(fn func()) {
+	m.updateHandler = fn
 	m.topBar.SetUpdateAvailable()
 }
 
@@ -589,7 +592,14 @@ func (m *Main) openActionsModal() {
 		mcpLabel = "Disable MCP server"
 	}
 
-	entries := []modal.ActionEntry{
+	entries := []modal.ActionEntry{}
+	if m.updateHandler != nil {
+		entries = append(entries, modal.ActionEntry{
+			Label:   "Update vi-sql",
+			Handler: m.updateHandler,
+		})
+	}
+	entries = append(entries, []modal.ActionEntry{
 		{
 			Label:   "Server info",
 			KeyHint: k.Main.ServerInfo.String(),
@@ -613,7 +623,7 @@ func (m *Main) openActionsModal() {
 			Label:   "Options page",
 			Handler: m.App.OpenOptionsPage,
 		},
-	}
+	}...)
 
 	cfg := m.App.GetConfig()
 	if cfg.Security.Method == config.SecurityMethodMaster && cfg.IsMasterConfigured() {
