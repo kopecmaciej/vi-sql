@@ -387,7 +387,7 @@ func (a *App) showChangelogModal(entries []util.ChangelogEntry) {
 }
 
 func (a *App) updateConfigVersion() {
-	normalized := util.NormalizeVersion(build.Version)
+	normalized := util.TagToVersion(build.Version)
 	cfg := a.App.GetConfig()
 	if cfg.Version != normalized {
 		if err := cfg.UpdateVersion(normalized); err != nil {
@@ -397,7 +397,7 @@ func (a *App) updateConfigVersion() {
 }
 
 func (a *App) checkForUpdate() {
-	latest := util.FetchLatestVersion(context.Background())
+	latest := util.FetchLatestVersionFromGithub(context.Background())
 	if latest == "" || !util.IsNewerVersion(build.Version, latest) {
 		return
 	}
@@ -427,7 +427,7 @@ func (a *App) startSelfUpdate(tag string) {
 		a.Pages.AddPage("SelfUpdateProgress", progress, true, true)
 
 		go func() {
-			err := util.ApplyUpdate(context.Background(), tag, func(step string) {
+			err := util.InstallRelease(context.Background(), tag, func(step string) {
 				a.Application.QueueUpdateDraw(func() { progress.SetText(step) })
 			})
 			a.Application.QueueUpdateDraw(func() {

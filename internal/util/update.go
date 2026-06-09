@@ -26,8 +26,7 @@ const (
 	checksumAsset       = "vi-sql_checksum_sha256.txt"
 )
 
-// FetchLatestVersion returns the latest release tag from GitHub (e.g. "v1.2.3").
-func FetchLatestVersion(ctx context.Context) string {
+func FetchLatestVersionFromGithub(ctx context.Context) string {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -57,15 +56,11 @@ func FetchLatestVersion(ctx context.Context) string {
 	return strings.TrimSpace(payload.TagName)
 }
 
-// NormalizeVersion strips the "v" prefix and any pre-release/build metadata
-// (everything after the first "-"), returning a bare "MAJOR.MINOR.PATCH" string.
-func NormalizeVersion(tag string) string {
+func TagToVersion(tag string) string {
 	tag = strings.TrimPrefix(tag, "v")
 	return strings.SplitN(tag, "-", 2)[0]
 }
 
-// IsNewerVersion returns true when latestTag is strictly newer than currentTag.
-// Both tags are expected in "vMAJOR.MINOR.PATCH" form; any parse failure returns false.
 func IsNewerVersion(currentTag, latestTag string) bool {
 	cv := parseVersion(currentTag)
 	lv := parseVersion(latestTag)
@@ -85,7 +80,7 @@ func parseVersion(tag string) [3]int {
 	}
 	var v [3]int
 	for i, p := range parts {
-		p = strings.SplitN(p, "-", 2)[0] // strip pre-release suffix
+		p = strings.SplitN(p, "-", 2)[0]
 		n := 0
 		for _, c := range p {
 			if c < '0' || c > '9' {
@@ -98,11 +93,7 @@ func parseVersion(tag string) [3]int {
 	return v
 }
 
-// ApplyUpdate downloads the release archive for the given tag, verifies its
-// SHA256 checksum, extracts the vi-sql binary, and atomically replaces the
-// running executable. progress is called with a human-readable status string
-// at each stage.
-func ApplyUpdate(ctx context.Context, tag string, progress func(string)) error {
+func InstallRelease(ctx context.Context, tag string, progress func(string)) error {
 	asset := buildAssetName(runtime.GOOS, runtime.GOARCH)
 	base := fmt.Sprintf("%s/%s", githubDownloadBase, tag)
 
@@ -119,7 +110,7 @@ func ApplyUpdate(ctx context.Context, tag string, progress func(string)) error {
 	}
 
 	progress("Verifying checksum…")
-	if err := verifyChecksum(archiveData, asset, string(checksumData)); err != nil {
+	if err := verifyShaChecksum(archiveData, asset, string(checksumData)); err != nil {
 		return fmt.Errorf("checksum: %w", err)
 	}
 
@@ -188,9 +179,7 @@ func downloadBytes(ctx context.Context, url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-// verifyChecksum checks that the SHA256 of archive matches the entry for
-// assetName in the GoReleaser checksum file (lines: "<hex>  <name>").
-func verifyChecksum(archive []byte, assetName, checksumContent string) error {
+func verifyShaChecksum(archive []byte, assetName, checksumContent string) error {
 	scanner := bufio.NewScanner(strings.NewReader(checksumContent))
 	for scanner.Scan() {
 		parts := strings.Fields(scanner.Text())
