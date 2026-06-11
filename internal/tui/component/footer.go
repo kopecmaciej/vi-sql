@@ -31,7 +31,7 @@ type (
 		expanded        bool
 		centered        bool
 		pinnedKeys      []config.Key
-		sequencePending rune
+		sequencePending string
 		onHeightChange  func()
 	}
 )
@@ -95,7 +95,9 @@ func (f *Footer) collectPairs() []info {
 	keys, _ := f.UpdateKeys()
 	pairs := make([]info, 0, len(keys))
 	for _, key := range keys {
-		pairs = append(pairs, info{formatKeyString(key), key.Description})
+		if label := formatKeyString(key); label != "" {
+			pairs = append(pairs, info{label, key.Description})
+		}
 	}
 	return pairs
 }
@@ -192,9 +194,11 @@ func (f *Footer) Render() {
 		f.Table.SetCell(0, 0, tview.NewTableCell("").SetExpansion(1))
 		col := 1
 		for _, key := range k {
-			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
-			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
-			col += 2
+			if label := formatKeyString(key); label != "" {
+				f.Table.SetCell(0, col, f.keyCell(label))
+				f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+				col += 2
+			}
 		}
 		f.Table.SetCell(0, col, tview.NewTableCell("").SetExpansion(1))
 		return
@@ -213,9 +217,11 @@ func (f *Footer) Render() {
 	}
 
 	for _, key := range k {
-		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
-		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
-		col += 2
+		if label := formatKeyString(key); label != "" {
+			f.Table.SetCell(0, col, f.keyCell(label))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
 	}
 
 }
@@ -237,7 +243,7 @@ func (f *Footer) handleEvents() {
 				f.Render()
 			})
 		case manager.SequencePendingChanged:
-			f.sequencePending = event.Message.Data.(rune)
+			f.sequencePending = event.Message.Data.(string)
 			go f.App.QueueUpdateDraw(f.Render)
 		case manager.ConfigChanged:
 			go f.App.QueueUpdateDraw(f.Render)
@@ -259,10 +265,10 @@ func (f *Footer) valueCell(text string) *tview.TableCell {
 		Background(styles.Global.BackgroundColor.Color()))
 }
 
-// sequencePendingCell renders the pending sequence prefix (e.g. "g")
-func (f *Footer) sequencePendingCell(prefix rune) *tview.TableCell {
-	text := string(prefix)
-	if prefix == 0 {
+// sequencePendingCell renders the pending sequence prefix (e.g. "yr")
+func (f *Footer) sequencePendingCell(prefix string) *tview.TableCell {
+	text := prefix
+	if prefix == "" {
 		text = " "
 	}
 	styles := f.App.GetStyles()

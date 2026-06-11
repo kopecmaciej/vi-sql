@@ -214,11 +214,15 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 	if vimMode {
 		k.Data.CopyCell = Key{Sequences: []string{"yc"}, Description: "Copy cell"}
 		k.Data.CopyRow = Key{Sequences: []string{"yy"}, Description: "Copy row"}
+		k.Data.CopyRowJSON = Key{Sequences: []string{"yrj"}, Description: "Copy row as JSON"}
+		k.Data.CopyRowCSV = Key{Sequences: []string{"yrc"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Sequences: []string{"gd"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Sequences: []string{"gr"}, Description: "Find references"}
 	} else {
 		k.Data.CopyCell = Key{Runes: []string{"c"}, Description: "Copy cell"}
 		k.Data.CopyRow = Key{Runes: []string{"C"}, Description: "Copy row"}
+		k.Data.CopyRowJSON = Key{Description: "Copy row as JSON"}
+		k.Data.CopyRowCSV = Key{Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Keys: []string{"Ctrl+b"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Keys: []string{"Alt+r"}, Description: "Find references"}
 	}

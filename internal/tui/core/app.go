@@ -83,14 +83,15 @@ func NewApp(appConfig *config.Config) *App {
 		config:      appConfig,
 		keys:        keyBindings,
 	}
+	app.EnablePaste(true)
 
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
 		screen.SetCursorStyle(app.cursorStyle)
 		return false
 	})
 
-	keyBindings.OnPendingChanged = func(r rune) {
-		app.manager.Broadcast(manager.NewSequencePendingChangedMsg(r))
+	keyBindings.OnPendingChanged = func(s string) {
+		app.manager.Broadcast(manager.NewSequencePendingChangedMsg(s))
 	}
 
 	app.Pages = NewPages(app.manager, app)

@@ -15,6 +15,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
 const (
@@ -715,6 +716,18 @@ func (m *Main) openActionsModal() {
 				Label:    "Explain viewer",
 				KeyHint:  k.Data.ExplainQuery.String(),
 				Handler:  func() { data.OpenExplain(ctx) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
+				Label:    "Copy row as JSON",
+				KeyHint:  k.Data.CopyRowJSON.String(),
+				Handler:  func() { data.CopyRowAs(util.ExportJSON) },
+				Disabled: !hasResults,
+			},
+			modal.ActionEntry{
+				Label:    "Copy row as CSV",
+				KeyHint:  k.Data.CopyRowCSV.String(),
+				Handler:  func() { data.CopyRowAs(util.ExportCSV) },
 				Disabled: !hasResults,
 			},
 			modal.ActionEntry{

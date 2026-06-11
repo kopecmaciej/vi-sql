@@ -253,7 +253,7 @@ func TestBuildSequencePrefixes_VimMode(t *testing.T) {
 	kb.buildSequencePrefixes()
 
 	assert.NotEmpty(t, kb.sequencePrefixes, "vim mode should build sequence prefixes")
-	_, hasG := kb.sequencePrefixes['g']
+	_, hasG := kb.sequencePrefixes["g"]
 	assert.True(t, hasG, "'g' must be a prefix (gg, gd are defined in vim defaults)")
 }
 
@@ -289,7 +289,7 @@ func TestMatchNamedKey(t *testing.T) {
 }
 
 func TestMatchSequenceSecondRune(t *testing.T) {
-	kb := &KeyBindings{sequenceState: sequenceState{pending: 'g'}}
+	kb := &KeyBindings{sequenceState: sequenceState{pending: "g"}}
 	key := Key{Sequences: []string{"gg"}}
 	assert.True(t, kb.Match(key, mkRune('g')))
 	assert.False(t, kb.Match(key, mkRune('d')))
@@ -303,9 +303,9 @@ func TestMatchSequenceRequiresPending(t *testing.T) {
 }
 
 func TestWrapInputCapture_PrefixAbsorbed(t *testing.T) {
-	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[rune]struct{}{'g': {}}}}
-	var notified []rune
-	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[string]struct{}{"g": {}}}}
+	var notified []string
+	kb.OnPendingChanged = func(s string) { notified = append(notified, s) }
 
 	innerCalled := false
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -316,14 +316,14 @@ func TestWrapInputCapture_PrefixAbsorbed(t *testing.T) {
 	out := fn(mkRune('g'))
 	assert.Nil(t, out, "prefix rune must be consumed (return nil)")
 	assert.False(t, innerCalled, "inner must not be called for a prefix rune")
-	assert.Equal(t, rune('g'), kb.pending)
-	assert.Equal(t, []rune{'g'}, notified)
+	assert.Equal(t, "g", kb.pending)
+	assert.Equal(t, []string{"g"}, notified)
 }
 
 func TestWrapInputCapture_SecondRuneDeliveredToInner(t *testing.T) {
-	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[rune]struct{}{'g': {}}, pending: 'g'}}
-	var notified []rune
-	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[string]struct{}{"g": {}}, pending: "g"}}
+	var notified []string
+	kb.OnPendingChanged = func(s string) { notified = append(notified, s) }
 
 	innerReceived := rune(0)
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -336,14 +336,14 @@ func TestWrapInputCapture_SecondRuneDeliveredToInner(t *testing.T) {
 	out := fn(mkRune('g'))
 	assert.Nil(t, out, "second rune must always be consumed")
 	assert.Equal(t, rune('g'), innerReceived, "inner must receive the second rune")
-	assert.Equal(t, rune(0), kb.pending, "pending must be cleared after second rune")
-	assert.Equal(t, []rune{0}, notified, "OnPendingChanged(0) must fire")
+	assert.Equal(t, "", kb.pending, "pending must be cleared after second rune")
+	assert.Equal(t, []string{""}, notified, "OnPendingChanged(\"\") must fire")
 }
 
 func TestWrapInputCapture_NonRuneResets(t *testing.T) {
-	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[rune]struct{}{'g': {}}, pending: 'g'}}
-	var notified []rune
-	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[string]struct{}{"g": {}}, pending: "g"}}
+	var notified []string
+	kb.OnPendingChanged = func(s string) { notified = append(notified, s) }
 
 	innerCalled := false
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -357,8 +357,8 @@ func TestWrapInputCapture_NonRuneResets(t *testing.T) {
 	out := fn(f1Ev)
 	assert.Equal(t, f1Ev, out, "inner return value must pass through")
 	assert.True(t, innerCalled)
-	assert.Equal(t, rune(0), kb.pending, "non-rune must reset pending")
-	assert.Equal(t, []rune{0}, notified)
+	assert.Equal(t, "", kb.pending, "non-rune must reset pending")
+	assert.Equal(t, []string{""}, notified)
 }
 
 func TestWrapInputCapture_NormalModeNeverAbsorbs(t *testing.T) {
@@ -376,22 +376,22 @@ func TestWrapInputCapture_NormalModeNeverAbsorbs(t *testing.T) {
 }
 
 func TestWrapInputCapture_OnPendingChangedEveryTransition(t *testing.T) {
-	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[rune]struct{}{'g': {}}}}
-	var notified []rune
-	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+	kb := &KeyBindings{sequenceState: sequenceState{vimMode: true, sequencePrefixes: map[string]struct{}{"g": {}}}}
+	var notified []string
+	kb.OnPendingChanged = func(s string) { notified = append(notified, s) }
 
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey { return nil })
 
-	fn(mkRune('g')) // prefix: notified('g')
-	fn(mkRune('g')) // completion: notified(0)
+	fn(mkRune('g')) // prefix: notified("g")
+	fn(mkRune('g')) // completion: notified("")
 
-	assert.Equal(t, []rune{'g', 0}, notified)
+	assert.Equal(t, []string{"g", ""}, notified)
 }
 
 func TestReset_DoesNotFireWhenAlreadyClear(t *testing.T) {
 	kb := &KeyBindings{}
 	called := 0
-	kb.OnPendingChanged = func(rune) { called++ }
+	kb.OnPendingChanged = func(string) { called++ }
 
 	kb.Reset()
 	assert.Equal(t, 0, called, "Reset on already-clear state must not fire OnPendingChanged")
@@ -400,7 +400,7 @@ func TestReset_DoesNotFireWhenAlreadyClear(t *testing.T) {
 func TestWrapInputCapture_SkipAbsorbBypassesPrefix(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:           true,
-		sequencePrefixes:  map[rune]struct{}{'g': {}},
+		sequencePrefixes:  map[string]struct{}{"g": {}},
 		SequencesDisabled: func() bool { return true },
 	}}
 
@@ -413,18 +413,18 @@ func TestWrapInputCapture_SkipAbsorbBypassesPrefix(t *testing.T) {
 	out := fn(mkRune('g'))
 	assert.NotNil(t, out, "SkipAbsorb must let the rune through")
 	assert.Equal(t, rune('g'), innerReceived, "inner must receive the prefix rune verbatim")
-	assert.Equal(t, rune(0), kb.pending, "no pending state must be set when absorption is skipped")
+	assert.Equal(t, "", kb.pending, "no pending state must be set when absorption is skipped")
 }
 
 func TestWrapInputCapture_SkipAbsorbResetsStalePending(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:           true,
-		sequencePrefixes:  map[rune]struct{}{'g': {}},
-		pending:           'g',
+		sequencePrefixes:  map[string]struct{}{"g": {}},
+		pending:           "g",
 		SequencesDisabled: func() bool { return true },
 	}}
-	var notified []rune
-	kb.OnPendingChanged = func(r rune) { notified = append(notified, r) }
+	var notified []string
+	kb.OnPendingChanged = func(s string) { notified = append(notified, s) }
 
 	innerReceived := rune(0)
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey {
@@ -435,14 +435,14 @@ func TestWrapInputCapture_SkipAbsorbResetsStalePending(t *testing.T) {
 	out := fn(mkRune('x'))
 	assert.NotNil(t, out, "SkipAbsorb must pass the event through even with stale pending")
 	assert.Equal(t, rune('x'), innerReceived)
-	assert.Equal(t, rune(0), kb.pending, "stale pending must be cleared on bypass")
-	assert.Equal(t, []rune{0}, notified, "OnPendingChanged(0) must fire when clearing stale pending")
+	assert.Equal(t, "", kb.pending, "stale pending must be cleared on bypass")
+	assert.Equal(t, []string{""}, notified, "OnPendingChanged(\"\") must fire when clearing stale pending")
 }
 
 func TestWrapInputCapture_SkipAbsorbFalseStillAbsorbs(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:           true,
-		sequencePrefixes:  map[rune]struct{}{'g': {}},
+		sequencePrefixes:  map[string]struct{}{"g": {}},
 		SequencesDisabled: func() bool { return false },
 	}}
 
@@ -450,5 +450,5 @@ func TestWrapInputCapture_SkipAbsorbFalseStillAbsorbs(t *testing.T) {
 
 	out := fn(mkRune('g'))
 	assert.Nil(t, out, "SkipAbsorb returning false must keep absorption behavior")
-	assert.Equal(t, rune('g'), kb.pending)
+	assert.Equal(t, "g", kb.pending)
 }

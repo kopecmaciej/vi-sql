@@ -93,7 +93,7 @@ func NewQueryExecutedMsg(result QueryResult) EventMsg {
 	return EventMsg{Message: Message{Type: QueryExecuted, Data: result}}
 }
 
-// NewSequencePendingChangedMsg broadcasts the current sequence prefix (0 = cleared).
-func NewSequencePendingChangedMsg(r rune) EventMsg {
-	return EventMsg{Message: Message{Type: SequencePendingChanged, Data: r}}
+// NewSequencePendingChangedMsg broadcasts the current sequence prefix ("" = cleared).
+func NewSequencePendingChangedMsg(s string) EventMsg {
+	return EventMsg{Message: Message{Type: SequencePendingChanged, Data: s}}
 }

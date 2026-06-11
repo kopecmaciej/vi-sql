@@ -19,6 +19,7 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 	"github.com/kopecmaciej/vi-sql/internal/tui/widget"
+	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/rs/zerolog/log"
 )
 
@@ -345,6 +346,12 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		case k.Match(k.Data.CopyRow, event):
 			c.resultGrid.CopyRow(row, c.state.GetAllRows(), c.columns)
 			return nil
+		case k.Match(k.Data.CopyRowJSON, event):
+			c.resultGrid.CopyRowAs(util.ExportJSON, row, c.state.GetAllRows(), c.columns)
+			return nil
+		case k.Match(k.Data.CopyRowCSV, event):
+			c.resultGrid.CopyRowAs(util.ExportCSV, row, c.state.GetAllRows(), c.columns)
+			return nil
 		case k.Match(k.Common.Refresh, event):
 			c.triggerRefresh(nil, func(err error) {
 				modal.ShowError(c.App.Pages, "Error refreshing rows", err)
@@ -552,6 +559,13 @@ func (c *Data) IsCleanQueryTab() bool {
 // HasResults reports whether the tab currently has query results loaded.
 func (c *Data) HasResults() bool {
 	return c.state != nil && (c.state.Table != "" || c.state.RawSQL != "")
+}
+
+// CopyRowAs copies the current row (or multi-selection) to the clipboard in
+// the given export format. Delegates to ResultGrid with the current selection.
+func (c *Data) CopyRowAs(format util.ExportFormat) {
+	row, _ := c.resultGrid.GetSelection()
+	c.resultGrid.CopyRowAs(format, row, c.state.GetAllRows(), c.columns)
 }
 
 // SelectedTable returns the schema and table currently loaded in this tab.
