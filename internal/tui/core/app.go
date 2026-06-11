@@ -83,7 +83,6 @@ func NewApp(appConfig *config.Config) *App {
 		config:      appConfig,
 		keys:        keyBindings,
 	}
-	app.EnablePaste(true)
 
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
 		screen.SetCursorStyle(app.cursorStyle)
