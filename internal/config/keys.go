@@ -376,8 +376,7 @@ func (kb *KeyBindings) ConvertStrKeyToTcellKey(key string) (tcell.Key, bool) {
 }
 
 // normalizeNamedKey converts tcell's EventKey.Name() to the canonical config
-// format. Returns the normalized string and whether it's a bare rune (no modifiers).
-// Handles quirks in tcell's Name() output: space arrives as "Rune[ ]", Alt/Ctrl
+// format. Handles quirks in tcell's Name() output: space arrives as "Rune[ ]", Alt/Ctrl
 // combos with runes arrive as "Alt+Rune[x]"/"Ctrl+Rune[x]" instead of "Alt+x"/"Ctrl+x".
 func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	if namedKey == "Rune[ ]" {
@@ -402,10 +401,9 @@ func normalizeNamedKey(namedKey string) (normalized string, isRune bool) {
 	return namedKey, false
 }
 
-// Match reports whether ev should fire configKey's handler. When a sequence
-// prefix is pending, matches the accumulated prefix + incoming rune against
-// configKey.Sequences; otherwise checks the Keys/Runes lists. Must be used
-// inside a handler wrapped with WrapInputCapture so sequence state is maintained.
+// Match checks whether EventKey and configKey after normalization are the same.
+// If there is pending key, matches accumulated prefix + incoming rune.
+// To maintain sequence state, must be used inside WrapInputCapture
 func (kb *KeyBindings) Match(configKey Key, ev *tcell.EventKey) bool {
 	if ev.Key() == tcell.KeyRune && kb.pending != "" {
 		seq := kb.pending + string(ev.Rune())
@@ -414,10 +412,9 @@ func (kb *KeyBindings) Match(configKey Key, ev *tcell.EventKey) bool {
 	return kb.contains(configKey, ev.Name())
 }
 
-// contains reports whether namedKey (tcell EventKey.Name()) matches any
-// single-event Keys/Runes entry in configKey. Sequence matching is in Match.
-func (kb *KeyBindings) contains(configKey Key, namedKey string) bool {
-	normalized, isRune := normalizeNamedKey(namedKey)
+// contains cheks whether tcellNamedKey matches any Keys/Runes entry in configKey.
+func (kb *KeyBindings) contains(configKey Key, tcellNamedKey string) bool {
+	normalized, isRune := normalizeNamedKey(tcellNamedKey)
 
 	if isRune {
 		return slices.Contains(configKey.Runes, normalized)
@@ -434,11 +431,9 @@ func (kb *KeyBindings) contains(configKey Key, namedKey string) bool {
 	return false
 }
 
-// buildSequencePrefixes scans every Key in the bindings and records all proper
-// prefixes of every sequence so WrapInputCapture knows which rune strings to
-// absorb during prefix extension. Vim mode only — leaves the map nil otherwise.
-// Logs a warning for any complete sequence that is also a proper prefix of
-// another (shadowing), since the shorter sequence wins at match time.
+// buildSequencePrefixes records all proper prefixes of every sequence so eg:
+// `yrc` will record 2 prefixes: `y` and `yr`. If sequence key shadow another,
+// `yr` -> `yrc` just logs warning, as it was user decision. VimMode only.
 func (kb *KeyBindings) buildSequencePrefixes() {
 	kb.sequencePrefixes = nil
 	if !kb.vimMode {
