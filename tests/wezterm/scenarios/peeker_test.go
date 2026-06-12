@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -21,7 +20,7 @@ func TestPeekCell(t *testing.T) {
 	))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.PeekRow()

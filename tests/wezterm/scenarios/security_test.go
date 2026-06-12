@@ -5,7 +5,6 @@ package wezterm_test
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -14,7 +13,7 @@ func TestMasterPasswordUnlock(t *testing.T) {
 	configPath, logPath := harness.NewTestConfigWithMasterPassword(t, "test_master_pw_123")
 	s := harness.SpawnWithConfig(t, configPath, logPath)
 
-	s.WaitForPaneTimeout(" Unlock with master password ", 10*time.Second)
+	s.WaitForPane(" Unlock with master password ")
 	s.Paste("test_master_pw_123")
 	s.Send("Enter")
 	s.Send("Enter")
@@ -27,7 +26,7 @@ func TestMasterPasswordWrongPassword(t *testing.T) {
 	configPath, logPath := harness.NewTestConfigWithMasterPassword(t, "correct_password")
 	s := harness.SpawnWithConfig(t, configPath, logPath)
 
-	s.WaitForPaneTimeout(" Unlock with master password ", 10*time.Second)
+	s.WaitForPane(" Unlock with master password ")
 	s.Paste("wrong_password")
 	s.Send("Enter")
 
@@ -57,7 +56,7 @@ func TestSecurityEnv(t *testing.T) {
 	configPath, logPath := harness.NewTestConfigWithSecurityMethod(t, "env")
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn)
 
-	s.WaitForPaneTimeout("Schemas", 10*time.Second)
+	s.WaitForPane("Schemas")
 	s.AssertPaneNotContains("master password")
 }
 
@@ -69,6 +68,6 @@ func TestSecurityOff(t *testing.T) {
 	configPath, logPath := harness.NewTestConfigWithSecurityMethod(t, "off")
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn)
 
-	s.WaitForPaneTimeout("Schemas", 10*time.Second)
+	s.WaitForPane("Schemas")
 	s.AssertPaneNotContains("master password")
 }

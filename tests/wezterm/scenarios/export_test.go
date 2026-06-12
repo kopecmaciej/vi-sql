@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -16,7 +15,7 @@ func TestExportModal(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ")
-	s.WaitForFocus("ExportModal", 2*time.Second)
+	s.WaitForFocus("ExportModal")
 
 	s.Close()
 
@@ -30,7 +29,7 @@ func TestExportCSV(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ")
-	s.WaitForFocus("ExportModal", 2*time.Second)
+	s.WaitForFocus("ExportModal")
 
 	s.FocusDown(1) // → Filename
 	s.ClearField()
@@ -42,7 +41,7 @@ func TestExportCSV(t *testing.T) {
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
-	s.WaitForFile(tmp+"/export.csv", 3*time.Second)
+	s.WaitForFile(tmp + "/export.csv")
 
 	data, err := os.ReadFile(tmp + "/export.csv")
 	if err != nil {
@@ -60,7 +59,7 @@ func TestExportJSON(t *testing.T) {
 
 	s.OpenExportModal()
 	s.WaitForPane(" Export ")
-	s.WaitForFocus("ExportModal", 2*time.Second)
+	s.WaitForFocus("ExportModal")
 
 	s.MoveDown(1)  // Format: CSV → JSON
 	s.FocusDown(1) // → Filename
@@ -73,7 +72,7 @@ func TestExportJSON(t *testing.T) {
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
-	s.WaitForFile(tmp+"/export.json", 3*time.Second)
+	s.WaitForFile(tmp + "/export.json")
 
 	data, err := os.ReadFile(tmp + "/export.json")
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -22,10 +21,10 @@ func TestImportCSV(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.OpenImportModal()
-	s.WaitForPaneTimeout(" Import CSV ", 3*time.Second)
+	s.WaitForPane(" Import CSV ")
 
 	s.ClearField()
 	s.Paste(fmt.Sprintf("%s.%s", schema, table))

@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/internal/util"
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
@@ -21,7 +20,7 @@ func TestMultiSelectCopy(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MultipleSelect()
 	s.MoveDown(2)
@@ -43,7 +42,7 @@ func TestMultiSelectExport(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MultipleSelect()
 	s.MoveDown(1)
@@ -62,7 +61,7 @@ func TestMultiSelectExport(t *testing.T) {
 	s.Select()
 
 	s.AssertPaneNotContains(" Export ")
-	s.WaitForFile(tmp+"/multi.csv", 3*time.Second)
+	s.WaitForFile(tmp + "/multi.csv")
 
 	data, err := os.ReadFile(tmp + "/multi.csv")
 	if err != nil {
@@ -83,7 +82,7 @@ func TestMultiSelectDelete(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.MultipleSelect()

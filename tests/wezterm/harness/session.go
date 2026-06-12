@@ -18,15 +18,17 @@ import (
 )
 
 const (
-	defaultLogPath   = "/tmp/vi-sql.log"
-	defaultTable     = "auth.users"
-	defaultKeyDelay  = 40 * time.Millisecond
-	slowKeyDelay     = 200 * time.Millisecond
-	readyMarker      = "Vi-SQL started"
-	connectedMarker  = "Connected to database"
-	startupTimeout   = 15 * time.Second
-	assertionTimeout = 3 * time.Second
-	defaultPaneWait  = 5 * time.Second
+	defaultLogPath    = "/tmp/vi-sql.log"
+	defaultTable      = "auth.users"
+	defaultKeyDelay   = 40 * time.Millisecond
+	slowKeyDelay      = 200 * time.Millisecond
+	readyMarker       = "Vi-SQL started"
+	connectedMarker   = "Connected to database"
+	startupTimeout    = 15 * time.Second
+	assertionTimeout  = 2 * time.Second
+	defaultPaneWait   = 3 * time.Second
+	dbQueryTimeout    = 5 * time.Second
+	fileCreateTimeout = 500 * time.Millisecond
 )
 
 // Session represents a running vi-sql instance in a wezterm pane.
@@ -492,9 +494,9 @@ func (s *Session) RunQueryInNewTab(sql string) {
 	s.RunQuery()
 }
 
-func (s *Session) WaitForQueryResult(timeout time.Duration) {
+func (s *Session) WaitForQueryResult() {
 	s.t.Helper()
-	s.WaitForPaneTimeout("⏱", timeout)
+	s.WaitForPaneTimeout("⏱", dbQueryTimeout)
 }
 
 func (s *Session) FocusSchemaTree() {
@@ -692,16 +694,16 @@ func (s *Session) GetFocusedElement() string {
 	return last
 }
 
-func (s *Session) WaitForFocus(element string, timeout time.Duration) {
+func (s *Session) WaitForFocus(element string) {
 	s.t.Helper()
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(assertionTimeout)
 	for time.Now().Before(deadline) {
 		if s.GetFocusedElement() == element {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	s.t.Fatalf("WaitForFocus: element %q not focused within %v (currently focused: %q)", element, timeout, s.GetFocusedElement())
+	s.t.Fatalf("WaitForFocus: element %q not focused within %v (currently focused: %q)", element, assertionTimeout, s.GetFocusedElement())
 }
 
 func (s *Session) LogFocus() {
@@ -709,16 +711,16 @@ func (s *Session) LogFocus() {
 	s.t.Logf("focus: %q", s.GetFocusedElement())
 }
 
-func (s *Session) WaitForFile(path string, timeout time.Duration) {
+func (s *Session) WaitForFile(path string) {
 	s.t.Helper()
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(fileCreateTimeout)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	s.t.Fatalf("WaitForFile: %q not created within %v", path, timeout)
+	s.t.Fatalf("WaitForFile: %q not created within %v", path, fileCreateTimeout)
 }
 
 func SpawnWithTable(t *testing.T) (*Session, string) {
@@ -735,7 +737,7 @@ func SpawnWithTable(t *testing.T) (*Session, string) {
 		return nil, ""
 	}
 	s := Spawn(t, "--connect", dsn, "--jump", jump)
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 	return s, table
 }
 

@@ -16,7 +16,7 @@ func TestInlineEditShortValueEnter(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('old_value')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveRight(1)
 	s.Edit()
@@ -39,7 +39,7 @@ func TestInlineEditShortValueConfirmKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('old_value')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveRight(1)
 	s.Edit()
@@ -62,7 +62,7 @@ func TestInlineEditShortValueCancel(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('original_name')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveRight(1)
 	s.Edit()
@@ -85,7 +85,7 @@ func TestInlineEditLongValueConfirmKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (content) VALUES ('%s')", db.Qualified(schema, table), longX))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveRight(1)
 	s.Edit()

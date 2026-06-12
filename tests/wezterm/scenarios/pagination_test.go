@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -23,9 +22,9 @@ func TestScrollLoadsMoreRows(t *testing.T) {
 	))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.GoBottom()
 
-	s.WaitForPaneTimeout("150 rows", 10*time.Second)
+	s.WaitForPane("150 rows")
 }

@@ -15,7 +15,7 @@ func TestRowLifecycle(t *testing.T) {
 		"id serial primary key, name text, email text")
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.Add()
 	s.WaitForPane(" Add Row ")
@@ -51,7 +51,7 @@ func TestRowDeleteCancel(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('keep_me')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.Delete()

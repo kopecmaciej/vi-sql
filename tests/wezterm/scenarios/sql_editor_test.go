@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -15,7 +14,7 @@ func TestSQLHistoryRecall(t *testing.T) {
 	s := harness.SpawnConnected(t, "--debug")
 
 	s.RunQueryInNewTab("SELECT 99999 AS n")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
 	s.NewTab()
 	s.AssertPaneContains("Query")
@@ -51,9 +50,9 @@ func TestSQLEditorTypeAndRun(t *testing.T) {
 	s := harness.SpawnConnected(t, "--debug")
 
 	s.RunQueryInNewTab("SELECT table_schema, table_name FROM information_schema.tables")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
-	s.WaitForPaneTimeout("table_schema", 10*time.Second)
+	s.WaitForPane("table_schema")
 
 	pane := s.GetPaneText()
 	if !strings.Contains(pane, "information_schema") {
@@ -66,12 +65,12 @@ func TestSQLEditorDelete(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('to_delete')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.RunQueryInNewTab(fmt.Sprintf("DELETE FROM %s WHERE id = 1", db.Qualified(schema, table)))
 	s.WaitForPane("Execute this statement?")
 	s.Send("Enter")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
 	harness.WaitForRowCount(t, db, schema, table, 0)
 }
@@ -84,12 +83,12 @@ func TestSQLEditorUpdateWithoutWhere(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('a'),('b'),('c')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.RunQueryInNewTab(fmt.Sprintf("UPDATE %s SET name = 'updated'", db.Qualified(schema, table)))
 	s.WaitForPane("Execute this statement?")
 	s.Send("Enter")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
 	// All 3 rows should now have name='updated'.
 	rows := db.Query(fmt.Sprintf("SELECT DISTINCT name FROM %s", db.Qualified(schema, table)))
@@ -107,12 +106,12 @@ func TestSQLEditorTruncate(t *testing.T) {
 	}
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.RunQueryInNewTab(fmt.Sprintf("TRUNCATE TABLE %s", db.Qualified(schema, table)))
 	s.WaitForPane("Execute this statement?")
 	s.Send("Enter")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
 	harness.WaitForRowCount(t, db, schema, table, 0)
 }
@@ -138,8 +137,8 @@ func TestSQLEditorExplain(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (name) VALUES ('x')", db.Qualified(schema, table)))
 
 	s := harness.SpawnConnected(t, "--jump", schema+"."+table, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.RunQueryInNewTab(fmt.Sprintf("EXPLAIN SELECT * FROM %s", db.Qualified(schema, table)))
-	s.WaitForPaneTimeout("EXPLAIN", 10*time.Second)
+	s.WaitForPane("EXPLAIN")
 }

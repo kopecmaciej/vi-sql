@@ -5,7 +5,6 @@ package wezterm_test
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -20,13 +19,13 @@ func TestFollowForeignKey(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id) VALUES (1)", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".child", "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.MoveRight(1)
 	s.FollowForeignKey()
 
-	s.WaitForPaneTimeout("fk_target_alpha", 10*time.Second)
+	s.WaitForPane("fk_target_alpha")
 }
 
 func TestFindReferencesSingleTable(t *testing.T) {
@@ -39,12 +38,12 @@ func TestFindReferencesSingleTable(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'ref_marker_xyz')", db.Qualified(schema, "child")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.FindReferences()
 
-	s.WaitForPaneTimeout("ref_marker_xyz", 10*time.Second)
+	s.WaitForPane("ref_marker_xyz")
 }
 
 func TestFindReferencesMultipleTablesList(t *testing.T) {
@@ -61,7 +60,7 @@ func TestFindReferencesMultipleTablesList(t *testing.T) {
 	db.Exec(fmt.Sprintf("INSERT INTO %s (parent_id, tag) VALUES (1, 'beta_marker')", db.Qualified(schema, "ref_beta")))
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.FindReferences()
@@ -71,7 +70,7 @@ func TestFindReferencesMultipleTablesList(t *testing.T) {
 
 	s.Send("Enter")
 	s.AssertPaneNotContains(" Referenced by ")
-	s.WaitForPaneTimeout("alpha_marker", 10*time.Second)
+	s.WaitForPane("alpha_marker")
 }
 
 func TestFindReferencesListCancel(t *testing.T) {
@@ -86,7 +85,7 @@ func TestFindReferencesListCancel(t *testing.T) {
 	db.InsertDefault(schema, "parent")
 
 	s := harness.SpawnConnected(t, "--jump", schema+".parent", "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 
 	s.MoveDown(1)
 	s.FindReferences()

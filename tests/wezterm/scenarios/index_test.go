@@ -84,7 +84,7 @@ func TestDeleteIndexViaSQLEditor(t *testing.T) {
 	s.RunQueryInNewTab(db.DropIndexSQL(schema, table, "vi_sql_test_sqldrop_idx"))
 	s.WaitForPane("Execute this statement?")
 	s.Send("Enter")
-	s.WaitForQueryResult(10 * time.Second)
+	s.WaitForQueryResult()
 
 	harness.WaitFor(t, 8*time.Second, fmt.Sprintf("index vi_sql_test_sqldrop_idx dropped from %s.%s", schema, table),
 		func() bool { return !db.IndexExists(schema, table, "vi_sql_test_sqldrop_idx") })

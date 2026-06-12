@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -21,7 +20,7 @@ func TestStyleChangePersists(t *testing.T) {
 	s := harness.SpawnWithConfig(t, configPath, logPath, "--connect", dsn, "--debug")
 
 	s.ChangeStyle()
-	s.WaitForPaneTimeout(" Change Style ", 3*time.Second)
+	s.WaitForPane(" Change Style ")
 	s.MoveDown(1)
 	s.Send("Enter")
 	s.AssertPaneNotContains(" Change Style ")

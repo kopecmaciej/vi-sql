@@ -4,7 +4,6 @@ package wezterm_test
 
 import (
 	"testing"
-	"time"
 
 	"github.com/kopecmaciej/vi-sql/tests/wezterm/harness"
 )
@@ -25,5 +24,5 @@ func TestOpenTableViaTree(t *testing.T) {
 	jump := harness.DefaultJump()
 
 	s := harness.SpawnConnected(t, "--jump", jump, "--debug")
-	s.WaitForPaneTimeout("⏱", 10*time.Second)
+	s.WaitForPane("⏱")
 }
