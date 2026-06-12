@@ -164,7 +164,7 @@ func (h *Help) setLayout() {
 
 	captureHint := tview.NewTextView()
 	captureHint.SetDynamicColors(true)
-	captureHint.SetText(" [::d]any key=add  2 runes=sequence  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
+	captureHint.SetText(" [::d]any key=add  2+ runes=sequence  Enter=save  Ctrl+Q=cancel  Backspace=undo[-:-:-]")
 
 	h.captureDisplay.SetDynamicColors(true)
 	h.captureDisplay.SetText(" [::d]Press a key combination to bind...[-:-:-]")
@@ -408,7 +408,7 @@ func (h *Help) saveEdit() {
 	}
 
 	newKey := config.Key{Description: section.Keys[h.editKeyIdx].Description}
-	if len(h.capturedKey.Runes) == 2 {
+	if len(h.capturedKey.Runes) >= 2 {
 		newKey.Sequences = []string{strings.Join(h.capturedKey.Runes, "")}
 	} else {
 		newKey.Keys = h.capturedKey.Keys
@@ -446,7 +446,7 @@ func (h *Help) saveEdit() {
 func (h *Help) updateCaptureDisplay() {
 	var parts []string
 	parts = append(parts, h.capturedKey.Keys...)
-	if len(h.capturedKey.Runes) == 2 {
+	if len(h.capturedKey.Runes) >= 2 {
 		parts = append(parts, "<"+strings.Join(h.capturedKey.Runes, "")+">"+" (sequence)")
 	} else {
 		parts = append(parts, h.capturedKey.Runes...)
