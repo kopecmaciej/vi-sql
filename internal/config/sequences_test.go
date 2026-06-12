@@ -50,9 +50,6 @@ func TestReset_ClearsInFlightEvent(t *testing.T) {
 	assert.Nil(t, cs.inFlightEvent, "Reset must clear inFlightEvent")
 }
 
-// When a sequence's final rune has no matching binding, inner returns the
-// event (passes through). Pending stays — until the next, different event
-// triggers the stale-event reset and clears it.
 func TestWrapInputCapture_UnmatchedSecondRuneClearsOnNextEvent(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:          true,
@@ -64,15 +61,12 @@ func TestWrapInputCapture_UnmatchedSecondRuneClearsOnNextEvent(t *testing.T) {
 
 	fn := kb.WrapInputCapture(func(ev *tcell.EventKey) *tcell.EventKey { return ev })
 
-	// Final rune of an unmatched sequence: inner returns ev, so wrapper
-	// passes it through and leaves pending in place.
 	out := fn(mkRune('q'))
 	assert.NotNil(t, out, "unmatched final rune must pass through")
 	assert.Equal(t, "g", kb.pending, "pending must remain after unmatched final rune")
 	assert.NotNil(t, kb.inFlightEvent, "inFlightEvent must be set so deeper wrappers reuse pending")
 	assert.Empty(t, notified, "no notification yet — pending unchanged")
 
-	// Next event arrives: stale check clears pending.
 	out = fn(mkRune('x'))
 	assert.NotNil(t, out)
 	assert.Equal(t, "", kb.pending, "stale pending cleared on next event")
@@ -80,8 +74,6 @@ func TestWrapInputCapture_UnmatchedSecondRuneClearsOnNextEvent(t *testing.T) {
 	assert.Equal(t, []string{""}, notified, "OnPendingChanged(\"\") fires when stale pending is cleared")
 }
 
-// The inFlightEvent guard prevents the stale-reset from firing when the SAME
-// event re-enters the wrapper (deeper wrappers in the chain share the state).
 func TestWrapInputCapture_SameEventReusedDoesNotResetPending(t *testing.T) {
 	ev := mkRune('g')
 	kb := &KeyBindings{sequenceState: sequenceState{
@@ -104,8 +96,6 @@ func TestWrapInputCapture_SameEventReusedDoesNotResetPending(t *testing.T) {
 	assert.Nil(t, kb.inFlightEvent)
 }
 
-// Escape while a prefix is pending must cancel the prefix and consume the
-// event (return nil) so the Escape does not trigger other handlers.
 func TestWrapInputCapture_EscapeCancelsPendingAndConsumes(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:          true,
@@ -128,7 +118,6 @@ func TestWrapInputCapture_EscapeCancelsPendingAndConsumes(t *testing.T) {
 	assert.Equal(t, []string{""}, notified, "OnPendingChanged(\"\") must fire")
 }
 
-// Escape with no pending prefix must be forwarded to inner as normal.
 func TestWrapInputCapture_EscapeWithNoPendingForwards(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:          true,
@@ -146,10 +135,7 @@ func TestWrapInputCapture_EscapeWithNoPendingForwards(t *testing.T) {
 	assert.True(t, innerCalled)
 }
 
-// Three-rune sequence: each intermediate rune is absorbed as a prefix extension
-// without calling inner; only the final rune is delivered to inner for matching.
 func TestWrapInputCapture_ThreeRuneMatch(t *testing.T) {
-	// "y" and "yr" are proper prefixes; "yrj" is the complete sequence.
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:          true,
 		sequencePrefixes: map[string]struct{}{"y": {}, "yr": {}},
@@ -162,22 +148,19 @@ func TestWrapInputCapture_ThreeRuneMatch(t *testing.T) {
 		if ev.Key() == tcell.KeyRune {
 			innerReceivedRune = ev.Rune()
 		}
-		return nil // simulate a match on the third rune
+		return nil
 	})
 
-	// First rune 'y' → prefix, inner NOT called.
 	out := fn(mkRune('y'))
 	assert.Nil(t, out)
 	assert.Equal(t, "y", kb.pending)
 	assert.Equal(t, rune(0), innerReceivedRune, "inner must not be called for prefix extension")
 
-	// Second rune 'r' → still a prefix, inner NOT called.
 	out = fn(mkRune('r'))
 	assert.Nil(t, out)
 	assert.Equal(t, "yr", kb.pending)
 	assert.Equal(t, rune(0), innerReceivedRune, "inner must not be called for prefix extension")
 
-	// Third rune 'j' → not a prefix, inner called with 'j'.
 	out = fn(mkRune('j'))
 	assert.Nil(t, out, "third rune consumed by inner match")
 	assert.Equal(t, 'j', innerReceivedRune)
@@ -185,7 +168,6 @@ func TestWrapInputCapture_ThreeRuneMatch(t *testing.T) {
 	assert.Equal(t, []string{"y", "yr", ""}, notified)
 }
 
-// Esc mid-sequence (after two prefix runes) clears pending and does not forward.
 func TestWrapInputCapture_EscapeMidThreeRuneSequence(t *testing.T) {
 	kb := &KeyBindings{sequenceState: sequenceState{
 		vimMode:          true,

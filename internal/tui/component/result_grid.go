@@ -135,7 +135,6 @@ func (g *ResultGrid) FlashRow(row int) {
 }
 
 // CopyCell copies the value at (row, col) to the clipboard and flashes the cell.
-// Returns false if there is nothing to copy.
 func (g *ResultGrid) CopyCell(row, col int, allRows []database.Row) bool {
 	colName := g.ColumnName(col)
 	if colName == "" {
@@ -150,9 +149,7 @@ func (g *ResultGrid) CopyCell(row, col int, allRows []database.Row) bool {
 	return true
 }
 
-// CopyRow copies the visible columns of the selected rows (or row if nothing
-// is selected) to the clipboard and flashes those rows.
-// Returns false if there is nothing to copy.
+// CopyRow copies visable columns of selected rows and flashed those rows.
 func (g *ResultGrid) CopyRow(row int, allRows []database.Row, cols []database.ColumnInfo) bool {
 	if len(allRows) == 0 {
 		return false
