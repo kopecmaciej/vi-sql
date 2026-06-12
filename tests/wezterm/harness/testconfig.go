@@ -17,7 +17,7 @@ import (
 // os.TempDir() keeps it in /tmp without the per-test cleanup t.TempDir() would register.
 var appLogPath = filepath.Join(os.TempDir(), "vi-sql-test-harness.log")
 
-func newTestConfig(t *testing.T) (configPath, logPath string) {
+func newTestConfig(t *testing.T, vimMode bool) (configPath, logPath string) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -29,6 +29,9 @@ func newTestConfig(t *testing.T) (configPath, logPath string) {
 			"path":        logPath,
 			"level":       "trace",
 			"prettyPrint": false,
+		},
+		"ui": map[string]any{
+			"vimMode": vimMode,
 		},
 	}
 

@@ -54,7 +54,7 @@ func Spawn(t *testing.T, args ...string) *Session {
 	logStart := currentFileSize(logPath)
 
 	if !hasArg(args, "--config", "-c") {
-		configPath, testLogPath := newTestConfig(t)
+		configPath, testLogPath := newTestConfig(t, false)
 		args = append([]string{"--config", configPath}, args...)
 		logPath = testLogPath
 		logStart = 0
@@ -65,7 +65,7 @@ func Spawn(t *testing.T, args ...string) *Session {
 
 func NewTestConfig(t *testing.T) (configPath, logPath string) {
 	t.Helper()
-	return newTestConfig(t)
+	return newTestConfig(t, false)
 }
 
 func SpawnWithConfig(t *testing.T, configPath, logPath string, args ...string) *Session {
@@ -84,6 +84,19 @@ func SpawnConnected(t *testing.T, args ...string) *Session {
 		return nil
 	}
 	return Spawn(t, append([]string{"--connect", dsn}, args...)...)
+}
+
+func SpawnConnectedVimMode(t *testing.T, args ...string) *Session {
+	t.Helper()
+	dsn := os.Getenv(EnvDSN)
+	if dsn == "" {
+		t.Skipf("%s not set — skipping test", EnvDSN)
+		return nil
+	}
+	binary := requireBinary(t)
+	configPath, logPath := newTestConfig(t, true)
+	args = append([]string{"--config", configPath, "--connect", dsn}, args...)
+	return spawnSession(t, binary, args, logPath, 0)
 }
 
 func SpawnWithSavedConnection(t *testing.T, args ...string) *Session {
@@ -126,7 +139,7 @@ func RunBinary(t *testing.T, args ...string) string {
 	t.Helper()
 	binary := findBinary(t)
 	if !hasArg(args, "--config", "-c") {
-		configPath, _ := newTestConfig(t)
+		configPath, _ := newTestConfig(t, false)
 		args = append([]string{"--config", configPath}, args...)
 	}
 	cmd := exec.Command(binary, args...)
@@ -618,6 +631,16 @@ func (s *Session) MultipleSelect() {
 func (s *Session) CopyRow() {
 	s.t.Helper()
 	s.sendAction(s.mustKeys().Data.CopyRow)
+}
+
+func (s *Session) CopyRowJSON() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.CopyRowJSON)
+}
+
+func (s *Session) CopyRowCSV() {
+	s.t.Helper()
+	s.sendAction(s.mustKeys().Data.CopyRowCSV)
 }
 
 func (s *Session) AssertPaneNotContains(substr string) {
