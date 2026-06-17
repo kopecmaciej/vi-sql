@@ -31,25 +31,18 @@ const (
 	ResultsSuffix     = "-results"
 	DeleteModalSuffix = "-delete"
 	EditorSuffix      = "-editor"
+
+	editorSizeNormal     = 0
+	editorSizeFullscreen = 1
 )
 
-// SQL editor size states toggled by the Fullscreen key.
-const (
-	editorSizeNormal     = 0 // 30/70 proportional split
-	editorSizeFullscreen = 1 // editor fills the tab, results hidden
-)
-
-// QueryTabMode controls which keybindings and features are active.
-type QueryTabMode int
+// TabMode controls which keybindings and features are active.
+type TabMode int
 
 const (
-	// TableMode: pre-filled SELECT, full CRUD keybindings. Used when opening a
-	// table directly from the schema tree.
-	TableMode QueryTabMode = iota
-	// QueryMode: blank editor, read-only results. Used for ad-hoc query tabs.
-	QueryMode
-	// ViewMode: pre-filled SELECT on a view; read-only (no PK, no CRUD).
-	ViewMode
+	TableMode TabMode = iota // pre-filled SELECT, no editor, full CRUD keys
+	QueryMode                // blank editor, no CRUD keys
+	ViewMode                 // read-only (no PK, no CRUD)
 )
 
 // dataTabCounter generates unique identifiers for each Data/QueryTab instance
@@ -67,7 +60,7 @@ type Data struct {
 	*core.BaseElement
 	*core.Flex
 
-	mode           QueryTabMode
+	mode           TabMode
 	tableFlex      *core.Flex
 	resultsBar     *widget.ResultsBar
 	resultGrid     *ResultGrid
@@ -92,7 +85,7 @@ type Data struct {
 	scroll         *scrollFetcher
 }
 
-func newData(mode QueryTabMode) *Data {
+func newData(mode TabMode) *Data {
 	id := tview.Identifier(nextDataID())
 	c := &Data{
 		BaseElement: core.NewBaseElement(),
@@ -128,19 +121,14 @@ func newData(mode QueryTabMode) *Data {
 	return c
 }
 
-// NewData creates a blank query-mode tab (no CRUD, empty editor).
-func NewData() *Data {
+func NewQueryMode() *Data {
 	return newData(QueryMode)
 }
 
-// NewTableTab creates a table-mode tab with full CRUD keybindings.
-// Callers must follow up with HandleTableSelection to load data.
 func NewTableTab() *Data {
 	return newData(TableMode)
 }
 
-// NewViewTab creates a view-mode tab (read-only, no CRUD).
-// Callers must follow up with HandleTableSelection to load data.
 func NewViewTab() *Data {
 	return newData(ViewMode)
 }
@@ -406,10 +394,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			return c.handleFollowForeignKey(row, col)
 		case k.Match(k.Data.FindReferences, event):
 			return c.handleFindReferences(ctx, row, col)
-		}
-
-		// OrderByColumn works in both modes.
-		if k.Match(k.Data.OrderByColumn, event) {
+		case k.Match(k.Data.OrderByColumn, event):
 			return c.handleOrderByColumn(col)
 		}
 
@@ -439,7 +424,6 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			}
 		}
 
-		// Check if cursor is approaching buffer end — trigger prefetch if so.
 		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
 		c.scroll.tryPrefetch(row, viewHeight, c.renderAfterAppend)
 
@@ -545,7 +529,6 @@ func (c *Data) SetSchemasForAutocomplete(schemas []database.Schema) {
 }
 
 // IsQueryRunning reports whether a query is currently in flight.
-// Intended for tests that need to synchronise with the async runner.
 func (c *Data) IsQueryRunning() bool { return c.runner != nil && c.runner.IsQueryRunning() }
 
 // Refresh discards the current buffer and re-fetches from offset 0.
@@ -629,7 +612,7 @@ func (c *Data) Render() {
 		switch c.editorSize {
 		case editorSizeFullscreen:
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 1, true)
-		default: // editorSizeNormal
+		default:
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 3, true)
 			c.Flex.AddItem(c.tableFlex, 0, 7, true)
 		}

@@ -299,7 +299,7 @@ func (m *Main) openNewQueryTab() {
 func (m *Main) openNewQueryTabFull(tabID, name string) {
 	n := m.nextQueryTabNum()
 	m.queryTabNums[n] = true
-	tab := component.NewData()
+	tab := component.NewQueryMode()
 	if err := tab.Init(m.App); err != nil {
 		modal.ShowError(m.App.Pages, "Failed to create tab", err)
 		m.queryTabNums[n] = false
