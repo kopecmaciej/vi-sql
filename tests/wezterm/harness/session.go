@@ -99,21 +99,6 @@ func SpawnConnectedVimMode(t *testing.T, args ...string) *Session {
 	return spawnSession(t, binary, args, logPath, 0)
 }
 
-func SpawnWithSavedConnection(t *testing.T, args ...string) *Session {
-	t.Helper()
-
-	dsn := os.Getenv(EnvDSN)
-	if dsn == "" {
-		t.Skipf("%s not set — skipping test", EnvDSN)
-		return nil
-	}
-
-	binary := requireBinary(t)
-	configPath, logPath := newTestConfigWithDSN(t, dsn)
-	args = append([]string{"--config", configPath}, args...)
-	return spawnSession(t, binary, args, logPath, 0)
-}
-
 func findBinary(t *testing.T) string {
 	t.Helper()
 	binary := os.Getenv(EnvBinary)
@@ -142,21 +127,6 @@ func RunBinary(t *testing.T, args ...string) string {
 		configPath, _ := newTestConfig(t, false)
 		args = append([]string{"--config", configPath}, args...)
 	}
-	cmd := exec.Command(binary, args...)
-	out, _ := cmd.CombinedOutput()
-	return string(out)
-}
-
-func RunBinaryWithSavedConnection(t *testing.T, args ...string) string {
-	t.Helper()
-	dsn := os.Getenv(EnvDSN)
-	if dsn == "" {
-		t.Skipf("%s not set — skipping test", EnvDSN)
-		return ""
-	}
-	binary := findBinary(t)
-	configPath, _ := newTestConfigWithDSN(t, dsn)
-	args = append([]string{"--config", configPath}, args...)
 	cmd := exec.Command(binary, args...)
 	out, _ := cmd.CombinedOutput()
 	return string(out)
@@ -225,10 +195,6 @@ func (s *Session) Type(text string) {
 	}
 }
 
-func (s *Session) IsVimMode() bool {
-	return s.vimMode
-}
-
 func (s *Session) Paste(text string) {
 	s.t.Helper()
 	util.Copy(text)
@@ -245,18 +211,6 @@ func (s *Session) WaitForLog(substr string, timeout time.Duration) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	s.t.Fatalf("WaitForLog: %q not found in %s within %v", substr, s.logPath, timeout)
-}
-
-func (s *Session) AssertLogContains(substr string) {
-	s.t.Helper()
-	deadline := time.Now().Add(assertionTimeout)
-	for time.Now().Before(deadline) {
-		if s.logContains(substr) {
-			return
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	s.t.Errorf("AssertLogContains: %q not found in log", substr)
 }
 
 func (s *Session) AssertPaneContains(substr string) {
@@ -292,20 +246,6 @@ func (s *Session) waitForPane(substr string, timeout time.Duration, fatal bool) 
 		s.t.Fatalf("WaitForPane: %q not visible in pane within %v", substr, timeout)
 	} else {
 		s.t.Errorf("AssertPaneContains: %q not visible in pane", substr)
-	}
-}
-
-// TypeQuery types a multi-line SQL query into the active editor.
-// Each \n in sql is sent as an Enter keystroke.
-// When using vim mode, the caller must ensure the editor is in insert mode first (send "i").
-func (s *Session) TypeQuery(sql string) {
-	s.t.Helper()
-	lines := strings.Split(sql, "\n")
-	for i, line := range lines {
-		s.Type(line)
-		if i < len(lines)-1 {
-			s.Send("Enter")
-		}
 	}
 }
 
@@ -487,9 +427,7 @@ func (s *Session) RenameTable() {
 // WriteToEditor pastes sql via clipboard. TextArea is always in insert mode — no mode switch needed.
 func (s *Session) WriteToEditor(sql string) {
 	s.t.Helper()
-	if err := weztermSetClipboard(sql); err != nil {
-		s.t.Fatalf("WriteToEditor: clipboard: %v", err)
-	}
+	util.Copy(sql)
 	s.sendAction(s.mustKeys().Common.Paste)
 }
 
@@ -534,11 +472,6 @@ func (s *Session) GoToTable(schema, table string) {
 	s.Type(schema + "." + table)
 	s.sendAction(s.mustKeys().Common.Confirm)
 	s.WaitForPane(schema + "." + table)
-}
-
-func (s *Session) ExplainQuery() {
-	s.t.Helper()
-	s.sendAction(s.mustKeys().Data.ExplainQuery)
 }
 
 func (s *Session) ClearEditor() {
@@ -692,7 +625,7 @@ func (s *Session) logContains(substr string) bool {
 	return false
 }
 
-func (s *Session) GetFocusedElement() string {
+func (s *Session) getFocusedElement() string {
 	f, err := os.Open(s.logPath)
 	if err != nil {
 		return ""
@@ -721,17 +654,12 @@ func (s *Session) WaitForFocus(element string) {
 	s.t.Helper()
 	deadline := time.Now().Add(assertionTimeout)
 	for time.Now().Before(deadline) {
-		if s.GetFocusedElement() == element {
+		if s.getFocusedElement() == element {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	s.t.Fatalf("WaitForFocus: element %q not focused within %v (currently focused: %q)", element, assertionTimeout, s.GetFocusedElement())
-}
-
-func (s *Session) LogFocus() {
-	s.t.Helper()
-	s.t.Logf("focus: %q", s.GetFocusedElement())
+	s.t.Fatalf("WaitForFocus: element %q not focused within %v (currently focused: %q)", element, assertionTimeout, s.getFocusedElement())
 }
 
 func (s *Session) WaitForFile(path string) {
