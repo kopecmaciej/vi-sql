@@ -785,6 +785,55 @@ SET query_params  = NULLIF(@query_params, ''),
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================
+-- VIEWS
+-- ============================================================
+
+CREATE OR REPLACE VIEW `orders`.v_order_summary AS
+SELECT
+    o.id,
+    o.status,
+    o.currency,
+    o.total_amount,
+    o.created_at,
+    u.email      AS customer_email,
+    u.full_name  AS customer_name,
+    COUNT(oi.id) AS item_count
+FROM `orders`.orders          o
+LEFT JOIN auth.users          u  ON u.id = o.user_id
+LEFT JOIN `orders`.order_items oi ON oi.order_id = o.id
+GROUP BY o.id, o.status, o.currency, o.total_amount, o.created_at, u.email, u.full_name;
+
+CREATE OR REPLACE VIEW catalog.v_active_products AS
+SELECT
+    p.id,
+    p.sku,
+    p.name,
+    p.status,
+    c.name            AS category,
+    MIN(pv.price)     AS min_price,
+    MAX(pv.price)     AS max_price,
+    SUM(pv.stock_qty) AS total_stock
+FROM catalog.products              p
+LEFT JOIN catalog.categories       c  ON c.id = p.category_id
+LEFT JOIN catalog.product_variants pv ON pv.product_id = p.id
+WHERE p.status = 'active'
+GROUP BY p.id, p.sku, p.name, p.status, c.name;
+
+CREATE OR REPLACE VIEW auth.v_active_users AS
+SELECT
+    u.id,
+    u.email,
+    u.full_name,
+    u.status,
+    u.last_login_at,
+    GROUP_CONCAT(r.name ORDER BY r.name SEPARATOR ', ') AS roles
+FROM auth.users           u
+LEFT JOIN auth.user_roles ur ON ur.user_id = u.id
+LEFT JOIN auth.roles      r  ON r.id = ur.role_id
+WHERE u.status = 'active' AND u.deleted_at IS NULL
+GROUP BY u.id, u.email, u.full_name, u.status, u.last_login_at;
+
+-- ============================================================
 -- ANALYZE TABLES
 -- ============================================================
 ANALYZE TABLE auth.users, auth.roles, auth.permissions, auth.sessions,
