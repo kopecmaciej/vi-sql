@@ -24,6 +24,7 @@ nerd:
   tabQuery: "" # nf-fa-terminal
   tabStructure: "" # nf-fa-sitemap
   tabIndex: "" # nf-fa-list-ol
+  view: "󱂔" # nf-md-table_eye
   primaryKey: "" # nf-fa-key
   foreignKey: "" # nf-fa-link
   completionKeyword: "󰘦" # nf-md-tag
@@ -60,6 +61,7 @@ ascii:
   tabQuery: "Q"
   tabStructure: "S"
   tabIndex: "I"
+  view: "V"
   primaryKey: "*"
   foreignKey: "fk"
   completionKeyword: "kw"

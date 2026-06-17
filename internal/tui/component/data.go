@@ -48,6 +48,8 @@ const (
 	TableMode QueryTabMode = iota
 	// QueryMode: blank editor, read-only results. Used for ad-hoc query tabs.
 	QueryMode
+	// ViewMode: pre-filled SELECT on a view; read-only (no PK, no CRUD).
+	ViewMode
 )
 
 // dataTabCounter generates unique identifiers for each Data/QueryTab instance
@@ -135,6 +137,12 @@ func NewData() *Data {
 // Callers must follow up with HandleTableSelection to load data.
 func NewTableTab() *Data {
 	return newData(TableMode)
+}
+
+// NewViewTab creates a view-mode tab (read-only, no CRUD).
+// Callers must follow up with HandleTableSelection to load data.
+func NewViewTab() *Data {
+	return newData(ViewMode)
 }
 
 func (c *Data) init() error {
@@ -308,8 +316,11 @@ func (c *Data) setLayout() {
 	c.tableFlex.SetBorder(true)
 	c.tableFlex.SetDirection(tview.FlexRow)
 	title := " Table "
-	if c.mode == QueryMode {
+	switch c.mode {
+	case QueryMode:
 		title = " Query "
+	case ViewMode:
+		title = " View "
 	}
 	c.tableFlex.SetTitle(title)
 	c.tableFlex.SetTitleAlign(tview.AlignCenter)
@@ -549,6 +560,11 @@ func (c *Data) IsQueryTab() bool {
 	return c.mode == QueryMode
 }
 
+// IsViewTab reports whether this tab is browsing a database view (read-only).
+func (c *Data) IsViewTab() bool {
+	return c.mode == ViewMode
+}
+
 // IsCleanQueryTab reports whether this tab has never loaded any table data,
 // making it safe to replace without losing user work.
 func (c *Data) IsCleanQueryTab() bool {
@@ -568,7 +584,7 @@ func (c *Data) CopyRowAs(format util.ExportFormat) {
 	c.resultGrid.CopyRowAs(format, row, c.state.GetAllRows(), c.columns)
 }
 
-// SelectedTable returns the schema and table currently loaded in this tab.
+// SelectedTable returns the schema and table/view currently loaded in this tab.
 // Returns empty strings for query-mode tabs or tabs with no table loaded.
 func (c *Data) SelectedTable() (schema, table string) {
 	if c.state == nil || c.mode == QueryMode {

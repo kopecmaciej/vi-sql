@@ -125,6 +125,11 @@ func (m *MockDriver) GetTableDDL(ctx context.Context, schema, table string) (str
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockDriver) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
+	args := m.Called(ctx, schema, view)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockDriver) CreateTable(ctx context.Context, schema, ddl string) error {
 	return m.Called(ctx, schema, ddl).Error(0)
 }

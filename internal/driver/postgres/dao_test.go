@@ -65,28 +65,57 @@ func TestMain(m *testing.M) {
 
 // --- Schema browsing ---
 
-func TestListSchemas_MultipleSchemas(t *testing.T) {
+func TestListSchemas(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-
-	schemaNames := make([]string, len(schemas))
-	for i, s := range schemas {
-		schemaNames[i] = s.Schema
+	tests := []struct {
+		name   string
+		filter string
+		check  func(t *testing.T, schemas []database.Schema)
+	}{
+		{
+			name:   "returns multiple schemas",
+			filter: "",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.NotEmpty(t, schemas)
+				var authSchema *database.Schema
+				for i := range schemas {
+					if schemas[i].Schema == "auth" {
+						authSchema = &schemas[i]
+						break
+					}
+				}
+				require.NotNil(t, authSchema)
+				assert.Contains(t, authSchema.Views, "v_active_users")
+			},
+		},
+		{
+			name:   "filter by prefix",
+			filter: "pub",
+			check: func(t *testing.T, schemas []database.Schema) {
+				for _, s := range schemas {
+					assert.Contains(t, s.Schema, "pub")
+				}
+			},
+		},
 	}
-	assert.NotEmpty(t, schemaNames)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			schemas, err := testDao.ListSchemas(ctx, tt.filter)
+			require.NoError(t, err)
+			tt.check(t, schemas)
+		})
+	}
 }
 
-func TestListSchemas_WithFilter(t *testing.T) {
+func TestGetViewDDL_ReturnsDefinition(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "pub")
+	ddl, err := testDao.GetViewDDL(ctx, "auth", "v_active_users")
 	require.NoError(t, err)
-	for _, s := range schemas {
-		assert.Contains(t, s.Schema, "pub")
-	}
+	assert.NotEmpty(t, ddl)
+	assert.Contains(t, ddl, "auth.users")
 }
 
 // --- Table structure ---

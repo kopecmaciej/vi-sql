@@ -126,34 +126,78 @@ func findByName[T any](t *testing.T, items []T, name string, nameOf func(T) stri
 	return items[i]
 }
 
-func TestListSchemas_GroupsTablesUnderSchema(t *testing.T) {
+func TestListSchemas(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-
-	auth := findByName(t, schemas, "auth", func(s database.Schema) string { return s.Schema })
-	assert.Contains(t, auth.Tables, "users")
-	assert.Contains(t, auth.Tables, "roles")
-	assert.Contains(t, auth.Tables, "role_permissions")
-
-	names := make([]string, len(schemas))
-	for i, s := range schemas {
-		names[i] = s.Schema
+	tests := []struct {
+		name   string
+		filter string
+		setup  func(t *testing.T)
+		check  func(t *testing.T, schemas []database.Schema)
+	}{
+		{
+			name:   "groups tables under schema",
+			filter: "",
+			check: func(t *testing.T, schemas []database.Schema) {
+				auth := findByName(t, schemas, "auth", func(s database.Schema) string { return s.Schema })
+				assert.Contains(t, auth.Tables, "users")
+				assert.Contains(t, auth.Tables, "roles")
+				assert.Contains(t, auth.Tables, "role_permissions")
+				names := make([]string, len(schemas))
+				for i, s := range schemas {
+					names[i] = s.Schema
+				}
+				assert.Contains(t, names, "catalog")
+			},
+		},
+		{
+			name:   "filter by name",
+			filter: "auth",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.NotEmpty(t, schemas)
+				for _, s := range schemas {
+					assert.Contains(t, s.Schema, "auth")
+				}
+			},
+		},
+		{
+			name:   "includes views",
+			filter: "auth",
+			setup: func(t *testing.T) {
+				_, err := testDao.ExecuteStatement(ctx,
+					"CREATE VIEW auth.v_test_users AS SELECT id, email FROM auth.users")
+				require.NoError(t, err)
+			},
+			check: func(t *testing.T, schemas []database.Schema) {
+				auth := findByName(t, schemas, "auth", func(s database.Schema) string { return s.Schema })
+				assert.Contains(t, auth.Views, "v_test_users")
+			},
+		},
 	}
-	assert.Contains(t, names, "catalog")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(t)
+			}
+			schemas, err := testDao.ListSchemas(ctx, tt.filter)
+			require.NoError(t, err)
+			tt.check(t, schemas)
+		})
+	}
 }
 
-func TestListSchemas_WithFilter(t *testing.T) {
+func TestGetViewDDL_ReturnsDefinition(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "auth")
+	_, err := testDao.ExecuteStatement(ctx,
+		"CREATE VIEW auth.v_ddl_test AS SELECT id, email FROM auth.users")
 	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-	for _, s := range schemas {
-		assert.Contains(t, s.Schema, "auth")
-	}
+
+	ddl, err := testDao.GetViewDDL(ctx, "auth", "v_ddl_test")
+	require.NoError(t, err)
+	assert.NotEmpty(t, ddl)
+	assert.Contains(t, ddl, "users")
 }
 
 // --- Table structure ---

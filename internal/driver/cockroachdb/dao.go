@@ -28,9 +28,11 @@ func NewDao(client *pgdriver.Client) *Dao {
 // standard PostgreSQL ones.
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	query := `
-		SELECT s.schema_name, COALESCE(array_agg(t.table_name ORDER BY t.table_name) FILTER (WHERE t.table_name IS NOT NULL), '{}')
+		SELECT s.schema_name,
+		       COALESCE(array_agg(t.table_name ORDER BY t.table_name) FILTER (WHERE t.table_name IS NOT NULL AND t.table_type = 'BASE TABLE'), '{}'),
+		       COALESCE(array_agg(t.table_name ORDER BY t.table_name) FILTER (WHERE t.table_name IS NOT NULL AND t.table_type = 'VIEW'), '{}')
 		FROM information_schema.schemata s
-		LEFT JOIN information_schema.tables t ON s.schema_name = t.table_schema AND t.table_type = 'BASE TABLE'
+		LEFT JOIN information_schema.tables t ON s.schema_name = t.table_schema AND t.table_type IN ('BASE TABLE', 'VIEW')
 		WHERE s.schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast', 'crdb_internal', 'pg_extension')
 	`
 	args := []any{}
@@ -52,11 +54,11 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 	var result []database.Schema
 	for rows.Next() {
 		var schema string
-		var tables []string
-		if err := rows.Scan(&schema, &tables); err != nil {
+		var tables, views []string
+		if err := rows.Scan(&schema, &tables, &views); err != nil {
 			return nil, fmt.Errorf("failed to scan schema row: %w", err)
 		}
-		result = append(result, database.Schema{Schema: schema, Tables: tables})
+		result = append(result, database.Schema{Schema: schema, Tables: tables, Views: views})
 	}
 
 	return result, rows.Err()

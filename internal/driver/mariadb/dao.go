@@ -101,10 +101,11 @@ func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	query := `
 		SELECT s.schema_name,
-		       GROUP_CONCAT(t.table_name ORDER BY t.table_name SEPARATOR ',')
+		       GROUP_CONCAT(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','),
+		       GROUP_CONCAT(CASE WHEN t.table_type = 'VIEW'       THEN t.table_name END ORDER BY t.table_name SEPARATOR ',')
 		FROM information_schema.schemata s
 		LEFT JOIN information_schema.tables t
-			ON s.schema_name = t.table_schema AND t.table_type = 'BASE TABLE'
+			ON s.schema_name = t.table_schema AND t.table_type IN ('BASE TABLE', 'VIEW')
 		WHERE s.schema_name NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')`
 
 	args := []any{}
@@ -123,17 +124,31 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 	var result []database.Schema
 	for rows.Next() {
 		var schemaName string
-		var tableStr *string
-		if err := rows.Scan(&schemaName, &tableStr); err != nil {
+		var tableStr, viewStr *string
+		if err := rows.Scan(&schemaName, &tableStr, &viewStr); err != nil {
 			return nil, err
 		}
-		var tables []string
+		var tables, views []string
 		if tableStr != nil && *tableStr != "" {
 			tables = strings.Split(*tableStr, ",")
 		}
-		result = append(result, database.Schema{Schema: schemaName, Tables: tables})
+		if viewStr != nil && *viewStr != "" {
+			views = strings.Split(*viewStr, ",")
+		}
+		result = append(result, database.Schema{Schema: schemaName, Tables: tables, Views: views})
 	}
 	return result, rows.Err()
+}
+
+func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
+	var viewName, def, charset, collation string
+	err := d.client.DB.QueryRowContext(ctx,
+		fmt.Sprintf("SHOW CREATE VIEW %s", quote.Table(schema, view))).
+		Scan(&viewName, &def, &charset, &collation)
+	if err != nil {
+		return "", fmt.Errorf("failed to get view DDL: %w", err)
+	}
+	return def, nil
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {

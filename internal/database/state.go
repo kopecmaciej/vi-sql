@@ -16,7 +16,7 @@ type TableState struct {
 	UserLimit       int64 // user's explicit LIMIT value from SQL (0 = none)
 	Count           int64
 	CountIsEstimate bool // true when Count came from pg_class rather than COUNT(*)
-	AllRowsLoaded   bool // true once a scroll-fetch returned 0 rows (buffer holds every row)
+	AllRowsLoaded   bool
 	Where           string
 	OrderBy         string
 	Columns         string
@@ -62,7 +62,6 @@ func (t *TableState) AppendRows(rows []Row) {
 }
 
 // ClearBuffer resets the row buffer and count. Called before a fresh fetch
-// (filter change, sort change, explicit refresh).
 func (t *TableState) ClearBuffer() {
 	t.rows = nil
 	t.Count = 0
@@ -142,8 +141,6 @@ func (sm *StateMap) Set(key string, state *TableState) {
 	defer sm.mu.Unlock()
 	sm.states[key] = state
 }
-
-// Helper functions
 
 func matchesPK(row Row, pk PrimaryKey) bool {
 	for col, val := range pk.Columns {

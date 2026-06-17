@@ -83,42 +83,83 @@ func copyFile(dst, src string) error {
 
 // --- Schema browsing ---
 
-func TestListSchemas_ReturnsMainSchema(t *testing.T) {
-	t.Parallel()
-	dao := newTestDao(t)
-	ctx := context.Background()
+func TestListSchemas(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter string
+		setup  func(t *testing.T, dao *Dao)
+		check  func(t *testing.T, schemas []database.Schema)
+	}{
+		{
+			name:   "returns main schema with tables",
+			filter: "",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Equal(t, "main", schemas[0].Schema)
+				assert.Contains(t, schemas[0].Tables, "users")
+				assert.Contains(t, schemas[0].Tables, "orders")
+				assert.Contains(t, schemas[0].Tables, "products")
+			},
+		},
+		{
+			name:   "filter by table name prefix",
+			filter: "user",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				for _, table := range schemas[0].Tables {
+					assert.Contains(t, table, "user")
+				}
+			},
+		},
+		{
+			name:   "filter no match returns empty tables",
+			filter: "nonexistent_xyz",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Empty(t, schemas[0].Tables)
+			},
+		},
+		{
+			name:   "includes views",
+			filter: "",
+			setup: func(t *testing.T, dao *Dao) {
+				_, err := dao.ExecuteStatement(context.Background(),
+					"CREATE VIEW v_test_users AS SELECT id, email FROM users")
+				require.NoError(t, err)
+			},
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Contains(t, schemas[0].Views, "v_test_users")
+			},
+		},
+	}
 
-	schemas, err := dao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.Len(t, schemas, 1)
-	assert.Equal(t, "main", schemas[0].Schema)
-	assert.Contains(t, schemas[0].Tables, "users")
-	assert.Contains(t, schemas[0].Tables, "orders")
-	assert.Contains(t, schemas[0].Tables, "products")
-}
-
-func TestListSchemas_WithFilter(t *testing.T) {
-	t.Parallel()
-	dao := newTestDao(t)
-	ctx := context.Background()
-
-	schemas, err := dao.ListSchemas(ctx, "user")
-	require.NoError(t, err)
-	require.Len(t, schemas, 1)
-	for _, table := range schemas[0].Tables {
-		assert.Contains(t, table, "user")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dao := newTestDao(t)
+			ctx := context.Background()
+			if tt.setup != nil {
+				tt.setup(t, dao)
+			}
+			schemas, err := dao.ListSchemas(ctx, tt.filter)
+			require.NoError(t, err)
+			tt.check(t, schemas)
+		})
 	}
 }
 
-func TestListSchemas_FilterNoMatch(t *testing.T) {
-	t.Parallel()
+func TestGetViewDDL_ReturnsDefinition(t *testing.T) {
 	dao := newTestDao(t)
 	ctx := context.Background()
 
-	schemas, err := dao.ListSchemas(ctx, "nonexistent_xyz")
+	_, err := dao.ExecuteStatement(ctx, "CREATE VIEW v_ddl_test AS SELECT id, email FROM users")
 	require.NoError(t, err)
-	require.Len(t, schemas, 1)
-	assert.Empty(t, schemas[0].Tables)
+
+	ddl, err := dao.GetViewDDL(ctx, "main", "v_ddl_test")
+	require.NoError(t, err)
+	assert.NotEmpty(t, ddl)
+	assert.Contains(t, ddl, "users")
 }
 
 // --- Table structure ---

@@ -275,6 +275,70 @@ func TestSchemaTree_Render_MultipleSchemas(t *testing.T) {
 		"screen should show second schema")
 }
 
+func TestExtractName(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"users", "users"},
+		{"", ""},
+		{"  spaces  ", "spaces"},
+		{"[#387D44]\xef\x82\x94[-:-:-]  v_active_users", "v_active_users"},
+		{"[color]icon[-:-:-] name[-:-:-]  actual", "actual"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.want, extractName(tt.input))
+		})
+	}
+}
+
+func TestSchemaTree_JumpToView(t *testing.T) {
+	schemas := []database.Schema{
+		{Schema: "public", Tables: []string{"sessions"}, Views: []string{"v_sessions", "v_users"}},
+	}
+
+	tests := []struct {
+		name        string
+		schema      string
+		view        string
+		wantErr     bool
+		errContains string
+		wantCalled  bool
+	}{
+		{"success", "public", "v_sessions", false, "", true},
+		{"schema not found", "nonexistent", "v_sessions", true, "nonexistent", false},
+		{"view not found", "public", "v_nonexistent", true, "v_nonexistent", false},
+		{"skips table node with same name", "public", "sessions", true, "sessions", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app, _ := testutil.NewTestApp(t)
+			app.SetDriver(newSchemaTreeMock(schemas))
+			tree := NewSchemaTree()
+			require.NoError(t, tree.Init(app))
+			app.SetRoot(tree, true)
+			tree.Render()
+
+			called := false
+			tree.SetViewSelectFunc(func(ctx context.Context, schema, view string) error {
+				called = true
+				return nil
+			})
+
+			err := tree.JumpToView(context.Background(), tt.schema, tt.view)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantCalled, called)
+		})
+	}
+}
+
 func TestLastVisibleTreeNode_Leaf(t *testing.T) {
 	node := tview.NewTreeNode("leaf")
 	got := lastVisibleTreeNode(node)

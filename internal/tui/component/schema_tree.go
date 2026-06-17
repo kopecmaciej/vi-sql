@@ -39,12 +39,15 @@ type SchemaTree struct {
 	deleteModal      *modal.Confirm
 	createTableModal *modal.CreateTableModal
 
-	schemas         []database.Schema
-	nodeSelectFunc  func(ctx context.Context, schema, table string) error
-	nodeColumnsFunc func(ctx context.Context, schema, table string)
-	nodeIndexesFunc func(ctx context.Context, schema, table string)
-	onSchemasLoaded func([]database.Schema)
-	onImport        func(schema, table string)
+	schemas            []database.Schema
+	viewNodes          map[*tview.TreeNode]bool
+	nodeSelectFunc     func(ctx context.Context, schema, table string) error
+	nodeViewSelectFunc func(ctx context.Context, schema, view string) error
+	nodeColumnsFunc    func(ctx context.Context, schema, table string)
+	nodeIndexesFunc    func(ctx context.Context, schema, table string)
+	nodeViewDDLFunc    func(ctx context.Context, schema, view string)
+	onSchemasLoaded    func([]database.Schema)
+	onImport           func(schema, table string)
 }
 
 // UpdateDriver propagates the driver change to child components that use it.
@@ -156,10 +159,16 @@ func (s *SchemaTree) setKeybindings() {
 			s.showAddTableModal(ctx)
 			return nil
 		case k.Match(k.Common.Delete, event):
-			s.showDeleteTableModal(ctx)
+			current := s.tree.GetCurrentNode()
+			if current != nil && !s.isViewNode(current) {
+				s.showDeleteTableModal(ctx)
+			}
 			return nil
 		case k.Match(k.Schema.RenameTable, event):
-			s.showRenameTableModal(ctx)
+			current := s.tree.GetCurrentNode()
+			if current != nil && !s.isViewNode(current) {
+				s.showRenameTableModal(ctx)
+			}
 			return nil
 		case k.Match(k.Schema.ExpandTable, event):
 			current := s.tree.GetCurrentNode()
@@ -169,14 +178,20 @@ func (s *SchemaTree) setKeybindings() {
 			return nil
 		case k.Match(k.Schema.OpenStructure, event):
 			current := s.tree.GetCurrentNode()
-			if s.nodeColumnsFunc != nil && current != nil && current.GetLevel() >= 2 {
-				schema, table := s.SelectedTable()
-				s.nodeColumnsFunc(ctx, schema, table)
+			if current != nil && current.GetLevel() >= 2 {
+				schema, name := s.SelectedTable()
+				if s.isViewNode(current) {
+					if s.nodeViewDDLFunc != nil {
+						s.nodeViewDDLFunc(ctx, schema, name)
+					}
+				} else if s.nodeColumnsFunc != nil {
+					s.nodeColumnsFunc(ctx, schema, name)
+				}
 			}
 			return nil
 		case k.Match(k.Schema.OpenIndexes, event):
 			current := s.tree.GetCurrentNode()
-			if s.nodeIndexesFunc != nil && current != nil && current.GetLevel() >= 2 {
+			if s.nodeIndexesFunc != nil && current != nil && current.GetLevel() >= 2 && !s.isViewNode(current) {
 				schema, table := s.SelectedTable()
 				s.nodeIndexesFunc(ctx, schema, table)
 			}
@@ -356,6 +371,7 @@ func (s *SchemaTree) renderTree(schemas []database.Schema, expand bool) {
 	ctx := context.Background()
 	rootNode := s.rootNode()
 	s.tree.SetRoot(rootNode)
+	s.viewNodes = make(map[*tview.TreeNode]bool)
 
 	if len(schemas) == 0 {
 		emptyNode := tview.NewTreeNode("No schemas found")
@@ -369,6 +385,9 @@ func (s *SchemaTree) renderTree(schemas []database.Schema, expand bool) {
 
 		for _, table := range schema.Tables {
 			s.addTableNode(ctx, parent, schema.Schema, table, false)
+		}
+		for _, view := range schema.Views {
+			s.addViewNode(ctx, parent, schema.Schema, view)
 		}
 	}
 
@@ -418,6 +437,24 @@ func (s *SchemaTree) SetColumnsFunc(f func(ctx context.Context, schema, table st
 // "Indexes" child node under a table. Use it to show the index panel.
 func (s *SchemaTree) SetIndexesFunc(f func(ctx context.Context, schema, table string)) {
 	s.nodeIndexesFunc = f
+}
+
+// SetViewSelectFunc registers a callback invoked when the user presses Enter on
+// a view node. Use it to open a read-only data tab for the view.
+func (s *SchemaTree) SetViewSelectFunc(f func(ctx context.Context, schema, view string) error) {
+	s.nodeViewSelectFunc = f
+}
+
+// SetViewDDLFunc registers a callback invoked when the user presses the
+// structure key on a view node. Use it to show the view DDL in the structure panel.
+func (s *SchemaTree) SetViewDDLFunc(f func(ctx context.Context, schema, view string)) {
+	s.nodeViewDDLFunc = f
+}
+
+// IsViewSelected reports whether the currently focused tree node is a view.
+func (s *SchemaTree) IsViewSelected() bool {
+	current := s.tree.GetCurrentNode()
+	return current != nil && s.isViewNode(current)
 }
 
 func (s *SchemaTree) SetOnSchemasLoaded(fn func([]database.Schema)) {
@@ -487,6 +524,35 @@ func (s *SchemaTree) addTableNode(ctx context.Context, parent *tview.TreeNode, s
 	})
 }
 
+func (s *SchemaTree) viewNode(name string) *tview.TreeNode {
+	viewIcon := s.style.IconWithColor(s.style.View, s.App.GetStyles().Others.LeafIconColor)
+	ch := tview.NewTreeNode(fmt.Sprintf("%s%s", viewIcon, name))
+	ch.SetColor(s.App.GetStyles().Global.TextColor.Color())
+	ch.SetSelectable(true)
+	ch.SetExpanded(false)
+	return ch
+}
+
+func (s *SchemaTree) addViewNode(ctx context.Context, parent *tview.TreeNode, schemaName, viewName string) {
+	node := s.viewNode(viewName)
+	parent.AddChild(node)
+	s.viewNodes[node] = true
+	node.SetReference(parent)
+	// ponytail: views are read-only; row edits unsupported
+	node.SetSelectedFunc(func() {
+		if s.nodeViewSelectFunc != nil {
+			if err := s.nodeViewSelectFunc(ctx, schemaName, viewName); err != nil {
+				log.Error().Err(err).Msg("Error selecting view")
+				modal.ShowError(s.App.Pages, "Error selecting view", err)
+			}
+		}
+	})
+}
+
+func (s *SchemaTree) isViewNode(node *tview.TreeNode) bool {
+	return s.viewNodes != nil && s.viewNodes[node]
+}
+
 func (s *SchemaTree) expandAllNodes(closedIcon, openIcon string) {
 	s.tree.GetRoot().ExpandAll()
 	s.tree.GetRoot().Walk(func(node, parent *tview.TreeNode) bool {
@@ -510,17 +576,7 @@ func (s *SchemaTree) setNodeIcon(node *tview.TreeNode, oldIcon, newIcon string) 
 }
 
 func (s *SchemaTree) removeIcons(schema, table string) (string, string) {
-	openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
-	closedNodeIcon := s.style.IconWithColor(s.style.ClosedNode, s.App.GetStyles().Global.SecondaryTextColor)
-	leafIcon := s.style.IconWithColor(s.style.Leaf, s.App.GetStyles().Others.LeafIconColor)
-	iconsToRemove := []string{openNodeIcon, closedNodeIcon, leafIcon}
-
-	for _, icon := range iconsToRemove {
-		schema = strings.ReplaceAll(schema, icon, "")
-		table = strings.ReplaceAll(table, icon, "")
-	}
-
-	return strings.TrimSpace(schema), strings.TrimSpace(table)
+	return extractName(schema), extractName(table)
 }
 
 func (s *SchemaTree) refreshStyle() {
@@ -529,16 +585,18 @@ func (s *SchemaTree) refreshStyle() {
 		return
 	}
 	root.Walk(func(node, parent *tview.TreeNode) bool {
-		// Skip the invisible root node.
 		if parent == nil {
 			return true
 		}
-		// Table nodes have a *tview.TreeNode reference pointing to their schema node.
-		if _, isTableRef := node.GetReference().(*tview.TreeNode); isTableRef {
-			s.updateLeafIcon(node)
+		// Table and view nodes have a *tview.TreeNode reference pointing to their schema node.
+		if _, isLeafRef := node.GetReference().(*tview.TreeNode); isLeafRef {
+			if s.isViewNode(node) {
+				s.updateViewIcon(node)
+			} else {
+				s.updateLeafIcon(node)
+			}
 			return true
 		}
-		// Schema nodes (with or without tables).
 		s.updateNodeIcon(node)
 		return true
 	})
@@ -585,6 +643,16 @@ func (s *SchemaTree) updateLeafIcon(node *tview.TreeNode) {
 		return
 	}
 	node.SetText(fmt.Sprintf("%s%s", leafIcon, name))
+}
+
+func (s *SchemaTree) updateViewIcon(node *tview.TreeNode) {
+	node.SetColor(s.App.GetStyles().Global.TextColor.Color())
+	viewIcon := s.style.IconWithColor(s.style.View, s.App.GetStyles().Others.LeafIconColor)
+	name := extractName(node.GetText())
+	if name == "" {
+		return
+	}
+	node.SetText(fmt.Sprintf("%s%s", viewIcon, name))
 }
 
 func (s *SchemaTree) copyCurrentNode() {
@@ -638,23 +706,30 @@ func (s *SchemaTree) filter(text string) {
 		for _, st := range s.schemas {
 			matchedSchema := re.MatchString(st.Schema)
 			matchedTables := []string{}
-
 			for _, t := range st.Tables {
 				if re.MatchString(t) {
 					matchedTables = append(matchedTables, t)
 				}
 			}
+			matchedViews := []string{}
+			for _, v := range st.Views {
+				if re.MatchString(v) {
+					matchedViews = append(matchedViews, v)
+				}
+			}
 
-			if matchedSchema || len(matchedTables) > 0 {
+			if matchedSchema || len(matchedTables) > 0 || len(matchedViews) > 0 {
 				filteredST := database.Schema{
 					Schema: st.Schema,
 					Tables: matchedTables,
+					Views:  matchedViews,
 				}
 				if matchedSchema {
 					filteredST.Tables = st.Tables
+					filteredST.Views = st.Views
 				}
 				filtered = append(filtered, filteredST)
-				expand = expand || len(matchedTables) > 0
+				expand = expand || len(matchedTables) > 0 || len(matchedViews) > 0
 			}
 		}
 	}
@@ -834,6 +909,40 @@ func (s *SchemaTree) JumpToTable(ctx context.Context, targetSchema, targetTable 
 				}
 			}
 			return fmt.Errorf("table %q not found in schema %q", targetTable, targetSchema)
+		}
+	}
+
+	return fmt.Errorf("schema %q not found", targetSchema)
+}
+
+func (s *SchemaTree) JumpToView(ctx context.Context, targetSchema, targetView string) error {
+	root := s.tree.GetRoot()
+	if root == nil {
+		return fmt.Errorf("tree not initialized")
+	}
+
+	for _, schemaNode := range root.GetChildren() {
+		cleanSchema, _ := s.removeIcons(schemaNode.GetText(), "")
+
+		if cleanSchema == targetSchema {
+			schemaNode.SetExpanded(true)
+			openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
+			schemaNode.SetText(fmt.Sprintf("%s%s", openNodeIcon, cleanSchema))
+
+			for _, viewNode := range schemaNode.GetChildren() {
+				if !s.isViewNode(viewNode) {
+					continue
+				}
+				_, cleanView := s.removeIcons("", viewNode.GetText())
+				if cleanView == targetView {
+					s.tree.SetCurrentNode(viewNode)
+					if s.nodeViewSelectFunc != nil {
+						return s.nodeViewSelectFunc(ctx, targetSchema, targetView)
+					}
+					return nil
+				}
+			}
+			return fmt.Errorf("view %q not found in schema %q", targetView, targetSchema)
 		}
 	}
 

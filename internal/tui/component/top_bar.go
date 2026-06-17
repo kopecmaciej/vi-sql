@@ -305,10 +305,10 @@ func (t *TopBar) GetActiveTabName() string {
 	return t.tabBar.GetActiveTabName()
 }
 
-// SwitchToTabByName activates the first tab with the given name.
+// SwitchToTabByName activates the first tab matching both name and kind.
 // Returns true if a matching tab was found.
-func (t *TopBar) SwitchToTabByName(name string) bool {
-	return t.tabBar.SwitchToTabByName(name)
+func (t *TopBar) SwitchToTabByName(name string, kind widget.TabKind) bool {
+	return t.tabBar.SwitchToTabByName(name, kind)
 }
 
 // GetTabCount returns the total number of registered tabs.

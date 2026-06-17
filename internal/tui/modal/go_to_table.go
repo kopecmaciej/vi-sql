@@ -72,15 +72,17 @@ func (g *GoToTableModal) setStyle() {
 }
 
 // Open displays the modal and wires autocomplete from schemas.
-// jumpFunc is called with the selected schema and table on confirmation.
-func (g *GoToTableModal) Open(schemas []database.Schema, jumpFunc func(schema, table string) error) {
+// getNames extracts the item list from a schema (tables or views).
+// jumpFunc is called with the selected schema and name on confirmation.
+func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames func(database.Schema) []string, jumpFunc func(schema, table string) error) {
 	k := g.App.GetKeys()
+	g.Flex.SetTitle(title)
 	g.input.SetText("")
 
 	type pair struct{ schema, table string }
 	var pairs []pair
 	for _, s := range schemas {
-		for _, t := range s.Tables {
+		for _, t := range getNames(s) {
 			pairs = append(pairs, pair{s.Schema, t})
 		}
 	}
@@ -113,7 +115,7 @@ func (g *GoToTableModal) Open(schemas []database.Schema, jumpFunc func(schema, t
 			return
 		}
 		if err := jumpFunc(parts[0], parts[1]); err != nil {
-			ShowError(g.App.Pages, "Table not found", err)
+			ShowError(g.App.Pages, "Not found", err)
 		}
 	}
 

@@ -65,30 +65,75 @@ func TestMain(m *testing.M) {
 
 // --- Schema browsing ---
 
-func TestListSchemas_MultipleSchemas(t *testing.T) {
+func TestListSchemas(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "")
-	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-
-	schemaNames := make([]string, len(schemas))
-	for i, s := range schemas {
-		schemaNames[i] = s.Schema
+	tests := []struct {
+		name   string
+		filter string
+		setup  func(t *testing.T)
+		check  func(t *testing.T, schemas []database.Schema)
+	}{
+		{
+			name:   "returns multiple schemas",
+			filter: "",
+			check: func(t *testing.T, schemas []database.Schema) {
+				schemaNames := make([]string, len(schemas))
+				for i, s := range schemas {
+					schemaNames[i] = s.Schema
+				}
+				assert.Contains(t, schemaNames, "auth")
+				assert.Contains(t, schemaNames, "catalog")
+			},
+		},
+		{
+			name:   "filter by name",
+			filter: "auth",
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.NotEmpty(t, schemas)
+				for _, s := range schemas {
+					assert.Contains(t, s.Schema, "auth")
+				}
+			},
+		},
+		{
+			name:   "includes views",
+			filter: "auth",
+			setup: func(t *testing.T) {
+				_, err := testDao.ExecuteStatement(ctx,
+					"CREATE OR REPLACE VIEW auth.v_test_users AS SELECT id, email FROM auth.users")
+				require.NoError(t, err)
+			},
+			check: func(t *testing.T, schemas []database.Schema) {
+				require.Len(t, schemas, 1)
+				assert.Contains(t, schemas[0].Views, "v_test_users")
+			},
+		},
 	}
-	assert.Contains(t, schemaNames, "auth")
-	assert.Contains(t, schemaNames, "catalog")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setup != nil {
+				tt.setup(t)
+			}
+			schemas, err := testDao.ListSchemas(ctx, tt.filter)
+			require.NoError(t, err)
+			tt.check(t, schemas)
+		})
+	}
 }
 
-func TestListSchemas_WithFilter(t *testing.T) {
+func TestGetViewDDL_ReturnsDefinition(t *testing.T) {
 	ctx := context.Background()
 
-	schemas, err := testDao.ListSchemas(ctx, "auth")
+	_, err := testDao.ExecuteStatement(ctx,
+		"CREATE OR REPLACE VIEW auth.v_ddl_test AS SELECT id, email FROM auth.users")
 	require.NoError(t, err)
-	require.NotEmpty(t, schemas)
-	for _, s := range schemas {
-		assert.Contains(t, s.Schema, "auth")
-	}
+
+	ddl, err := testDao.GetViewDDL(ctx, "auth", "v_ddl_test")
+	require.NoError(t, err)
+	assert.NotEmpty(t, ddl)
+	assert.Contains(t, ddl, "users")
 }
 
 // --- Table structure ---

@@ -23,6 +23,8 @@ type Driver interface {
 	InsertRow(ctx context.Context, schema, table string, row Row) (PrimaryKey, error)
 	UpdateRow(ctx context.Context, schema, table string, pk PrimaryKey, original, updated Row) error
 	DeleteRows(ctx context.Context, schema, table string, pks []PrimaryKey) error
+	// Views
+	GetViewDDL(ctx context.Context, schema, view string) (string, error)
 	// DDL
 	CommonDataTypes() []string
 	DefaultPKType() string

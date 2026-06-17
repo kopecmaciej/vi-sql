@@ -22,6 +22,7 @@ const (
 	KindTable
 	KindStructure
 	KindIndex
+	KindView
 )
 
 type tabBarComponent struct {
@@ -162,6 +163,8 @@ func (t *TabBar) tabIcon(kind TabKind) string {
 		return sym.Icon(sym.TabStructure)
 	case KindIndex:
 		return sym.Icon(sym.TabIndex)
+	case KindView:
+		return sym.Icon(sym.View)
 	default:
 		return sym.Icon(sym.TabQuery)
 	}
@@ -311,11 +314,11 @@ func (t *TabBar) GetActiveTabName() string {
 	return ""
 }
 
-// SwitchToTabByName activates the first tab with the given name.
+// SwitchToTabByName activates the first tab matching both name and kind.
 // Returns true if a matching tab was found.
-func (t *TabBar) SwitchToTabByName(name string) bool {
+func (t *TabBar) SwitchToTabByName(name string, kind TabKind) bool {
 	for i, tab := range t.tabs {
-		if tab.id == name {
+		if tab.id == name && tab.kind == kind {
 			t.active = i
 			t.Render()
 			return true

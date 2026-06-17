@@ -9,10 +9,11 @@ type PrimaryKey struct {
 	Columns map[string]any
 }
 
-// Schema represents a database schema and its tables.
+// Schema represents a database schema and its tables and views.
 type Schema struct {
 	Schema string
 	Tables []string
+	Views  []string
 }
 
 // ColumnInfo describes a table column.
@@ -31,7 +32,7 @@ type ColumnInfo struct {
 // ConstraintInfo describes a table constraint.
 type ConstraintInfo struct {
 	Name    string
-	Type    string // PRIMARY KEY, UNIQUE, CHECK, EXCLUDE
+	Type    string
 	Columns []string
 	Def     string
 }
@@ -49,8 +50,8 @@ type ForeignKeyInfo struct {
 
 // IncomingForeignKeyInfo describes a foreign key in another table that references the current table.
 type IncomingForeignKeyInfo struct {
-	Schema         string   // schema of the referencing table
-	Table          string   // name of the referencing table
+	Schema         string
+	Table          string
 	Columns        []string // FK columns in the referencing table
 	ReferencedCols []string // columns in the current table being referenced
 }
@@ -61,7 +62,7 @@ type IndexInfo struct {
 	Columns    []string
 	IsUnique   bool
 	IsPrimary  bool
-	Type       string // btree, hash, gin, gist, etc.
+	Type       string
 	Size       int64
 	Definition string
 }
@@ -85,6 +86,6 @@ type ServerInfo struct {
 	CacheHitRatio  string
 	Host           string
 	Port           int
-	TLS            string            // TLS protocol in use (e.g. "TLSv1.3"), empty if not encrypted
+	TLS            string
 	Extra          map[string]string // driver-specific key/value pairs
 }

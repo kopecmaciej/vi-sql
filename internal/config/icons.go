@@ -49,6 +49,7 @@ type IconStyle struct {
 	TabQuery      Style `yaml:"tabQuery"`
 	TabStructure  Style `yaml:"tabStructure"`
 	TabIndex      Style `yaml:"tabIndex"`
+	View          Style `yaml:"view"`
 
 	PrimaryKey         Style `yaml:"primaryKey"`
 	ForeignKey         Style `yaml:"foreignKey"`

@@ -53,33 +53,64 @@ func (d *Dao) GetActiveSessions(_ context.Context) (int64, error) {
 }
 
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
-	query := "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+	tableQuery := "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+	viewQuery := "SELECT name FROM sqlite_master WHERE type='view'"
 	args := []any{}
 	if nameFilter != "" {
-		query += " AND name LIKE ?"
+		tableQuery += " AND name LIKE ?"
+		viewQuery += " AND name LIKE ?"
 		args = append(args, "%"+nameFilter+"%")
 	}
-	query += " ORDER BY name"
+	tableQuery += " ORDER BY name"
+	viewQuery += " ORDER BY name"
 
-	rows, err := d.client.DB.QueryContext(ctx, query, args...)
+	tableRows, err := d.client.DB.QueryContext(ctx, tableQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tables: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
+	defer func() { _ = tableRows.Close() }()
 
 	var tables []string
-	for rows.Next() {
+	for tableRows.Next() {
 		var name string
-		if err := rows.Scan(&name); err != nil {
+		if err := tableRows.Scan(&name); err != nil {
 			return nil, err
 		}
 		tables = append(tables, name)
 	}
-	if err := rows.Err(); err != nil {
+	if err := tableRows.Err(); err != nil {
 		return nil, err
 	}
 
-	return []database.Schema{{Schema: "main", Tables: tables}}, nil
+	viewRows, err := d.client.DB.QueryContext(ctx, viewQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list views: %w", err)
+	}
+	defer func() { _ = viewRows.Close() }()
+
+	var views []string
+	for viewRows.Next() {
+		var name string
+		if err := viewRows.Scan(&name); err != nil {
+			return nil, err
+		}
+		views = append(views, name)
+	}
+	if err := viewRows.Err(); err != nil {
+		return nil, err
+	}
+
+	return []database.Schema{{Schema: "main", Tables: tables, Views: views}}, nil
+}
+
+func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
+	var ddl string
+	err := d.client.DB.QueryRowContext(ctx,
+		"SELECT sql FROM sqlite_master WHERE type='view' AND name = ?", view).Scan(&ddl)
+	if err != nil {
+		return "", fmt.Errorf("failed to get view DDL: %w", err)
+	}
+	return ddl, nil
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {

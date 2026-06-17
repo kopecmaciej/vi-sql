@@ -90,6 +90,7 @@ type (
 		OpenActions     Key `yaml:"openActions"`
 		ImportData      Key `yaml:"importData"`
 		GoToTable       Key `yaml:"goToTable"`
+		GoToView        Key `yaml:"goToView"`
 	}
 
 	SchemaKeys struct {

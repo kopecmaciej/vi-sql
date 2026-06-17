@@ -155,10 +155,12 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Main.FocusSchemaTree = Key{Sequences: []string{"ge"}, Description: "Focus schemas"}
 		k.Main.OpenActions = Key{Runes: []string{":"}, Description: "Actions"}
 		k.Main.GoToTable = Key{Sequences: []string{"gt"}, Description: "Go to table"}
+		k.Main.GoToView = Key{Sequences: []string{"gv"}, Description: "Go to view"}
 	} else {
 		k.Main.FocusSchemaTree = Key{Keys: []string{"Ctrl+/"}, Description: "Focus schemas"}
 		k.Main.OpenActions = Key{Keys: []string{"Ctrl+Space"}, Description: "Actions"}
 		k.Main.GoToTable = Key{Keys: []string{"Ctrl+g"}, Description: "Go to table"}
+		k.Main.GoToView = Key{Keys: []string{"Alt+v"}, Description: "Go to view"}
 	}
 	k.Data = DataKeys{
 		PeekRow: Key{
