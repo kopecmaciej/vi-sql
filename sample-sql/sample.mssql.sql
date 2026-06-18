@@ -747,6 +747,7 @@ GO
 -- VIEWS
 -- CREATE VIEW must be the only statement in its batch.
 -- ============================================================
+GO
 
 CREATE VIEW [orders].v_order_summary AS
 SELECT

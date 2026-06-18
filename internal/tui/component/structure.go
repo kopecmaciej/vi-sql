@@ -90,7 +90,7 @@ func (s *Structure) setLayout() {
 	s.ddlView.SetBorderPadding(0, 0, 1, 1)
 	s.ddlView.SetDynamicColors(true)
 	s.ddlView.SetScrollable(true)
-	s.ddlView.SetWrap(false)
+	s.ddlView.SetWrap(true)
 }
 
 func (s *Structure) setKeybindings() {

@@ -158,7 +158,7 @@ func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, erro
 	if err != nil || def == nil {
 		return "", fmt.Errorf("failed to get view DDL: %w", err)
 	}
-	return *def, nil
+	return strings.TrimSpace(*def), nil
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
@@ -183,11 +183,11 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 		       '',
 		       c.is_identity
 		FROM sys.columns c
-		JOIN sys.tables t ON c.object_id = t.object_id
-		JOIN sys.schemas s ON t.schema_id = s.schema_id
+		JOIN sys.objects o ON c.object_id = o.object_id
+		JOIN sys.schemas s ON o.schema_id = s.schema_id
 		JOIN sys.types tp ON c.user_type_id = tp.user_type_id
 		LEFT JOIN sys.default_constraints dc ON c.object_id = dc.parent_object_id AND c.column_id = dc.parent_column_id
-		WHERE s.name = @p1 AND t.name = @p2
+		WHERE s.name = @p1 AND o.name = @p2 AND o.type IN ('U', 'V')
 		ORDER BY c.column_id`, schema, table)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get table columns: %w", err)

@@ -353,10 +353,13 @@ func (m *Main) closeActiveTab() {
 			delete(m.queryTabNums, n)
 		}
 	case *component.Structure:
-		for key, s := range m.structureTabs {
-			if s == tab {
-				delete(m.structureTabs, key)
-				break
+		structures := []map[string]*component.Structure{m.structureTabs, m.viewStructureTabs}
+		for _, tabs := range structures {
+			for key, s := range tabs {
+				if s == tab {
+					delete(tabs, key)
+					break
+				}
 			}
 		}
 	case *component.Indexes:
@@ -392,6 +395,7 @@ func (m *Main) UpdateDriver(driver database.Driver) {
 	m.queryTabs = m.queryTabs[:0]
 	m.queryTabNums = make(map[int]bool)
 	m.structureTabs = make(map[string]*component.Structure)
+	m.viewStructureTabs = make(map[string]*component.Structure)
 	m.indexTabs = make(map[string]*component.Indexes)
 	m.topBar.ClearAllTabs()
 
