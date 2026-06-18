@@ -10,51 +10,51 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 )
 
-const GoToTableModalId = "GoToTable"
+const GoToObjectModalId = "GoToObject"
 
-type GoToTableModal struct {
+type GoToObjectModal struct {
 	*core.BaseElement
 	*core.Flex
 
 	input *core.InputField
 }
 
-func NewGoToTableModal() *GoToTableModal {
-	g := &GoToTableModal{
+func NewGoToObjectModal() *GoToObjectModal {
+	g := &GoToObjectModal{
 		BaseElement: core.NewBaseElement(),
 		Flex:        core.NewFlex(),
 		input:       core.NewInputField(),
 	}
-	g.SetIdentifier(GoToTableModalId)
+	g.SetIdentifier(GoToObjectModalId)
 	g.SetAfterInitFunc(g.init)
 	return g
 }
 
-func (g *GoToTableModal) init() error {
+func (g *GoToObjectModal) init() error {
 	g.setLayout()
 	g.setStyle()
 	g.handleEvents()
 	return nil
 }
 
-func (g *GoToTableModal) handleEvents() {
-	go g.HandleEvents(GoToTableModalId, func(event manager.EventMsg) {
+func (g *GoToObjectModal) handleEvents() {
+	go g.HandleEvents(GoToObjectModalId, func(event manager.EventMsg) {
 		if event.Message.Type == manager.StyleChanged {
 			g.setStyle()
 		}
 	})
 }
 
-func (g *GoToTableModal) setLayout() {
+func (g *GoToObjectModal) setLayout() {
 	g.Flex.SetDirection(tview.FlexRow)
 	g.Flex.SetBorder(true)
-	g.Flex.SetTitle(" Go to table ")
+	g.Flex.SetTitle(" Go to ")
 	g.Flex.AddItem(g.input, 3, 0, true)
 
 	g.input.SetLabel(" > ")
 }
 
-func (g *GoToTableModal) setStyle() {
+func (g *GoToObjectModal) setStyle() {
 	styles := g.App.GetStyles()
 	g.Flex.SetStyle(styles)
 	g.input.SetStyle(styles)
@@ -72,18 +72,16 @@ func (g *GoToTableModal) setStyle() {
 }
 
 // Open displays the modal and wires autocomplete from schemas.
-// getNames extracts the item list from a schema (tables or views).
-// jumpFunc is called with the selected schema and name on confirmation.
-func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames func(database.Schema) []string, jumpFunc func(schema, table string) error) {
+func (g *GoToObjectModal) Open(schemas []database.Schema, title string, getNames func(database.Schema) []string, jumpFunc func(schema, name string) error) {
 	k := g.App.GetKeys()
 	g.Flex.SetTitle(title)
 	g.input.SetText("")
 
-	type pair struct{ schema, table string }
+	type pair struct{ schema, name string }
 	var pairs []pair
 	for _, s := range schemas {
-		for _, t := range getNames(s) {
-			pairs = append(pairs, pair{s.Schema, t})
+		for _, n := range getNames(s) {
+			pairs = append(pairs, pair{s.Schema, n})
 		}
 	}
 
@@ -91,7 +89,7 @@ func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames 
 		lower := strings.ToLower(text)
 		var items []tview.AutocompleteItem
 		for _, p := range pairs {
-			label := p.schema + "." + p.table
+			label := p.schema + "." + p.name
 			if lower == "" || strings.Contains(strings.ToLower(label), lower) {
 				items = append(items, tview.AutocompleteItem{Main: label})
 			}
@@ -109,7 +107,7 @@ func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames 
 
 	doJump := func() {
 		text := strings.TrimSpace(g.input.GetText())
-		g.App.Pages.RemovePage(GoToTableModalId)
+		g.App.Pages.RemovePage(GoToObjectModalId)
 		parts := strings.SplitN(text, ".", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			return
@@ -131,7 +129,7 @@ func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames 
 			doJump()
 			return nil
 		case k.Match(k.Common.Close, event):
-			g.App.Pages.RemovePage(GoToTableModalId)
+			g.App.Pages.RemovePage(GoToObjectModalId)
 			return nil
 		}
 		return event
@@ -145,6 +143,6 @@ func (g *GoToTableModal) Open(schemas []database.Schema, title string, getNames 
 			AddItem(nil, 0, 1, false), 0, 2, true).
 		AddItem(nil, 0, 1, false)
 
-	g.App.Pages.AddPage(GoToTableModalId, wrapper, true, true)
+	g.App.Pages.AddPage(GoToObjectModalId, wrapper, true, true)
 	g.App.SetFocusOnly(g.input)
 }

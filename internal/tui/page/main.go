@@ -46,7 +46,7 @@ type Main struct {
 	actionsModal    *modal.ActionsModal
 	importModal     *modal.ImportModal
 	serverInfoModal *modal.ServerInfoModal
-	goToTableModal  *modal.GoToTableModal
+	goToObjectModal *modal.GoToObjectModal
 	renameModal     *core.InputField
 	updateHandler   func()
 }
@@ -66,7 +66,7 @@ func NewMain() *Main {
 		actionsModal:      modal.NewActionsModal(),
 		importModal:       modal.NewImportModal(),
 		serverInfoModal:   modal.NewServerInfoModal(),
-		goToTableModal:    modal.NewGoToTableModal(),
+		goToObjectModal:   modal.NewGoToObjectModal(),
 		renameModal:       core.NewInputField(),
 	}
 
@@ -146,7 +146,7 @@ func (m *Main) initComponents() error {
 	if err := m.serverInfoModal.Init(m.App); err != nil {
 		return err
 	}
-	if err := m.goToTableModal.Init(m.App); err != nil {
+	if err := m.goToObjectModal.Init(m.App); err != nil {
 		return err
 	}
 
@@ -843,11 +843,11 @@ func (m *Main) openIndexesTab(ctx context.Context, schema, table string) {
 }
 
 func (m *Main) openGoToTableModal() {
-	m.goToTableModal.Open(m.lastSchemas, " Go to table ", func(s database.Schema) []string { return s.Tables }, m.JumpToTable)
+	m.goToObjectModal.Open(m.lastSchemas, " Go to table ", func(s database.Schema) []string { return s.Tables }, m.JumpToTable)
 }
 
 func (m *Main) openGoToViewModal() {
-	m.goToTableModal.Open(m.lastSchemas, " Go to view ", func(s database.Schema) []string { return s.Views }, m.JumpToView)
+	m.goToObjectModal.Open(m.lastSchemas, " Go to view ", func(s database.Schema) []string { return s.Views }, m.JumpToView)
 }
 
 func (m *Main) JumpToView(schema, view string) error {
