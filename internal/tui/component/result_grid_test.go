@@ -11,6 +11,15 @@ import (
 )
 
 func TestResultGrid_CopyRowAsJSON_NestedJSONStringEmbeddedAsObject(t *testing.T) {
+	var buf string
+	origWrite, origRead := util.ClipboardWrite, util.ClipboardRead
+	util.ClipboardWrite = func(s string) error { buf = s; return nil }
+	util.ClipboardRead = func() (string, error) { return buf, nil }
+	t.Cleanup(func() {
+		util.ClipboardWrite = origWrite
+		util.ClipboardRead = origRead
+	})
+
 	app, sim := testutil.NewTestApp(t)
 	g := NewResultGrid()
 	g.SetApp(app)
