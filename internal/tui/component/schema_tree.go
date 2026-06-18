@@ -427,31 +427,22 @@ func (s *SchemaTree) SetSelectFunc(f func(ctx context.Context, schema, table str
 	s.nodeSelectFunc = f
 }
 
-// SetColumnsFunc registers a callback invoked when the user selects the
-// "Columns" child node under a table. Use it to show the structure panel.
 func (s *SchemaTree) SetColumnsFunc(f func(ctx context.Context, schema, table string)) {
 	s.nodeColumnsFunc = f
 }
 
-// SetIndexesFunc registers a callback invoked when the user selects the
-// "Indexes" child node under a table. Use it to show the index panel.
 func (s *SchemaTree) SetIndexesFunc(f func(ctx context.Context, schema, table string)) {
 	s.nodeIndexesFunc = f
 }
 
-// SetViewSelectFunc registers a callback invoked when the user presses Enter on
-// a view node. Use it to open a read-only data tab for the view.
 func (s *SchemaTree) SetViewSelectFunc(f func(ctx context.Context, schema, view string) error) {
 	s.nodeViewSelectFunc = f
 }
 
-// SetViewDDLFunc registers a callback invoked when the user presses the
-// structure key on a view node. Use it to show the view DDL in the structure panel.
 func (s *SchemaTree) SetViewDDLFunc(f func(ctx context.Context, schema, view string)) {
 	s.nodeViewDDLFunc = f
 }
 
-// IsViewSelected reports whether the currently focused tree node is a view.
 func (s *SchemaTree) IsViewSelected() bool {
 	current := s.tree.GetCurrentNode()
 	return current != nil && s.isViewNode(current)
@@ -538,7 +529,6 @@ func (s *SchemaTree) addViewNode(ctx context.Context, parent *tview.TreeNode, sc
 	parent.AddChild(node)
 	s.viewNodes[node] = true
 	node.SetReference(parent)
-	// ponytail: views are read-only; row edits unsupported
 	node.SetSelectedFunc(func() {
 		if s.nodeViewSelectFunc != nil {
 			if err := s.nodeViewSelectFunc(ctx, schemaName, viewName); err != nil {
@@ -885,37 +875,14 @@ func (s *SchemaTree) SelectedTable() (schema, table string) {
 }
 
 func (s *SchemaTree) JumpToTable(ctx context.Context, targetSchema, targetTable string) error {
-	root := s.tree.GetRoot()
-	if root == nil {
-		return fmt.Errorf("tree not initialized")
-	}
-
-	for _, schemaNode := range root.GetChildren() {
-		cleanSchema, _ := s.removeIcons(schemaNode.GetText(), "")
-
-		if cleanSchema == targetSchema {
-			schemaNode.SetExpanded(true)
-			openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
-			schemaNode.SetText(fmt.Sprintf("%s%s", openNodeIcon, cleanSchema))
-
-			for _, tableNode := range schemaNode.GetChildren() {
-				_, cleanTable := s.removeIcons("", tableNode.GetText())
-				if cleanTable == targetTable {
-					s.tree.SetCurrentNode(tableNode)
-					if s.nodeSelectFunc != nil {
-						return s.nodeSelectFunc(ctx, targetSchema, targetTable)
-					}
-					return nil
-				}
-			}
-			return fmt.Errorf("table %q not found in schema %q", targetTable, targetSchema)
-		}
-	}
-
-	return fmt.Errorf("schema %q not found", targetSchema)
+	return s.jumpToLeaf(ctx, targetSchema, targetTable, false, "table", s.nodeSelectFunc)
 }
 
 func (s *SchemaTree) JumpToView(ctx context.Context, targetSchema, targetView string) error {
+	return s.jumpToLeaf(ctx, targetSchema, targetView, true, "view", s.nodeViewSelectFunc)
+}
+
+func (s *SchemaTree) jumpToLeaf(ctx context.Context, targetSchema, targetName string, wantView bool, kind string, selectFunc func(context.Context, string, string) error) error {
 	root := s.tree.GetRoot()
 	if root == nil {
 		return fmt.Errorf("tree not initialized")
@@ -923,27 +890,28 @@ func (s *SchemaTree) JumpToView(ctx context.Context, targetSchema, targetView st
 
 	for _, schemaNode := range root.GetChildren() {
 		cleanSchema, _ := s.removeIcons(schemaNode.GetText(), "")
-
-		if cleanSchema == targetSchema {
-			schemaNode.SetExpanded(true)
-			openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
-			schemaNode.SetText(fmt.Sprintf("%s%s", openNodeIcon, cleanSchema))
-
-			for _, viewNode := range schemaNode.GetChildren() {
-				if !s.isViewNode(viewNode) {
-					continue
-				}
-				_, cleanView := s.removeIcons("", viewNode.GetText())
-				if cleanView == targetView {
-					s.tree.SetCurrentNode(viewNode)
-					if s.nodeViewSelectFunc != nil {
-						return s.nodeViewSelectFunc(ctx, targetSchema, targetView)
-					}
-					return nil
-				}
-			}
-			return fmt.Errorf("view %q not found in schema %q", targetView, targetSchema)
+		if cleanSchema != targetSchema {
+			continue
 		}
+
+		schemaNode.SetExpanded(true)
+		openNodeIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
+		schemaNode.SetText(fmt.Sprintf("%s%s", openNodeIcon, cleanSchema))
+
+		for _, leaf := range schemaNode.GetChildren() {
+			if s.isViewNode(leaf) != wantView {
+				continue
+			}
+			_, cleanName := s.removeIcons("", leaf.GetText())
+			if cleanName == targetName {
+				s.tree.SetCurrentNode(leaf)
+				if selectFunc != nil {
+					return selectFunc(ctx, targetSchema, targetName)
+				}
+				return nil
+			}
+		}
+		return fmt.Errorf("%s %q not found in schema %q", kind, targetName, targetSchema)
 	}
 
 	return fmt.Errorf("schema %q not found", targetSchema)
