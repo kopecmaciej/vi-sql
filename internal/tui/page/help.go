@@ -51,18 +51,22 @@ var vimEditorKeys = config.OrderedKeys{
 	Keys: []config.Key{
 		{Keys: []string{"Esc"}, Description: "enter normal mode"},
 		{Keys: []string{"i / a / I / A / o / O"}, Description: "enter insert mode"},
-		{Keys: []string{"v"}, Description: "enter visual select"},
+		{Keys: []string{"v / V"}, Description: "enter visual / visual-line select"},
 		{Keys: []string{"h / j / k / l"}, Description: "move ← ↓ ↑ →"},
-		{Keys: []string{"w / e / b"}, Description: "word forward / end / backward"},
+		{Keys: []string{"w / W / e / E / b / B"}, Description: "word / WORD forward, end, backward"},
 		{Keys: []string{"0 / ^ / $"}, Description: "line start / first non-blank / end"},
-		{Sequences: []string{"gg"}, Description: "go to first line"},
-		{Keys: []string{"G"}, Description: "go to last line"},
+		{Keys: []string{"{ / }"}, Description: "previous / next blank line"},
+		{Keys: []string{"gg / G"}, Description: "first / last line"},
+		{Keys: []string{"f / F / t / T"}, Description: "find / till char on line"},
+		{Keys: []string{"3w, d2e, 2dd"}, Description: "count repeats a motion or operator"},
 		{Keys: []string{"d / c / y + motion"}, Description: "delete / change / yank"},
 		{Keys: []string{"dd / cc / yy"}, Description: "delete / change / yank line"},
-		{Keys: []string{"r"}, Description: "replace char under cursor"},
-		{Keys: []string{"f / F / t / T"}, Description: "find char on line"},
+		{Keys: []string{"D / C / Y"}, Description: "delete / change / yank to line end"},
+		{Keys: []string{"S"}, Description: "change whole line"},
 		{Keys: []string{"x / s"}, Description: "delete char / delete and enter insert"},
+		{Keys: []string{"r"}, Description: "replace char under cursor"},
 		{Keys: []string{"p / P"}, Description: "paste after / before cursor"},
+		{Keys: []string{"J"}, Description: "join lines"},
 		{Keys: []string{"u"}, Description: "undo"},
 	},
 }
@@ -743,8 +747,6 @@ func formatHelpKeyString(key config.Key) string {
 	var parts []string
 	parts = append(parts, key.Keys...)
 	parts = append(parts, key.Runes...)
-	for _, seq := range key.Sequences {
-		parts = append(parts, "<"+seq+">")
-	}
+	parts = append(parts, key.Sequences...)
 	return strings.Join(parts, ", ")
 }

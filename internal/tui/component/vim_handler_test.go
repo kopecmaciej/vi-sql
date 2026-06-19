@@ -421,6 +421,52 @@ func TestYankLineBounds(t *testing.T) {
 	}
 }
 
+// linewisePaste mirrors the linewise branch of vimHandler.paste, exercising the
+// real lineStartAt/lineEndAfterNL offset math.
+func linewisePaste(full string, pos int, regText string, after bool) string {
+	body := strings.TrimSuffix(regText, "\n")
+	var at int
+	var insert string
+	if after {
+		at = lineEndAfterNL(full, pos)
+		if at == len(full) && (full == "" || full[len(full)-1] != '\n') {
+			insert = "\n" + body
+		} else {
+			insert = body + "\n"
+		}
+	} else {
+		at = lineStartAt(full, pos)
+		insert = body + "\n"
+	}
+	return full[:at] + insert + full[at:]
+}
+
+func TestLinewisePaste(t *testing.T) {
+	tests := []struct {
+		name  string
+		full  string
+		pos   int
+		reg   string
+		after bool
+		want  string
+	}{
+		{"P mid-word does not split line", "SELECT x,\n", 3, "SELECT x,\n", false, "SELECT x,\nSELECT x,\n"},
+		{"P middle line", "a\nb\nc\n", 2, "b\n", false, "a\nb\nb\nc\n"},
+		{"p middle line", "a\nb\nc\n", 2, "b\n", true, "a\nb\nb\nc\n"},
+		{"p last line no trailing newline", "a\nb", 2, "b\n", true, "a\nb\nb"},
+		{"P last line no trailing newline", "a\nb", 2, "b\n", false, "a\nb\nb"},
+		{"reg without trailing newline", "a\n", 0, "a", false, "a\na\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := linewisePaste(tt.full, tt.pos, tt.reg, tt.after); got != tt.want {
+				t.Errorf("linewisePaste(%q, %d, %q, after=%v) = %q, want %q",
+					tt.full, tt.pos, tt.reg, tt.after, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestYankToEOLBounds(t *testing.T) {
 	tests := []struct {
 		name      string

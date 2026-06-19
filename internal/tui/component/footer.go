@@ -368,8 +368,6 @@ func formatKeyString(key config.Key) string {
 	var parts []string
 	parts = append(parts, key.Keys...)
 	parts = append(parts, key.Runes...)
-	for _, seq := range key.Sequences {
-		parts = append(parts, "<"+seq+">")
-	}
+	parts = append(parts, key.Sequences...)
 	return strings.Join(parts, ", ")
 }

@@ -1,6 +1,7 @@
 package component
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -19,26 +20,64 @@ const (
 	vimVisualLine
 )
 
+// pending accumulates one [count][operator][count]motion command. The handler owns
+// all sequence state here (vim modes disable the global App.GetKeys() sequence
+// machine), so counts and multi-key motions resolve in one place.
+type pending struct {
+	count         int  // count buffer being accumulated (0 = none)
+	operator      rune // pending operator d/c/y (0 = none)
+	operatorCount int  // count captured before the operator (0 = none)
+	prefix        rune // pending multi-key prefix: g/f/F/t/T/r (0 = none)
+}
+
+// vimRegister is the vim yank/delete register. The system clipboard can't carry the
+// linewise flag (and util.Paste trims trailing newlines), so we keep the raw
+// text here and only trust it when the clipboard still matches what we yanked.
+type vimRegister struct {
+	text     string
+	linewise bool
+}
+
 type vimHandler struct {
-	mode       vimMode
-	pending    string
-	selStart   int // byte offset of the anchor char (where visual/visual-line began)
-	selCurrent int // byte offset of the active cursor char in visual modes
-	editor     *SQLQueryEditor
+	mode            vimMode
+	pending         pending
+	selectionAnchor int
+	selectionCursor int
+	register        vimRegister
+	editor          *SQLQueryEditor
 }
 
 func newVimHandler(e *SQLQueryEditor) *vimHandler {
 	return &vimHandler{mode: vimInsert, editor: e}
 }
 
-func (v *vimHandler) setPending(p string) {
-	v.pending = p
-	v.editor.App.GetManager().Broadcast(manager.NewSequencePendingChangedMsg(p))
+func (v *vimHandler) notifyPending(s string) {
+	v.editor.App.GetManager().Broadcast(manager.NewSequencePendingChangedMsg(s))
+}
+
+func (v *vimHandler) resetPending() {
+	v.pending = pending{}
+	v.notifyPending("")
+}
+
+// combineCount folds the pre-operator and post-operator counts (vim multiplies
+// them). 0/0 stays 0 so motions like G still mean "last line" under an operator.
+func combineCount(a, b int) int {
+	if a == 0 && b == 0 {
+		return 0
+	}
+	if a == 0 {
+		a = 1
+	}
+	if b == 0 {
+		b = 1
+	}
+	return a * b
 }
 
 func (v *vimHandler) transitionTo(m vimMode) {
 	v.mode = m
-	v.setPending("")
+	v.resetPending()
 	v.editor.App.GetKeys().Reset()
 	if m == vimInsert {
 		v.editor.App.SetCursorStyle(tcell.CursorStyleSteadyBar)
@@ -77,7 +116,7 @@ func (v *vimHandler) Handle(event *tcell.EventKey, setFocus func(tview.Primitive
 	case vimVisualLine:
 		return v.handleVisualLine(event, setFocus)
 	}
-	return false // Insert — don't consume
+	return false
 }
 
 func (v *vimHandler) enterNormal() {
@@ -94,22 +133,22 @@ func (v *vimHandler) enterInsert() {
 func (v *vimHandler) enterVisual() {
 	v.transitionTo(vimVisual)
 	ta := v.editor.TextArea
-	v.selStart = ta.GetCursorByteOffset()
-	v.selCurrent = v.selStart
+	v.selectionAnchor = ta.GetCursorByteOffset()
+	v.selectionCursor = v.selectionAnchor
 	v.applyVisualSelection()
 }
 
 // applyVisualSelection calls ta.Select with the correct [start, end) range for
-// the current visual anchor (selStart) and active cursor (selCurrent), then
+// the current visual anchor (selectionAnchor) and active cursor (selCurrent), then
 // ensures the blinking cursor is at the active end (selCurrent).
 func (v *vimHandler) applyVisualSelection() {
 	ta := v.editor.TextArea
-	start, end := visualSelectionRange(ta.GetText(), v.selStart, v.selCurrent)
+	start, end := visualSelectionRange(ta.GetText(), v.selectionAnchor, v.selectionCursor)
 	ta.Select(start, end)
 	// Select always places the cursor at end (higher byte). For backward
-	// selections selCurrent < selStart, so end is at the anchor — swap to keep
+	// selections selCurrent < selectionAnchor, so end is at the anchor — swap to keep
 	// the blinking cursor at the active end.
-	if v.selCurrent < v.selStart {
+	if v.selectionCursor < v.selectionAnchor {
 		ta.SwapCursorAndSelectionStart()
 	}
 }
@@ -120,18 +159,18 @@ func (v *vimHandler) enterVisualLine() {
 	text := ta.GetText()
 	pos := ta.GetCursorByteOffset()
 	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
-	v.selStart = lineStart
-	v.selCurrent = lineStart
+	v.selectionAnchor = lineStart
+	v.selectionCursor = lineStart
 	v.applyVisualLineSelection()
 }
 
 func (v *vimHandler) applyVisualLineSelection() {
 	ta := v.editor.TextArea
-	start, end := visualLineRange(ta.GetText(), v.selStart, v.selCurrent)
+	start, end := visualLineRange(ta.GetText(), v.selectionAnchor, v.selectionCursor)
 	ta.Select(start, end)
 	// Same as applyVisualSelection: when moving up, swap so the cursor blinks
 	// at the active (upper) end rather than staying at the anchor line.
-	if v.selCurrent < v.selStart {
+	if v.selectionCursor < v.selectionAnchor {
 		ta.SwapCursorAndSelectionStart()
 	}
 }
@@ -234,168 +273,282 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 	}
 	ch := ev.Rune()
 
-	// Resolve pending operator + motion.
-	if v.pending != "" {
-		p := v.pending
-		v.setPending("")
-		switch p {
-		case "r":
-			after := ta.GetTextAfterCursor()
-			if len(after) > 0 && after[0] != '\n' {
-				_, oldSize := utf8.DecodeRuneInString(after)
-				pos := ta.GetCursorByteOffset()
-				ta.Replace(pos, pos+oldSize, string(ch))
-				ta.InputHandler()(synth(tcell.KeyLeft), setFocus)
+	// The global sequence machine (on in normal mode) absorbs the first rune of a
+	// sequence like `g`/`d`. When an upstream handler (e.g. main's `ge`) didn't
+	// claim the full sequence, pull that prefix back into our pend struct so this
+	// handler resolves it — counts and motions then follow the normal path.
+	if v.pending.operator == 0 && v.pending.prefix == 0 {
+		if kb := v.editor.App.GetKeys(); kb.HasPending() {
+			if p := kb.GetPending(); len(p) == 1 {
+				switch r := rune(p[0]); {
+				case r == 'd' || r == 'c' || r == 'y':
+					kb.Reset()
+					v.pending.operator = r
+					v.pending.operatorCount = v.pending.count
+					v.pending.count = 0
+				case strings.ContainsRune("gfFtTr", r):
+					kb.Reset()
+					v.pending.prefix = r
+				}
 			}
-			return true
-		case "d":
-			switch ch {
-			case 'd':
-				v.deleteLine()
-			case 'w':
-				v.deleteForward(func() { ta.MoveWordRight(true, true) })
-			case 'e':
-				v.deleteForwardInclusive(func() { ta.MoveWordRight(false, true) })
-			case 'b':
-				v.deleteBackward(func() { ta.MoveWordLeft(true) })
-			case '$':
-				v.deleteToEOL()
-			default:
-				return v.handleNormal(ev, setFocus)
+		}
+	}
+
+	// Complete a pending multi-key prefix (g-motion, f/F/t/T target, r replacement).
+	if v.pending.prefix != 0 {
+		return v.resolvePrefix(ch, setFocus)
+	}
+
+	// Count digits: 1-9 always start/extend; 0 extends only a non-empty count,
+	// otherwise it's the `0` motion.
+	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.count > 0) {
+		v.pending.count = v.pending.count*10 + int(ch-'0')
+		v.notifyPending(v.pendingLabel())
+		return true
+	}
+
+	// Operators (d/c/y).
+	if ch == 'd' || ch == 'c' || ch == 'y' {
+		switch v.pending.operator {
+		case ch: // dd/cc/yy — linewise current line(s)
+			v.applyOperator(ch, motion{kind: mLinewise, run: lineDownStart}, combineCount(v.pending.operatorCount, v.pending.count))
+			v.resetPending()
+		case 0:
+			v.pending.operator = ch
+			v.pending.operatorCount = v.pending.count
+			v.pending.count = 0
+			v.notifyPending(v.pendingLabel())
+		default: // mismatched operator (e.g. dy) — cancel
+			v.resetPending()
+		}
+		return true
+	}
+
+	// Multi-key prefixes: g-motions, f/F/t/T find, r replace.
+	if strings.ContainsRune("gfFtTr", ch) {
+		v.pending.prefix = ch
+		v.notifyPending(v.pendingLabel())
+		return true
+	}
+
+	// h/l/j/k: plain movement keeps TextArea row/column semantics; under an
+	// operator they go through the motion table for proper ranges.
+	if m, ok := simpleMotions[ch]; ok {
+		if v.pending.operator != 0 {
+			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+		} else {
+			v.moveSimple(ch, max(v.pending.count, 1), setFocus)
+		}
+		v.resetPending()
+		return true
+	}
+
+	// Table motions (word, line, document).
+	if m, ok := motions[ch]; ok {
+		v.runMotion(ch, m)
+		v.resetPending()
+		return true
+	}
+
+	// Operator was pending but the key is not a motion — cancel it.
+	if v.pending.operator != 0 {
+		v.resetPending()
+		return true
+	}
+
+	count := max(v.pending.count, 1)
+	v.resetPending()
+	return v.handleCommand(ch, count, setFocus)
+}
+
+// pendingLabel renders the in-progress command for the footer.
+func (v *vimHandler) pendingLabel() string {
+	var b strings.Builder
+	if v.pending.operatorCount > 0 {
+		b.WriteString(strconv.Itoa(v.pending.operatorCount))
+	}
+	if v.pending.operator != 0 {
+		b.WriteRune(v.pending.operator)
+	}
+	if v.pending.count > 0 {
+		b.WriteString(strconv.Itoa(v.pending.count))
+	}
+	if v.pending.prefix != 0 {
+		b.WriteRune(v.pending.prefix)
+	}
+	return b.String()
+}
+
+// runMotion positions the cursor (plain movement) or applies the pending
+// operator over the table motion m. ch drives the w/W operator quirks.
+func (v *vimHandler) runMotion(ch rune, m motion) {
+	ta := v.editor.TextArea
+	text := ta.GetText()
+	pos := ta.GetCursorByteOffset()
+	if v.pending.operator != 0 {
+		m = operatorMotion(v.pending.operator, ch, m, text, pos)
+		v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+		return
+	}
+	dest := m.run(text, pos, v.pending.count)
+	ta.Select(dest, dest)
+}
+
+// operatorMotion applies vim's word-motion quirks under an operator: dw/yw clamp
+// at the newline; cw/cW on a non-blank fold to ce/cE.
+func operatorMotion(op, ch rune, m motion, text string, pos int) motion {
+	if ch != 'w' && ch != 'W' {
+		return m
+	}
+	if op == 'c' {
+		if r, _ := utf8.DecodeRuneInString(text[pos:]); pos < len(text) && runeClass(r, ch == 'W') != 0 {
+			if ch == 'W' {
+				return motions['E']
 			}
-			return true
-		case "c":
-			switch ch {
-			case 'c':
-				v.changeCurrentLine()
-			case 'w':
-				v.deleteForward(func() { ta.MoveWordRight(true, true) })
-				v.enterInsert()
-			case 'e':
-				v.deleteForwardInclusive(func() { ta.MoveWordRight(false, true) })
-				v.enterInsert()
-			case 'b':
-				v.deleteBackward(func() { ta.MoveWordLeft(true) })
-				v.enterInsert()
-			case '$':
-				v.deleteToEOL()
-				v.enterInsert()
+			return motions['e']
+		}
+		return m
+	}
+	return clampWordMotion(m)
+}
+
+// applyOperator turns motion m's destination into a [start,end) range and runs
+// the operator over it. Adding an operator is one more case here.
+func (v *vimHandler) applyOperator(op rune, m motion, count int) {
+	ta := v.editor.TextArea
+	text := ta.GetText()
+	pos := ta.GetCursorByteOffset()
+	dest := m.run(text, pos, count)
+	start, end := operatorRange(text, pos, dest, op, m.kind)
+	if start >= end {
+		if op == 'c' {
+			v.enterInsert() // empty line: still enter insert
+		}
+		return
+	}
+	util.Copy(text[start:end])
+	v.register = vimRegister{text: text[start:end], linewise: m.kind == mLinewise}
+	switch op {
+	case 'y':
+		ta.Select(pos, pos)
+		v.editor.BeginYankHighlight(start, end)
+	case 'd':
+		ta.Replace(start, end, "")
+	case 'c':
+		ta.Replace(start, end, "")
+		v.enterInsert()
+	}
+}
+
+// paste inserts the register (or external clipboard) at the cursor. A linewise
+// yank (yy/dd) is pasted as whole lines below (after=true, p) or above (P);
+// charwise pastes after/before the cursor rune like vim.
+func (v *vimHandler) paste(after bool) {
+	ta := v.editor.TextArea
+	clip := util.Paste()
+	text, linewise := clip, false
+	if v.register.text != "" && strings.TrimSpace(v.register.text) == clip {
+		text, linewise = v.register.text, v.register.linewise
+	}
+	if text == "" {
+		return
+	}
+
+	full := ta.GetText()
+	pos := ta.GetCursorByteOffset()
+
+	if !linewise {
+		insertAt := pos
+		if after {
+			if rest := ta.GetTextAfterCursor(); len(rest) > 0 {
+				_, size := utf8.DecodeRuneInString(rest)
+				insertAt = pos + size
 			}
-			return true
-		case "y":
+		}
+		ta.Replace(insertAt, insertAt, text)
+		return
+	}
+
+	body := strings.TrimSuffix(text, "\n")
+	var at int
+	var insert string
+	if after {
+		at = lineEndAfterNL(full, pos)
+		if at == len(full) && (full == "" || full[len(full)-1] != '\n') {
+			insert = "\n" + body // last line lacks a trailing newline: add one first
+		} else {
+			insert = body + "\n"
+		}
+	} else {
+		at = lineStartAt(full, pos)
+		insert = body + "\n"
+	}
+	ta.Replace(at, at, insert)
+
+	pastedStart := at
+	if strings.HasPrefix(insert, "\n") {
+		pastedStart = at + 1
+	}
+	dest := firstNonBlankOffset(ta.GetText(), pastedStart)
+	row, col := byteToRowCol(ta.GetText(), dest)
+	ta.MoveCursorTo(row, col)
+}
+
+func (v *vimHandler) moveSimple(ch rune, count int, setFocus func(tview.Primitive)) {
+	ta := v.editor.TextArea
+	key := map[rune]tcell.Key{'h': tcell.KeyLeft, 'l': tcell.KeyRight, 'j': tcell.KeyDown, 'k': tcell.KeyUp}[ch]
+	for range count {
+		ta.InputHandler()(synth(key), setFocus)
+	}
+}
+
+// resolvePrefix completes a pending g/f/F/t/T/r sequence with the rune ch.
+func (v *vimHandler) resolvePrefix(ch rune, setFocus func(tview.Primitive)) bool {
+	ta := v.editor.TextArea
+	prefix := v.pending.prefix
+
+	switch prefix {
+	case 'r':
+		after := ta.GetTextAfterCursor()
+		if len(after) > 0 && after[0] != '\n' {
+			_, oldSize := utf8.DecodeRuneInString(after)
+			pos := ta.GetCursorByteOffset()
+			ta.Replace(pos, pos+oldSize, string(ch))
+			ta.InputHandler()(synth(tcell.KeyLeft), setFocus)
+		}
+	case 'g':
+		if m, ok := gMotions[ch]; ok {
+			v.runMotion('g', m)
+		}
+	default: // f/F/t/T — ch is the target rune
+		forward := prefix == 'f' || prefix == 't'
+		till := prefix == 't' || prefix == 'T'
+		m := findMotion(ch, forward, till)
+		if v.pending.operator != 0 {
+			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+		} else {
 			text := ta.GetText()
 			pos := ta.GetCursorByteOffset()
-			var hlStart, hlEnd int
-			switch ch {
-			case 'y':
-				hlStart, hlEnd = yankLineBounds(text, pos)
-				util.Copy(text[hlStart:hlEnd])
-			case 'w':
-				ta.MoveWordRight(true, true)
-				newPos := ta.GetCursorByteOffset()
-				util.Copy(text[pos:newPos])
-				// Use Select(pos, pos) rather than byteToRowCol+MoveCursorTo:
-				// MoveCursorTo uses display rows (wraps at terminal width) while
-				// byteToRowCol counts logical lines, causing misalignment on long lines.
-				ta.Select(pos, pos)
-				hlStart, hlEnd = pos, newPos
-			case 'e':
-				ta.MoveWordRight(false, true)
-				newPos := ta.GetCursorByteOffset()
-				if newPos < len(text) {
-					_, sz := utf8.DecodeRuneInString(text[newPos:])
-					newPos += sz
-				}
-				util.Copy(text[pos:newPos])
-				ta.Select(pos, pos)
-				hlStart, hlEnd = pos, newPos
-			case 'b':
-				ta.MoveWordLeft(true)
-				newPos := ta.GetCursorByteOffset()
-				util.Copy(text[newPos:pos])
-				ta.Select(pos, pos)
-				hlStart, hlEnd = newPos, pos
-			case '$':
-				hlStart, hlEnd = yankToEOLBounds(text, pos)
-				util.Copy(text[hlStart:hlEnd])
+			if dest := m.run(text, pos, v.pending.count); dest != pos {
+				row, col := byteToRowCol(text, dest)
+				ta.MoveCursorTo(row, col)
 			}
-			v.editor.BeginYankHighlight(hlStart, hlEnd)
-			return true
-		case "f":
-			v.findCharForward(ch, false)
-			return true
-		case "F":
-			v.findCharBackward(ch, false)
-			return true
-		case "t":
-			v.findCharForward(ch, true)
-			return true
-		case "T":
-			v.findCharBackward(ch, true)
-			return true
-		case "g":
-			if ch == 'g' {
-				v.editor.TextArea.MoveCursorTo(0, 0)
-			}
-			return true
 		}
-		return true
 	}
+	v.resetPending()
+	return true
+}
 
-	// When global WrapInputCapture absorbed the first rune of a sequence, transfer
-	// it to v.pending so this handler resolves the full sequence.
-	// Only transfer single-rune prefixes — multi-rune pending means a longer
-	// sequence is still accumulating in the global state machine.
-	kb := v.editor.App.GetKeys()
-	if kb.HasPending() {
-		pending := kb.GetPending()
-		if len(pending) == 1 {
-			op := rune(pending[0])
-			kb.Reset()
-			if strings.ContainsRune("dcyrfFtTg", op) {
-				v.setPending(string(op))
-				return v.handleNormal(ev, setFocus)
-			}
-		}
-		return true
-	}
-	if kb.IsSequencePrefix(string(ch)) {
-		kb.SetPending(string(ch))
-		return true
-	}
+// handleCommand runs the non-motion normal-mode commands (mode switches, paste,
+// line ops). count is already defaulted to >= 1.
+func (v *vimHandler) handleCommand(ch rune, count int, setFocus func(tview.Primitive)) bool {
+	ta := v.editor.TextArea
 
 	switch ch {
-	case 'h':
-		ta.InputHandler()(synth(tcell.KeyLeft), setFocus)
-	case 'l':
-		ta.InputHandler()(synth(tcell.KeyRight), setFocus)
-	case 'j':
-		ta.InputHandler()(synth(tcell.KeyDown), setFocus)
-	case 'k':
-		ta.InputHandler()(synth(tcell.KeyUp), setFocus)
-
-	case 'w':
-		ta.MoveWordRight(true, true)
-	case 'e':
-		ta.MoveWordRight(false, true)
-	case 'b':
-		ta.MoveWordLeft(true)
-
-	case '0':
-		ta.InputHandler()(synth(tcell.KeyHome), setFocus)
-	case '^':
-		v.moveToFirstNonBlank()
-	case '$':
-		ta.InputHandler()(synth(tcell.KeyEnd), setFocus)
 	case '{':
 		v.jumpToPrevBlankLine()
 	case '}':
 		v.jumpToNextBlankLine()
-
-	case 'G':
-		text := ta.GetText()
-		lastRow := strings.Count(text, "\n")
-		ta.MoveCursorTo(lastRow, -1)
 
 	case 'i':
 		v.enterInsert()
@@ -418,73 +571,33 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		ta.InputHandler()(synth(tcell.KeyUp), setFocus)
 		v.enterInsert()
 
-	case 'r':
-		v.setPending("r")
-		return true
 	case 's':
-		v.deleteCharUnderCursor()
+		for range count {
+			v.deleteCharUnderCursor()
+		}
 		v.enterInsert()
 	case 'S':
-		v.changeCurrentLine()
-
-	case 'd':
-		v.setPending("d")
-		return true
+		v.applyOperator('c', motion{kind: mLinewise, run: lineDownStart}, count)
 	case 'D':
-		v.deleteToEOL()
-	case 'c':
-		v.setPending("c")
-		return true
+		v.applyOperator('d', motions['$'], count)
 	case 'C':
-		v.deleteToEOL()
-		v.enterInsert()
-	case 'x':
-		v.deleteCharUnderCursor()
-
-	case 'y':
-		v.setPending("y")
-		return true
+		v.applyOperator('c', motions['$'], count)
 	case 'Y':
-		text := ta.GetText()
-		start, end := yankToEOLBounds(text, ta.GetCursorByteOffset())
-		util.Copy(text[start:end])
-		v.editor.BeginYankHighlight(start, end)
+		v.applyOperator('y', motions['$'], count)
+	case 'x':
+		for range count {
+			v.deleteCharUnderCursor()
+		}
 
 	case 'p':
-		if text := util.Paste(); text != "" {
-			pos := ta.GetCursorByteOffset()
-			after := ta.GetTextAfterCursor()
-			insertAt := pos
-			if len(after) > 0 {
-				_, size := utf8.DecodeRuneInString(after)
-				insertAt = pos + size
-			}
-			ta.Replace(insertAt, insertAt, text)
-		}
+		v.paste(true)
 	case 'P':
-		if text := util.Paste(); text != "" {
-			pos := ta.GetCursorByteOffset()
-			ta.Replace(pos, pos, text)
-		}
+		v.paste(false)
 
 	case 'J':
 		v.joinLines()
-
 	case 'u':
 		ta.InputHandler()(synth(tcell.KeyCtrlZ), setFocus)
-
-	case 'f':
-		v.setPending("f")
-		return true
-	case 'F':
-		v.setPending("F")
-		return true
-	case 't':
-		v.setPending("t")
-		return true
-	case 'T':
-		v.setPending("T")
-		return true
 
 	case 'v':
 		v.enterVisual()
@@ -505,27 +618,47 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	}
 	ch := ev.Rune()
 
-	applySelection := func(newCurrent int) {
-		v.selCurrent = newCurrent
+	// applyMotion extends the selection's active end via a table motion.
+	applyMotion := func(m motion) {
+		v.selectionCursor = m.run(ta.GetText(), v.selectionCursor, v.pending.count)
 		v.applyVisualSelection()
 	}
 
-	// Clear current selection to selCurrent, run move, then reapply from selStart.
-	// Using selCurrent (not ta.GetCursorByteOffset()) ensures the move starts from
-	// the active end even when the selection is backward.
+	// vertical moves keep column memory via synth keys, starting from the active end.
 	clearAndMove := func(move func()) {
-		ta.Select(v.selCurrent, v.selCurrent)
+		ta.Select(v.selectionCursor, v.selectionCursor)
 		move()
-		v.selCurrent = ta.GetCursorByteOffset()
+		v.selectionCursor = ta.GetCursorByteOffset()
 		v.applyVisualSelection()
 	}
 
-	// Resolve pending "g" in visual mode.
-	if v.pending == "g" {
-		v.setPending("")
-		if ch == 'g' {
-			clearAndMove(func() { ta.MoveCursorTo(0, 0) })
+	// Complete a pending g/f/F/t/T prefix.
+	if v.pending.prefix != 0 {
+		prefix := v.pending.prefix
+		switch prefix {
+		case 'g':
+			if m, ok := gMotions[ch]; ok {
+				applyMotion(m)
+			}
+		default:
+			forward := prefix == 'f' || prefix == 't'
+			till := prefix == 't' || prefix == 'T'
+			applyMotion(findMotion(ch, forward, till))
 		}
+		v.resetPending()
+		return true
+	}
+
+	// Count digits (0 extends a non-empty count, else it's the `0` motion).
+	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.count > 0) {
+		v.pending.count = v.pending.count*10 + int(ch-'0')
+		v.notifyPending(v.pendingLabel())
+		return true
+	}
+
+	if m, ok := motions[ch]; ok {
+		applyMotion(m)
+		v.resetPending()
 		return true
 	}
 
@@ -533,40 +666,22 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	case 'h':
 		// Bypass InputHandler: KeyLeft with an active selection jumps to the
 		// selection start rather than moving left by one char.
-		text := ta.GetText()
-		if v.selCurrent > 0 {
-			_, size := utf8.DecodeLastRuneInString(text[:v.selCurrent])
-			applySelection(v.selCurrent - size)
-		}
+		v.selectionCursor = charLeft(ta.GetText(), v.selectionCursor, max(v.pending.count, 1))
+		v.applyVisualSelection()
 	case 'l':
-		// Bypass InputHandler for the same reason.
-		text := ta.GetText()
-		if v.selCurrent < len(text) {
-			_, size := utf8.DecodeRuneInString(text[v.selCurrent:])
-			applySelection(v.selCurrent + size)
-		}
+		v.selectionCursor = charRight(ta.GetText(), v.selectionCursor, max(v.pending.count, 1))
+		v.applyVisualSelection()
 	case 'j':
-		clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyDown), setFocus) })
+		for range max(v.pending.count, 1) {
+			clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyDown), setFocus) })
+		}
 	case 'k':
-		clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyUp), setFocus) })
-	case 'w':
-		clearAndMove(func() { ta.MoveWordRight(true, true) })
-	case 'e':
-		clearAndMove(func() { ta.MoveWordRight(false, true) })
-	case 'b':
-		clearAndMove(func() { ta.MoveWordLeft(true) })
-	case '0':
-		clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyHome), setFocus) })
-	case '^':
-		clearAndMove(func() { v.moveToFirstNonBlank() })
-	case '$':
-		clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyEnd), setFocus) })
-	case 'G':
-		text := ta.GetText()
-		lastRow := strings.Count(text, "\n")
-		clearAndMove(func() { ta.MoveCursorTo(lastRow, 0) })
-	case 'g':
-		v.setPending("g")
+		for range max(v.pending.count, 1) {
+			clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyUp), setFocus) })
+		}
+	case 'g', 'f', 'F', 't', 'T':
+		v.pending.prefix = ch
+		v.notifyPending(v.pendingLabel())
 		return true
 	case 'd', 'x':
 		_, start, end := ta.GetSelection()
@@ -579,6 +694,7 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	case 'y':
 		sel, hlStart, hlEnd := ta.GetSelection()
 		util.Copy(sel)
+		v.register = vimRegister{text: sel}
 		v.enterNormal()
 		v.editor.BeginYankHighlight(hlStart, hlEnd)
 	case 'p', 'P':
@@ -590,6 +706,7 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	default:
 		return true // consume all unrecognised runes — Visual mode doesn't type
 	}
+	v.resetPending()
 	return true
 }
 
@@ -605,12 +722,12 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		move()
 		newPos := ta.GetCursorByteOffset()
 		text := ta.GetText()
-		v.selCurrent = strings.LastIndexByte(text[:newPos], '\n') + 1
+		v.selectionCursor = strings.LastIndexByte(text[:newPos], '\n') + 1
 		v.applyVisualLineSelection()
 	}
 
-	if v.pending == "g" {
-		v.setPending("")
+	if v.pending.prefix == 'g' {
+		v.resetPending()
 		if ch == 'g' {
 			moveAndUpdate(func() { ta.MoveCursorTo(0, 0) })
 		}
@@ -622,18 +739,18 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		// Use byte search instead of KeyDown so wrapped screen lines don't confuse
 		// movement — KeyDown advances by screen row, not logical line.
 		text := ta.GetText()
-		if eol := strings.IndexByte(text[v.selCurrent:], '\n'); eol >= 0 {
-			v.selCurrent += eol + 1
-			ta.Select(v.selCurrent, v.selCurrent)
+		if eol := strings.IndexByte(text[v.selectionCursor:], '\n'); eol >= 0 {
+			v.selectionCursor += eol + 1
+			ta.Select(v.selectionCursor, v.selectionCursor)
 			ta.MoveCursorTo(ta.GetCurrentRow(), 0)
 			v.applyVisualLineSelection()
 		}
 	case 'k':
 		text := ta.GetText()
-		if v.selCurrent > 0 {
-			prev := strings.LastIndexByte(text[:v.selCurrent-1], '\n')
-			v.selCurrent = prev + 1
-			ta.Select(v.selCurrent, v.selCurrent)
+		if v.selectionCursor > 0 {
+			prev := strings.LastIndexByte(text[:v.selectionCursor-1], '\n')
+			v.selectionCursor = prev + 1
+			ta.Select(v.selectionCursor, v.selectionCursor)
 			ta.MoveCursorTo(ta.GetCurrentRow(), 0)
 			v.applyVisualLineSelection()
 		}
@@ -642,7 +759,8 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		lastRow := strings.Count(text, "\n")
 		moveAndUpdate(func() { ta.MoveCursorTo(lastRow, 0) })
 	case 'g':
-		v.setPending("g")
+		v.pending.prefix = 'g'
+		v.notifyPending(v.pendingLabel())
 		return true
 	case 'd', 'x':
 		_, start, end := ta.GetSelection()
@@ -655,6 +773,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 	case 'y':
 		sel, hlStart, hlEnd := ta.GetSelection()
 		util.Copy(sel)
+		v.register = vimRegister{text: sel, linewise: true}
 		v.enterNormal()
 		v.editor.BeginYankHighlight(hlStart, hlEnd)
 	case 'p', 'P':
@@ -666,7 +785,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 	case 'v':
 		// Switch to char-visual at the current cursor position.
 		v.mode = vimVisual
-		v.selStart = v.selCurrent
+		v.selectionAnchor = v.selectionCursor
 		v.applyVisualSelection()
 		v.editor.refreshTitle()
 	default:
@@ -685,94 +804,6 @@ func (v *vimHandler) deleteCharUnderCursor() {
 	_, size := utf8.DecodeRuneInString(after)
 	pos := ta.GetCursorByteOffset()
 	ta.Replace(pos, pos+size, "")
-}
-
-func (v *vimHandler) deleteToEOL() {
-	ta := v.editor.TextArea
-	pos := ta.GetCursorByteOffset()
-	after := ta.GetTextAfterCursor()
-	if nl := strings.IndexByte(after, '\n'); nl >= 0 {
-		ta.Replace(pos, pos+nl, "")
-	} else {
-		ta.Replace(pos, pos+len(after), "")
-	}
-}
-
-func (v *vimHandler) deleteLine() {
-	ta := v.editor.TextArea
-	text := ta.GetText()
-	pos := ta.GetCursorByteOffset()
-
-	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
-	lineEnd := strings.IndexByte(text[pos:], '\n')
-	if lineEnd < 0 {
-		// Last line — remove the preceding newline too, if any.
-		yanked := text[lineStart:]
-		util.Copy(yanked)
-		if lineStart > 0 {
-			lineStart--
-		}
-		ta.Replace(lineStart, len(text), "")
-	} else {
-		yanked := text[lineStart : pos+lineEnd+1]
-		util.Copy(yanked)
-		ta.Replace(lineStart, pos+lineEnd+1, "")
-	}
-}
-
-// deleteForward deletes from current cursor position to wherever move() lands.
-func (v *vimHandler) deleteForward(move func()) {
-	ta := v.editor.TextArea
-	pos := ta.GetCursorByteOffset()
-	move()
-	newPos := ta.GetCursorByteOffset()
-	if newPos > pos {
-		ta.Replace(pos, newPos, "")
-	}
-}
-
-// deleteForwardInclusive is like deleteForward but also deletes the char the
-// cursor lands on — used for e-motion (cursor-inclusive) variants like de/ce.
-func (v *vimHandler) deleteForwardInclusive(move func()) {
-	ta := v.editor.TextArea
-	pos := ta.GetCursorByteOffset()
-	move()
-	newPos := ta.GetCursorByteOffset()
-	if newPos > pos {
-		after := ta.GetTextAfterCursor()
-		if len(after) > 0 {
-			_, sz := utf8.DecodeRuneInString(after)
-			newPos += sz
-		}
-		ta.Replace(pos, newPos, "")
-	}
-}
-
-// deleteBackward deletes from wherever move() lands back to the original cursor position.
-func (v *vimHandler) deleteBackward(move func()) {
-	ta := v.editor.TextArea
-	pos := ta.GetCursorByteOffset()
-	move()
-	newPos := ta.GetCursorByteOffset()
-	if pos > newPos {
-		ta.Replace(newPos, pos, "")
-	}
-}
-
-func (v *vimHandler) changeCurrentLine() {
-	ta := v.editor.TextArea
-	text := ta.GetText()
-	pos := ta.GetCursorByteOffset()
-	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
-	lineEnd := strings.IndexByte(text[pos:], '\n')
-	var end int
-	if lineEnd < 0 {
-		end = len(text)
-	} else {
-		end = pos + lineEnd
-	}
-	ta.Replace(lineStart, end, "")
-	v.enterInsert()
 }
 
 func (v *vimHandler) moveToFirstNonBlank() {
@@ -859,62 +890,4 @@ func (v *vimHandler) jumpToPrevBlankLine() {
 	target := idx + 1 // byte of the blank line's \n
 	row, _ := byteToRowCol(text, target)
 	ta.MoveCursorTo(row, 0)
-}
-
-func (v *vimHandler) findCharForward(target rune, till bool) {
-	ta := v.editor.TextArea
-	text := ta.GetText()
-	pos := ta.GetCursorByteOffset()
-
-	// Start from char after cursor.
-	i := pos
-	if i < len(text) {
-		_, sz := utf8.DecodeRuneInString(text[i:])
-		i += sz
-	}
-
-	prev := pos
-	for i < len(text) {
-		r, sz := utf8.DecodeRuneInString(text[i:])
-		if r == '\n' {
-			return
-		}
-		if r == target {
-			dest := i
-			if till {
-				dest = prev
-			}
-			row, col := byteToRowCol(text, dest)
-			ta.MoveCursorTo(row, col)
-			return
-		}
-		prev = i
-		i += sz
-	}
-}
-
-func (v *vimHandler) findCharBackward(target rune, till bool) {
-	ta := v.editor.TextArea
-	text := ta.GetText()
-	pos := ta.GetCursorByteOffset()
-	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
-
-	i := pos
-	for i > lineStart {
-		_, prevSz := utf8.DecodeLastRuneInString(text[:i])
-		i -= prevSz
-		ch, chSz := utf8.DecodeRuneInString(text[i:])
-		if ch == target {
-			dest := i
-			if till {
-				dest = i + chSz
-				if dest >= pos {
-					return
-				}
-			}
-			row, col := byteToRowCol(text, dest)
-			ta.MoveCursorTo(row, col)
-			return
-		}
-	}
 }
