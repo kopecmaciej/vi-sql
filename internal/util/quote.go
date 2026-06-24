@@ -20,32 +20,12 @@ const (
 // quote characters so reserved words and special characters in identifiers
 // are safe to interpolate.
 func (q Quoter) Ident(name string) string {
-	if q.isQuoted(name) {
-		return name
-	}
 	if q == BracketQuoter {
 		// SQL Server bracket quoting: [name], with ] escaped as ]]
 		return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
 	}
 	s := string(q)
 	return s + strings.ReplaceAll(name, s, s+s) + s
-}
-
-// isQuoted reports whether name is already wrapped in this dialect's
-// identifier quote characters.
-func (q Quoter) isQuoted(name string) bool {
-	if len(name) < 2 {
-		return false
-	}
-	switch q {
-	case ANSIQuoter:
-		return name[0] == '"' && name[len(name)-1] == '"'
-	case BacktickQuoter:
-		return name[0] == '`' && name[len(name)-1] == '`'
-	case BracketQuoter:
-		return name[0] == '[' && name[len(name)-1] == ']'
-	}
-	return false
 }
 
 // Table returns a schema-qualified table reference with both parts quoted.

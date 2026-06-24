@@ -228,3 +228,8 @@ var sqlKeywordSet = func() map[string]bool {
 	}
 	return m
 }()
+
+// IsKeyword reports whether word is a SQL reserved word (case-insensitive).
+func IsKeyword(word string) bool {
+	return sqlKeywordSet[strings.ToUpper(word)]
+}

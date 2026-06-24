@@ -133,6 +133,35 @@ func TestDetectContext_AfterDot_WithPartial(t *testing.T) {
 	}
 }
 
+func TestDetectContext_QuotedIdentifier(t *testing.T) {
+	tests := []struct {
+		name        string
+		sql         string
+		wantType    ContextType
+		wantTable   string
+		wantPartial string
+	}{
+		{"editing quoted table after from", `SELECT * FROM "us`, CtxAfterFrom, "", "us"},
+		{"editing quoted table after qualified dot", `SELECT * FROM "schema"."tab`, CtxAfterDot, "schema", "tab"},
+		{"cursor after dot following quoted qualifier", `SELECT * FROM "schema".`, CtxAfterDot, "schema", ""},
+		{"editing quoted column after dot", `SELECT "users"."na`, CtxAfterDot, "users", "na"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := ctx(tt.sql)
+			if c.Type != tt.wantType {
+				t.Errorf("Type=%d, want %d", c.Type, tt.wantType)
+			}
+			if c.TableName != tt.wantTable {
+				t.Errorf("TableName=%q, want %q", c.TableName, tt.wantTable)
+			}
+			if c.PartialWord != tt.wantPartial {
+				t.Errorf("PartialWord=%q, want %q", c.PartialWord, tt.wantPartial)
+			}
+		})
+	}
+}
+
 func TestDetectContext_SchemaQualified(t *testing.T) {
 	c := ctx("SELECT * FROM public.")
 	if c.Type != CtxAfterDot {

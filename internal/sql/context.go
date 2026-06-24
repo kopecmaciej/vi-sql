@@ -156,11 +156,18 @@ func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial strin
 		}
 		if tok.End >= cursorBytePos && tok.Start < cursorBytePos {
 			// Cursor is inside or at the end of this token.
-			if tok.Type == TokenIdentifier || tok.Type == TokenKeyword {
+			switch tok.Type {
+			case TokenIdentifier, TokenKeyword:
 				// Word token: cursor is still editing it — treat as partial.
 				partial = tok.Value[:cursorBytePos-tok.Start]
 				lookFrom = i - 1
-			} else {
+			case TokenQuotedIdentifier:
+				// Cursor editing inside a quoted identifier (e.g. "tab): treat the
+				// text after the opening quote as the partial word so completion
+				// still filters and the preceding dot is seen for qualification.
+				partial = strings.TrimPrefix(tok.Value[:cursorBytePos-tok.Start], `"`)
+				lookFrom = i - 1
+			default:
 				// Non-word token (dot, operator, punctuation, whitespace):
 				// cursor is past the token boundary — include it in lookFrom.
 				lookFrom = i
@@ -174,6 +181,15 @@ func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial strin
 	return
 }
 
+// unquoteIdent strips the surrounding double quotes from a "quoted" identifier
+// and collapses the "" escape, yielding the raw name as stored in the schema
+// index. A trailing quote may be absent if the identifier is still being typed.
+func unquoteIdent(s string) string {
+	s = strings.TrimPrefix(s, `"`)
+	s = strings.TrimSuffix(s, `"`)
+	return strings.ReplaceAll(s, `""`, `"`)
+}
+
 // qualifierBeforeDot returns the identifier immediately before the dot at dotIdx.
 func qualifierBeforeDot(tokens []Token, dotIdx int) string {
 	i := dotIdx - 1
@@ -184,8 +200,11 @@ func qualifierBeforeDot(tokens []Token, dotIdx int) string {
 		return ""
 	}
 	t := tokens[i]
-	if t.Type == TokenIdentifier || t.Type == TokenQuotedIdentifier {
+	if t.Type == TokenIdentifier {
 		return t.Value
+	}
+	if t.Type == TokenQuotedIdentifier {
+		return unquoteIdent(t.Value)
 	}
 	return ""
 }

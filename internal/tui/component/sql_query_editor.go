@@ -249,17 +249,7 @@ func (e *SQLQueryEditor) setAutocomplete() {
 			return false
 		}
 		sym := lastSymbols[index]
-		name := sym.Name
-		switch sym.Kind {
-		case completion.KindColumn:
-			name = e.App.GetQuoter().Ident(name)
-		case completion.KindTable:
-			parts := strings.Split(name, ".")
-			for i, p := range parts {
-				parts[i] = e.App.GetQuoter().Ident(p)
-			}
-			name = strings.Join(parts, ".")
-		}
+		name := core.QuoteCompletion(sym, e.App.GetQuoter())
 		e.Replace(sym.Replace.Start, sym.Replace.End, name)
 		return true
 	})
