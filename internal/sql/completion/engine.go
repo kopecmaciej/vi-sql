@@ -124,7 +124,7 @@ func (e *Engine) SuggestTokens(tokens []sql.Token, text string, cursorPos int, c
 	sqlCtx := sql.DetectContext(tokens, cursorPos)
 	var scope *QueryScope
 	if scopeRequired(sqlCtx.Type) {
-		scope = BuildScope(tokens)
+		scope = BuildScope(tokens, cursorPos)
 	}
 	partial := strings.ToLower(sqlCtx.PartialWord)
 

@@ -31,10 +31,10 @@ var tableTerminators = map[string]bool{
 }
 
 // BuildScope extracts all in-scope table references, CTE names, and aliases
-// from a pre-tokenized SQL statement. It stops at `;` to avoid leaking context
-// from a preceding statement.
-func BuildScope(tokens []sql.Token) *QueryScope {
-	tokens = stopAtSemicolon(tokens)
+// from a pre-tokenized SQL statement. It clamps to the statement containing the
+// cursor so neighbouring statements (separated by `;`) don't leak their context.
+func BuildScope(tokens []sql.Token, cursorPos int) *QueryScope {
+	tokens = statementAtCursor(tokens, cursorPos)
 
 	scope := &QueryScope{
 		AliasMap: make(map[string]string),
@@ -58,7 +58,6 @@ func (s *QueryScope) ResolveTable(name string) string {
 	return name
 }
 
-// HasTable reports whether tableName (or its alias) is in scope.
 func (s *QueryScope) HasTable(tableName string) bool {
 	lower := strings.ToLower(tableName)
 	for _, ref := range s.TableRefs {
@@ -69,15 +68,22 @@ func (s *QueryScope) HasTable(tableName string) bool {
 	return false
 }
 
-// stopAtSemicolon trims tokens to the last statement (after the final `;`).
-func stopAtSemicolon(tokens []sql.Token) []sql.Token {
-	last := 0
+// statementAtCursor trims tokens to the single statement containing cursorPos,
+// bounded by the nearest `;` before it and the first `;` at or after it. A
+// trailing `;` therefore can't collapse the cursor's statement to an empty tail.
+func statementAtCursor(tokens []sql.Token, cursorPos int) []sql.Token {
+	start, end := 0, len(tokens)
 	for i, tok := range tokens {
-		if tok.Type == sql.TokenPunctuation && tok.Value == ";" {
-			last = i + 1
+		if tok.Type != sql.TokenPunctuation || tok.Value != ";" {
+			continue
+		}
+		if tok.End <= cursorPos {
+			start = i + 1
+		} else if end == len(tokens) {
+			end = i
 		}
 	}
-	return tokens[last:]
+	return tokens[start:end]
 }
 
 func skipWS(tokens []sql.Token, start int) int {

@@ -222,14 +222,13 @@ func isNumContinue(ch byte) bool {
 var sqlKeywordSet = func() map[string]bool {
 	m := make(map[string]bool, len(allKeywordWords)*2)
 	for _, kw := range allKeywordWords {
-		for _, word := range strings.Fields(kw) {
+		for word := range strings.FieldsSeq(kw) {
 			m[strings.ToUpper(word)] = true
 		}
 	}
 	return m
 }()
 
-// IsKeyword reports whether word is a SQL reserved word (case-insensitive).
 func IsKeyword(word string) bool {
 	return sqlKeywordSet[strings.ToUpper(word)]
 }

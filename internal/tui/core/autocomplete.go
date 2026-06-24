@@ -1,6 +1,7 @@
 package core
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/kopecmaciej/tview"
@@ -10,13 +11,10 @@ import (
 	"github.com/kopecmaciej/vi-sql/internal/util"
 )
 
-// AutocompleteMaxItems is the max visible rows in any autocomplete dropdown.
 const AutocompleteMaxItems = 10
 
-// QuoteCompletion returns the text to insert for an accepted completion symbol.
-// Columns and each part of a (possibly schema-qualified) table name are quoted
-// only when the identifier requires it for the dialect; ordinary names are
-// inserted bare so they stay editable and keep re-triggering autocomplete.
+// QuoteCompletion based on symbol Kind quotes columns and table name parts
+// when needed (e.g. camelCase in postgres or names with numbers like `2fa`).
 func QuoteCompletion(sym completion.Symbol, q util.Quoter) string {
 	switch sym.Kind {
 	case completion.KindColumn:
@@ -39,30 +37,19 @@ func quoteIfNeeded(name string, q util.Quoter) string {
 	return q.Ident(name)
 }
 
-// identNeedsQuoting reports whether name must be quoted to be used verbatim:
-// it is a reserved word, starts with a digit, contains a special character, or
-// (for case-folding dialects via ANSIQuoter) is not all lowercase.
+var (
+	safeAnsi    = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+	safeAnyCase = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+)
+
 func identNeedsQuoting(name string, q util.Quoter) bool {
 	if sqlpkg.IsKeyword(name) {
 		return true
 	}
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		switch {
-		case c >= 'a' && c <= 'z', c == '_':
-		case c >= '0' && c <= '9':
-			if i == 0 {
-				return true
-			}
-		case c >= 'A' && c <= 'Z':
-			if q == util.ANSIQuoter {
-				return true
-			}
-		default:
-			return true
-		}
+	if q == util.ANSIQuoter {
+		return !safeAnsi.MatchString(name)
 	}
-	return false
+	return !safeAnyCase.MatchString(name)
 }
 
 // BuildAutocompleteItems converts completion symbols into display items: a

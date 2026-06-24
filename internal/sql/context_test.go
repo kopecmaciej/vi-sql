@@ -317,22 +317,23 @@ func TestShouldSuppressCompletion(t *testing.T) {
 		sql  string
 		want bool
 	}{
-		// number cases
 		{"SELECT * FROM t WHERE id = 1", true},   // cursor right after number
 		{"SELECT * FROM t WHERE id = 1 ", false}, // space after number
 		{"SELECT * FROM t WHERE id = 123", true}, // multi-digit number
-		{"SELECT * FROM t WHERE id = 1a", true},  // letter after number (partial word, preceded by number)
+		{"SELECT * FROM t WHERE id = 1a", true},  // digit-start partial preceded by = (value context)
 
-		// string literal cases
+		{"SELECT 2fa", false},                    // digit-start in column context
+		{"SELECT 2f", false},                     // partial digit-start column
+		{"SELECT * FROM t WHERE id = 2fa", true}, // digit-start but preceded by = (value context)
+		{"SELECT * FROM t WHERE 2fa", false},     // digit-start column in WHERE predicate position
+
 		{"WHERE name = 'hell", true},     // inside unclosed string
 		{"WHERE name = '", true},         // cursor right after opening quote
 		{"WHERE name = 'hello' ", false}, // after closed string + space
 
-		// ! prefix case
 		{"WHERE id !", true},  // after bare !
 		{"WHERE id !x", true}, // typing after !
 
-		// operator cases: suppress directly after operator, not after operator+space
 		{"WHERE id =", true},    // cursor right after =
 		{"WHERE id >=", true},   // cursor right after >=
 		{"WHERE id !=", true},   // cursor right after !=
@@ -341,10 +342,9 @@ func TestShouldSuppressCompletion(t *testing.T) {
 		{"WHERE id >= ", false}, // >= then space
 		{"WHERE id != ", false}, // != then space
 
-		// normal cases that should NOT suppress
 		{"SELECT * FROM ", false},
 		{"SELECT * FROM t WHERE ", false},
-		{"SELECT col", false}, // partial identifier
+		{"SELECT col", false},
 		{"", false},
 	}
 	for _, tc := range cases {

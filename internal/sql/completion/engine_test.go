@@ -1,13 +1,13 @@
 package completion
 
 import (
+	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	isql "github.com/kopecmaciej/vi-sql/internal/sql"
 )
-
-// ── test fixtures ─────────────────────────────────────────────────────────────
 
 var testSchemas = []database.Schema{
 	{Schema: "public", Tables: []string{"users", "orders"}},
@@ -31,15 +31,6 @@ func symbolNames(syms []Symbol) []string {
 	return out
 }
 
-func contains(names []string, name string) bool {
-	for _, n := range names {
-		if n == name {
-			return true
-		}
-	}
-	return false
-}
-
 func cfg() Context { return Context{Schemas: testSchemas} }
 
 func cfgWithCols() Context {
@@ -54,8 +45,6 @@ func cfgWithCols() Context {
 		ColumnCache: make(map[string][]Column),
 	}
 }
-
-// ── FROM clause ───────────────────────────────────────────────────────────────
 
 // TestEngine_FROM_Tables covers table listing and partial filtering in FROM context,
 // including schema-qualified qualifiers and CTE names.
@@ -93,12 +82,12 @@ func TestEngine_FROM_Tables(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected %q in suggestions: %v", tc.desc, w, names)
 			}
 		}
 		for _, nw := range tc.noWant {
-			if contains(names, nw) {
+			if slices.Contains(names, nw) {
 				t.Errorf("[%s] unexpected %q in suggestions: %v", tc.desc, nw, names)
 			}
 		}
@@ -131,14 +120,12 @@ func TestEngine_FROM_AfterCompleteTableRef(t *testing.T) {
 			}
 		}
 		for _, kw := range []string{"WHERE", "JOIN", "ORDER BY"} {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected clause keyword %q: %v", tc.desc, kw, names)
 			}
 		}
 	}
 }
-
-// ── JOIN clause ───────────────────────────────────────────────────────────────
 
 // TestEngine_JOIN_Tables verifies table suggestions after JOIN keywords,
 // including partial filtering.
@@ -171,12 +158,12 @@ func TestEngine_JOIN_Tables(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected %q: %v", tc.desc, w, names)
 			}
 		}
 		for _, nw := range tc.noWant {
-			if contains(names, nw) {
+			if slices.Contains(names, nw) {
 				t.Errorf("[%s] unexpected %q: %v", tc.desc, nw, names)
 			}
 		}
@@ -207,7 +194,7 @@ func TestEngine_JOIN_AfterCompleteRef(t *testing.T) {
 			}
 		}
 		for _, kw := range []string{"ON", "WHERE"} {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected %q after complete JOIN ref: %v", tc.desc, kw, names)
 			}
 		}
@@ -239,14 +226,12 @@ func TestEngine_JOIN_ON_Columns(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), c))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected column %q in ON clause: %v", tc.desc, w, names)
 			}
 		}
 	}
 }
-
-// ── SELECT clause ─────────────────────────────────────────────────────────────
 
 // TestEngine_SELECT_ExpressionPositions covers the three positions in the SELECT
 // column list: right after SELECT (with DISTINCT), after a comma (no DISTINCT),
@@ -258,12 +243,12 @@ func TestEngine_SELECT_ExpressionPositions(t *testing.T) {
 	t.Run("after SELECT keyword", func(t *testing.T) {
 		names := symbolNames(e.Suggest("SELECT ", len("SELECT "), cfg()))
 		for _, kw := range append(append(isql.ExpressionStarters, isql.FunctionKeywords...), "DISTINCT") {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("expected %q right after SELECT: %v", kw, names)
 			}
 		}
 		for _, kw := range isql.BinaryOperators {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("binary operator %q must not appear right after SELECT: %v", kw, names)
 			}
 		}
@@ -272,11 +257,11 @@ func TestEngine_SELECT_ExpressionPositions(t *testing.T) {
 	// After a comma: DISTINCT must not reappear.
 	t.Run("after comma", func(t *testing.T) {
 		names := symbolNames(e.Suggest("SELECT id, ", len("SELECT id, "), cfg()))
-		if contains(names, "DISTINCT") {
+		if slices.Contains(names, "DISTINCT") {
 			t.Errorf("DISTINCT must not appear after comma in SELECT list: %v", names)
 		}
 		for _, kw := range isql.ExpressionStarters {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("expected expression starter %q after comma: %v", kw, names)
 			}
 		}
@@ -314,19 +299,19 @@ func TestEngine_SELECT_AfterCompletedExpression(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 
-		if !contains(names, "FROM") {
+		if !slices.Contains(names, "FROM") {
 			t.Errorf("[%s] expected FROM: %v", tc.desc, names)
 		}
-		if !contains(names, "AS") {
+		if !slices.Contains(names, "AS") {
 			t.Errorf("[%s] expected AS: %v", tc.desc, names)
 		}
 		for _, kw := range isql.FunctionKeywords {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("[%s] function keyword %q must not appear after completed expression: %v", tc.desc, kw, names)
 			}
 		}
 		for _, kw := range isql.ExpressionStarters {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("[%s] expression starter %q must not appear after completed expression: %v", tc.desc, kw, names)
 			}
 		}
@@ -344,23 +329,21 @@ func TestEngine_SELECT_InJoinQuery(t *testing.T) {
 	names := symbolNames(e.Suggest(query, cursorPos, cfg()))
 
 	for _, kw := range isql.ExpressionStarters {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected expression starter %q in mid-JOIN SELECT list: %v", kw, names)
 		}
 	}
 	for _, kw := range isql.FunctionKeywords {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected function keyword %q in mid-JOIN SELECT list: %v", kw, names)
 		}
 	}
 	for _, bad := range []string{"DISTINCT", "FROM", "AS"} {
-		if contains(names, bad) {
+		if slices.Contains(names, bad) {
 			t.Errorf("%q must not appear after comma in SELECT list: %v", bad, names)
 		}
 	}
 }
-
-// ── WHERE clause ─────────────────────────────────────────────────────────────
 
 // TestEngine_WHERE_Keywords covers both the expression-start position (after WHERE
 // or AND/OR) and the post-value position (after a column name or literal), using
@@ -381,12 +364,12 @@ func TestEngine_WHERE_Keywords(t *testing.T) {
 	for _, tc := range startCases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, kw := range []string{"NOT", "EXISTS", "CASE"} {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected %q at WHERE start: %v", tc.desc, kw, names)
 			}
 		}
 		for _, kw := range isql.BinaryOperators {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("[%s] binary operator %q must not appear at expression start: %v", tc.desc, kw, names)
 			}
 		}
@@ -404,12 +387,12 @@ func TestEngine_WHERE_Keywords(t *testing.T) {
 	for _, tc := range postValueCases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, kw := range isql.BinaryOperators {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected binary operator %q: %v", tc.desc, kw, names)
 			}
 		}
 		for _, kw := range append(isql.ExpressionStarters, isql.FunctionKeywords...) {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("[%s] expression starter/function %q must not appear after column: %v", tc.desc, kw, names)
 			}
 		}
@@ -432,7 +415,7 @@ func TestEngine_WHERE_PostPredicateClauseKeywords(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, kw := range isql.PostPredicateKeywords {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected clause keyword %q after complete predicate: %v", tc.desc, kw, names)
 			}
 		}
@@ -456,12 +439,12 @@ func TestEngine_WHERE_AfterComparisonOp(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, kw := range isql.UnaryOperators {
-			if contains(names, kw) {
+			if slices.Contains(names, kw) {
 				t.Errorf("[%s] unary operator %q must not appear after comparison op: %v", tc.desc, kw, names)
 			}
 		}
 		for _, kw := range isql.ExpressionStarters {
-			if !contains(names, kw) {
+			if !slices.Contains(names, kw) {
 				t.Errorf("[%s] expected expression starter %q after comparison op: %v", tc.desc, kw, names)
 			}
 		}
@@ -511,19 +494,17 @@ func TestEngine_WHERE_Columns(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), c))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected column %q: %v", tc.desc, w, names)
 			}
 		}
 		for _, nw := range tc.noWant {
-			if contains(names, nw) {
+			if slices.Contains(names, nw) {
 				t.Errorf("[%s] unexpected column %q: %v", tc.desc, nw, names)
 			}
 		}
 	}
 }
-
-// ── ORDER BY / GROUP BY / HAVING ──────────────────────────────────────────────
 
 // TestEngine_ORDER_BY_Keywords covers both positions in ORDER BY: expression start
 // (functions offered) and post-column (ASC/DESC offered).
@@ -533,7 +514,7 @@ func TestEngine_ORDER_BY_Keywords(t *testing.T) {
 	// Expression start: function keywords.
 	names := symbolNames(e.Suggest("SELECT * FROM users ORDER BY ", len("SELECT * FROM users ORDER BY "), cfg()))
 	for _, kw := range isql.FunctionKeywords {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected function %q at ORDER BY start: %v", kw, names)
 		}
 	}
@@ -541,12 +522,12 @@ func TestEngine_ORDER_BY_Keywords(t *testing.T) {
 	// Post-column: order direction keywords, no functions.
 	names = symbolNames(e.Suggest("SELECT * FROM users ORDER BY id ", len("SELECT * FROM users ORDER BY id "), cfg()))
 	for _, kw := range isql.OrderKeywords {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected %q after ORDER BY column: %v", kw, names)
 		}
 	}
 	for _, kw := range isql.FunctionKeywords {
-		if contains(names, kw) {
+		if slices.Contains(names, kw) {
 			t.Errorf("function %q must not appear after ORDER BY column: %v", kw, names)
 		}
 	}
@@ -564,12 +545,12 @@ func TestEngine_HAVING_Keywords(t *testing.T) {
 		cfg(),
 	))
 	for _, kw := range isql.FunctionKeywords {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected function %q at HAVING start: %v", kw, names)
 		}
 	}
 	for _, kw := range isql.BinaryOperators {
-		if contains(names, kw) {
+		if slices.Contains(names, kw) {
 			t.Errorf("binary operator %q must not appear at HAVING start: %v", kw, names)
 		}
 	}
@@ -581,13 +562,11 @@ func TestEngine_HAVING_Keywords(t *testing.T) {
 		cfg(),
 	))
 	for _, kw := range isql.BinaryOperators {
-		if !contains(names, kw) {
+		if !slices.Contains(names, kw) {
 			t.Errorf("expected binary operator %q after HAVING aggregate: %v", kw, names)
 		}
 	}
 }
-
-// ── DDL ───────────────────────────────────────────────────────────────────────
 
 // TestEngine_DDL_AfterVerb verifies DDL object keyword suggestions after CREATE/DROP,
 // with and without partial filtering.
@@ -620,36 +599,32 @@ func TestEngine_DDL_AfterVerb(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected %q: %v", tc.desc, w, names)
 			}
 		}
 		for _, nw := range tc.noWant {
-			if contains(names, nw) {
+			if slices.Contains(names, nw) {
 				t.Errorf("[%s] unexpected %q: %v", tc.desc, nw, names)
 			}
 		}
 	}
 }
 
-// TestEngine_DDL_CreateObject verifies that after CREATE TABLE/VIEW no existing
-// tables or DDL object keywords are suggested (user names a new object).
 func TestEngine_DDL_CreateObject(t *testing.T) {
 	e := NewDefaultEngine()
 	syms := e.Suggest("CREATE TABLE ", len("CREATE TABLE "), cfg())
 	names := symbolNames(syms)
 	for _, kw := range isql.DDLObjectKeywords {
-		if contains(names, kw) {
+		if slices.Contains(names, kw) {
 			t.Errorf("DDL object keyword %q must not appear after CREATE TABLE: %v", kw, names)
 		}
 	}
-	if contains(names, "public.users") {
+	if slices.Contains(names, "public.users") {
 		t.Errorf("existing tables must not appear in CtxCreateObject: %v", names)
 	}
 }
 
-// TestEngine_DDL_ExistingObject verifies that DROP/ALTER/TRUNCATE TABLE suggest
-// existing tables, with partial filtering.
 func TestEngine_DDL_ExistingObject(t *testing.T) {
 	e := NewDefaultEngine()
 	cases := []struct {
@@ -679,103 +654,176 @@ func TestEngine_DDL_ExistingObject(t *testing.T) {
 	for _, tc := range cases {
 		names := symbolNames(e.Suggest(tc.sql, len(tc.sql), cfg()))
 		for _, w := range tc.want {
-			if !contains(names, w) {
+			if !slices.Contains(names, w) {
 				t.Errorf("[%s] expected %q: %v", tc.desc, w, names)
 			}
 		}
 		for _, nw := range tc.noWant {
-			if contains(names, nw) {
+			if slices.Contains(names, nw) {
 				t.Errorf("[%s] unexpected %q: %v", tc.desc, nw, names)
 			}
 		}
 	}
 }
 
-// ── BuildScope tests ──────────────────────────────────────────────────────────
-
-func buildScopeFromText(s string) *QueryScope {
-	return BuildScope(isql.Tokenize(s))
-}
-
-func TestBuildScope_SimpleFrom(t *testing.T) {
-	scope := buildScopeFromText("SELECT * FROM users")
-	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Table != "users" {
-		t.Errorf("got %+v", scope.TableRefs)
+func TestEngine_SELECT_ColumnStarstWithDigit(t *testing.T) {
+	e := NewDefaultEngine()
+	c := Context{
+		Schemas: []database.Schema{{Schema: "auth", Tables: []string{"access_roles"}}},
+		ColumnFetcher: func(_, _ string) ([]Column, error) {
+			return []Column{
+				{Name: "id"}, {Name: "name"}, {Name: "2fa"}, {Name: "isDefault"},
+			}, nil
+		},
+		ColumnCache: make(map[string][]Column),
 	}
-}
 
-func TestBuildScope_SchemaQualified(t *testing.T) {
-	scope := buildScopeFromText("SELECT * FROM public.users")
-	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Schema != "public" || scope.TableRefs[0].Table != "users" {
-		t.Errorf("got %+v", scope.TableRefs)
+	cases := []struct {
+		sql       string
+		cursorPos int
+		want      string
+		suppress  bool
+	}{
+		{
+			sql:       "SELECT 2fa FROM auth.access_roles",
+			cursorPos: len("SELECT 2fa"),
+			want:      "2fa",
+		},
+		{
+			sql:       "SELECT 2f FROM auth.access_roles",
+			cursorPos: len("SELECT 2f"),
+			want:      "2fa",
+		},
+		{
+			sql:       "SELECT 2 FROM auth.access_roles",
+			cursorPos: len("SELECT 2"),
+			suppress:  true,
+		},
 	}
-}
 
-func TestBuildScope_AliasAS(t *testing.T) {
-	scope := buildScopeFromText("SELECT * FROM users AS u")
-	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Alias != "u" {
-		t.Errorf("got %+v", scope.TableRefs)
-	}
-}
-
-func TestBuildScope_ImplicitAlias(t *testing.T) {
-	scope := buildScopeFromText("SELECT * FROM users u")
-	if len(scope.TableRefs) != 1 || scope.TableRefs[0].Alias != "u" {
-		t.Errorf("got %+v", scope.TableRefs)
-	}
-}
-
-func TestBuildScope_JoinClause(t *testing.T) {
-	scope := buildScopeFromText("SELECT * FROM users u JOIN orders o ON u.id = o.user_id")
-	if len(scope.TableRefs) != 2 {
-		t.Fatalf("got %d refs, want 2: %+v", len(scope.TableRefs), scope.TableRefs)
-	}
-	if scope.TableRefs[0].Table != "users" || scope.TableRefs[0].Alias != "u" {
-		t.Errorf("ref[0]=%+v", scope.TableRefs[0])
-	}
-	if scope.TableRefs[1].Table != "orders" || scope.TableRefs[1].Alias != "o" {
-		t.Errorf("ref[1]=%+v", scope.TableRefs[1])
-	}
-}
-
-func TestBuildScope_CTENames(t *testing.T) {
-	scope := buildScopeFromText("WITH cte AS (SELECT 1) SELECT * FROM cte")
-	if len(scope.CTENames) != 1 || scope.CTENames[0] != "cte" {
-		t.Errorf("got CTENames=%v", scope.CTENames)
-	}
-}
-
-func TestBuildScope_MultiCTE(t *testing.T) {
-	scope := buildScopeFromText("WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a JOIN b ON true")
-	if len(scope.CTENames) != 2 || scope.CTENames[0] != "a" || scope.CTENames[1] != "b" {
-		t.Errorf("got CTENames=%v", scope.CTENames)
-	}
-}
-
-func TestBuildScope_WithRecursive(t *testing.T) {
-	sql := "WITH RECURSIVE tree AS (SELECT id FROM nodes WHERE parent IS NULL UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent = t.id) SELECT * FROM tree"
-	scope := buildScopeFromText(sql)
-	if len(scope.CTENames) != 1 || scope.CTENames[0] != "tree" {
-		t.Errorf("WITH RECURSIVE: got CTENames=%v", scope.CTENames)
-	}
-}
-
-func TestBuildScope_MultiStatement_StopsAtSemicolon(t *testing.T) {
-	// stopAtSemicolon returns the last statement — 'a' from the first must not appear.
-	scope := buildScopeFromText("SELECT * FROM a; SELECT * FROM b")
-	for _, ref := range scope.TableRefs {
-		if ref.Table == "a" {
-			t.Errorf("first statement table 'a' leaked into scope from second statement: %+v", scope.TableRefs)
+	for _, tc := range cases {
+		names := symbolNames(e.Suggest(tc.sql, tc.cursorPos, c))
+		if tc.suppress {
+			if len(names) != 0 {
+				t.Errorf("cursor at %d: expected suppressed, got %v", tc.cursorPos, names)
+			}
+			continue
+		}
+		if !slices.Contains(names, tc.want) {
+			t.Errorf("cursor at %d: expected column %q in suggestions: %v", tc.cursorPos, tc.want, names)
 		}
 	}
 }
 
-func TestBuildScope_SubqueryInFrom(t *testing.T) {
-	// A subquery in FROM must not promote its inner tables to the outer scope.
-	scope := buildScopeFromText("SELECT * FROM (SELECT id FROM inner_table) sub")
-	for _, ref := range scope.TableRefs {
-		if ref.Table == "inner_table" {
-			t.Errorf("inner_table from subquery leaked into outer scope: %+v", scope.TableRefs)
-		}
+func TestBuildScope(t *testing.T) {
+	tests := []struct {
+		name     string
+		sql      string
+		cursor   int // byte offset; 0 means end of text
+		wantRefs []TableRef
+		wantCTEs []string
+	}{
+		{
+			name:     "simple from",
+			sql:      "SELECT * FROM users",
+			wantRefs: []TableRef{{Table: "users"}},
+		},
+		{
+			name:     "schema qualified",
+			sql:      "SELECT * FROM public.users",
+			wantRefs: []TableRef{{Schema: "public", Table: "users"}},
+		},
+		{
+			name:     "schema qualified with alias",
+			sql:      "SELECT * FROM public.users u",
+			wantRefs: []TableRef{{Schema: "public", Table: "users", Alias: "u"}},
+		},
+		{
+			name:     "alias with AS",
+			sql:      "SELECT * FROM users AS u",
+			wantRefs: []TableRef{{Table: "users", Alias: "u"}},
+		},
+		{
+			name:     "implicit alias",
+			sql:      "SELECT * FROM users u",
+			wantRefs: []TableRef{{Table: "users", Alias: "u"}},
+		},
+		{
+			name:     "join clause",
+			sql:      "SELECT * FROM users u JOIN orders o ON u.id = o.user_id",
+			wantRefs: []TableRef{{Table: "users", Alias: "u"}, {Table: "orders", Alias: "o"}},
+		},
+		{
+			name:     "left join keyword is not an alias",
+			sql:      "SELECT * FROM a LEFT JOIN b ON a.id = b.a_id",
+			wantRefs: []TableRef{{Table: "a"}, {Table: "b"}},
+		},
+		{
+			name:     "comma list only captures first table",
+			sql:      "SELECT * FROM a, b",
+			wantRefs: []TableRef{{Table: "a"}},
+		},
+		{
+			name:     "cte names",
+			sql:      "WITH cte AS (SELECT 1) SELECT * FROM cte",
+			wantRefs: []TableRef{{Table: "cte"}},
+			wantCTEs: []string{"cte"},
+		},
+		{
+			name:     "multi cte",
+			sql:      "WITH a AS (SELECT 1), b AS (SELECT 2) SELECT * FROM a JOIN b ON true",
+			wantRefs: []TableRef{{Table: "a"}, {Table: "b"}},
+			wantCTEs: []string{"a", "b"},
+		},
+		{
+			name:     "with recursive collects cte name and body tables",
+			sql:      "WITH RECURSIVE tree AS (SELECT id FROM nodes WHERE parent IS NULL UNION ALL SELECT n.id FROM nodes n JOIN tree t ON n.parent = t.id) SELECT * FROM tree",
+			wantRefs: []TableRef{{Table: "nodes"}, {Table: "nodes", Alias: "n"}, {Table: "tree", Alias: "t"}, {Table: "tree"}},
+			wantCTEs: []string{"tree"},
+		},
+		{
+			name:     "subquery in from is not promoted",
+			sql:      "SELECT * FROM (SELECT id FROM inner_table) sub",
+			wantRefs: nil,
+		},
+		{
+			name:     "cursor at end takes last statement",
+			sql:      "SELECT * FROM a; SELECT * FROM b",
+			wantRefs: []TableRef{{Table: "b"}},
+		},
+		{
+			name:     "cursor in first statement takes first statement",
+			sql:      "SELECT * FROM a; SELECT * FROM b",
+			cursor:   len("SELECT * FROM a"),
+			wantRefs: []TableRef{{Table: "a"}},
+		},
+		{
+			name:     "cursor in middle statement",
+			sql:      "SELECT 1; SELECT * FROM mid; SELECT 2",
+			cursor:   len("SELECT 1; SELECT * FROM mid"),
+			wantRefs: []TableRef{{Table: "mid"}},
+		},
+		{
+			name:     "cursor before trailing semicolon",
+			sql:      "SELECT  FROM auth.roles;",
+			cursor:   len("SELECT "),
+			wantRefs: []TableRef{{Schema: "auth", Table: "roles"}},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cursor := tc.cursor
+			if cursor == 0 {
+				cursor = len(tc.sql)
+			}
+			scope := BuildScope(isql.Tokenize(tc.sql), cursor)
+			if !reflect.DeepEqual(scope.TableRefs, tc.wantRefs) {
+				t.Errorf("TableRefs = %+v, want %+v", scope.TableRefs, tc.wantRefs)
+			}
+			if !reflect.DeepEqual(scope.CTENames, tc.wantCTEs) {
+				t.Errorf("CTENames = %v, want %v", scope.CTENames, tc.wantCTEs)
+			}
+		})
 	}
 }
