@@ -18,16 +18,17 @@ const (
 	vimNormal
 	vimVisual
 	vimVisualLine
+
+	vimOperators = "dcy"
+	vimPrefixes  = "gfFtTr"
 )
 
-// pending accumulates one [count][operator][count]motion command. The handler owns
-// all sequence state here (vim modes disable the global App.GetKeys() sequence
-// machine), so counts and multi-key motions resolve in one place.
+// pending accumulates next key sequences, it's form is: [operatorCount][operator][motionCount]motion
 type pending struct {
-	count         int  // count buffer being accumulated (0 = none)
-	operator      rune // pending operator d/c/y (0 = none)
-	operatorCount int  // count captured before the operator (0 = none)
-	prefix        rune // pending multi-key prefix: g/f/F/t/T/r (0 = none)
+	prefix        rune
+	motionCount   int
+	operator      rune
+	operatorCount int
 }
 
 // vimRegister is the vim yank/delete register. The system clipboard can't carry the
@@ -62,6 +63,7 @@ func (v *vimHandler) resetPending() {
 
 // combineCount folds the pre-operator and post-operator counts (vim multiplies
 // them). 0/0 stays 0 so motions like G still mean "last line" under an operator.
+// combineCount multiplies pre/post counts, so 2d4j will end up with 8dj
 func combineCount(a, b int) int {
 	if a == 0 && b == 0 {
 		return 0
@@ -135,19 +137,13 @@ func (v *vimHandler) enterVisual() {
 	ta := v.editor.TextArea
 	v.selectionAnchor = ta.GetCursorByteOffset()
 	v.selectionCursor = v.selectionAnchor
-	v.applyVisualSelection()
+	v.applySelection()
 }
 
-// applyVisualSelection calls ta.Select with the correct [start, end) range for
-// the current visual anchor (selectionAnchor) and active cursor (selCurrent), then
-// ensures the blinking cursor is at the active end (selCurrent).
-func (v *vimHandler) applyVisualSelection() {
+func (v *vimHandler) applySelection() {
 	ta := v.editor.TextArea
 	start, end := visualSelectionRange(ta.GetText(), v.selectionAnchor, v.selectionCursor)
 	ta.Select(start, end)
-	// Select always places the cursor at end (higher byte). For backward
-	// selections selCurrent < selectionAnchor, so end is at the anchor — swap to keep
-	// the blinking cursor at the active end.
 	if v.selectionCursor < v.selectionAnchor {
 		ta.SwapCursorAndSelectionStart()
 	}
@@ -161,15 +157,13 @@ func (v *vimHandler) enterVisualLine() {
 	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
 	v.selectionAnchor = lineStart
 	v.selectionCursor = lineStart
-	v.applyVisualLineSelection()
+	v.applyLineSelection()
 }
 
-func (v *vimHandler) applyVisualLineSelection() {
+func (v *vimHandler) applyLineSelection() {
 	ta := v.editor.TextArea
 	start, end := visualLineRange(ta.GetText(), v.selectionAnchor, v.selectionCursor)
 	ta.Select(start, end)
-	// Same as applyVisualSelection: when moving up, swap so the cursor blinks
-	// at the active (upper) end rather than staying at the anchor line.
 	if v.selectionCursor < v.selectionAnchor {
 		ta.SwapCursorAndSelectionStart()
 	}
@@ -275,18 +269,18 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 
 	// The global sequence machine (on in normal mode) absorbs the first rune of a
 	// sequence like `g`/`d`. When an upstream handler (e.g. main's `ge`) didn't
-	// claim the full sequence, pull that prefix back into our pend struct so this
+	// claim the full sequence, pull that prefix back into our pending struct so this
 	// handler resolves it — counts and motions then follow the normal path.
 	if v.pending.operator == 0 && v.pending.prefix == 0 {
 		if kb := v.editor.App.GetKeys(); kb.HasPending() {
 			if p := kb.GetPending(); len(p) == 1 {
 				switch r := rune(p[0]); {
-				case r == 'd' || r == 'c' || r == 'y':
+				case strings.ContainsRune(vimOperators, r):
 					kb.Reset()
 					v.pending.operator = r
-					v.pending.operatorCount = v.pending.count
-					v.pending.count = 0
-				case strings.ContainsRune("gfFtTr", r):
+					v.pending.operatorCount = v.pending.motionCount
+					v.pending.motionCount = 0
+				case strings.ContainsRune(vimPrefixes, r):
 					kb.Reset()
 					v.pending.prefix = r
 				}
@@ -301,22 +295,21 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 
 	// Count digits: 1-9 always start/extend; 0 extends only a non-empty count,
 	// otherwise it's the `0` motion.
-	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.count > 0) {
-		v.pending.count = v.pending.count*10 + int(ch-'0')
+	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.motionCount > 0) {
+		v.pending.motionCount = v.pending.motionCount*10 + int(ch-'0')
 		v.notifyPending(v.pendingLabel())
 		return true
 	}
 
-	// Operators (d/c/y).
-	if ch == 'd' || ch == 'c' || ch == 'y' {
+	if strings.ContainsRune(vimOperators, ch) {
 		switch v.pending.operator {
 		case ch: // dd/cc/yy — linewise current line(s)
-			v.applyOperator(ch, motion{kind: mLinewise, run: lineDownStart}, combineCount(v.pending.operatorCount, v.pending.count))
+			v.applyOperator(ch, motion{kind: mLinewise, run: lineDownStart}, combineCount(v.pending.operatorCount, v.pending.motionCount))
 			v.resetPending()
 		case 0:
 			v.pending.operator = ch
-			v.pending.operatorCount = v.pending.count
-			v.pending.count = 0
+			v.pending.operatorCount = v.pending.motionCount
+			v.pending.motionCount = 0
 			v.notifyPending(v.pendingLabel())
 		default: // mismatched operator (e.g. dy) — cancel
 			v.resetPending()
@@ -324,8 +317,7 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		return true
 	}
 
-	// Multi-key prefixes: g-motions, f/F/t/T find, r replace.
-	if strings.ContainsRune("gfFtTr", ch) {
+	if strings.ContainsRune(vimPrefixes, ch) {
 		v.pending.prefix = ch
 		v.notifyPending(v.pendingLabel())
 		return true
@@ -335,9 +327,9 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 	// operator they go through the motion table for proper ranges.
 	if m, ok := simpleMotions[ch]; ok {
 		if v.pending.operator != 0 {
-			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.motionCount))
 		} else {
-			v.moveSimple(ch, max(v.pending.count, 1), setFocus)
+			v.moveSimple(ch, max(v.pending.motionCount, 1), setFocus)
 		}
 		v.resetPending()
 		return true
@@ -356,7 +348,7 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		return true
 	}
 
-	count := max(v.pending.count, 1)
+	count := max(v.pending.motionCount, 1)
 	v.resetPending()
 	return v.handleCommand(ch, count, setFocus)
 }
@@ -370,8 +362,8 @@ func (v *vimHandler) pendingLabel() string {
 	if v.pending.operator != 0 {
 		b.WriteRune(v.pending.operator)
 	}
-	if v.pending.count > 0 {
-		b.WriteString(strconv.Itoa(v.pending.count))
+	if v.pending.motionCount > 0 {
+		b.WriteString(strconv.Itoa(v.pending.motionCount))
 	}
 	if v.pending.prefix != 0 {
 		b.WriteRune(v.pending.prefix)
@@ -387,10 +379,10 @@ func (v *vimHandler) runMotion(ch rune, m motion) {
 	pos := ta.GetCursorByteOffset()
 	if v.pending.operator != 0 {
 		m = operatorMotion(v.pending.operator, ch, m, text, pos)
-		v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+		v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.motionCount))
 		return
 	}
-	dest := m.run(text, pos, v.pending.count)
+	dest := m.run(text, pos, v.pending.motionCount)
 	ta.Select(dest, dest)
 }
 
@@ -525,11 +517,11 @@ func (v *vimHandler) resolvePrefix(ch rune, setFocus func(tview.Primitive)) bool
 		till := prefix == 't' || prefix == 'T'
 		m := findMotion(ch, forward, till)
 		if v.pending.operator != 0 {
-			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.count))
+			v.applyOperator(v.pending.operator, m, combineCount(v.pending.operatorCount, v.pending.motionCount))
 		} else {
 			text := ta.GetText()
 			pos := ta.GetCursorByteOffset()
-			if dest := m.run(text, pos, v.pending.count); dest != pos {
+			if dest := m.run(text, pos, v.pending.motionCount); dest != pos {
 				row, col := byteToRowCol(text, dest)
 				ta.MoveCursorTo(row, col)
 			}
@@ -620,8 +612,8 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 
 	// applyMotion extends the selection's active end via a table motion.
 	applyMotion := func(m motion) {
-		v.selectionCursor = m.run(ta.GetText(), v.selectionCursor, v.pending.count)
-		v.applyVisualSelection()
+		v.selectionCursor = m.run(ta.GetText(), v.selectionCursor, v.pending.motionCount)
+		v.applySelection()
 	}
 
 	// vertical moves keep column memory via synth keys, starting from the active end.
@@ -629,7 +621,7 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		ta.Select(v.selectionCursor, v.selectionCursor)
 		move()
 		v.selectionCursor = ta.GetCursorByteOffset()
-		v.applyVisualSelection()
+		v.applySelection()
 	}
 
 	// Complete a pending g/f/F/t/T prefix.
@@ -650,8 +642,8 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	}
 
 	// Count digits (0 extends a non-empty count, else it's the `0` motion).
-	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.count > 0) {
-		v.pending.count = v.pending.count*10 + int(ch-'0')
+	if (ch >= '1' && ch <= '9') || (ch == '0' && v.pending.motionCount > 0) {
+		v.pending.motionCount = v.pending.motionCount*10 + int(ch-'0')
 		v.notifyPending(v.pendingLabel())
 		return true
 	}
@@ -666,17 +658,17 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 	case 'h':
 		// Bypass InputHandler: KeyLeft with an active selection jumps to the
 		// selection start rather than moving left by one char.
-		v.selectionCursor = charLeft(ta.GetText(), v.selectionCursor, max(v.pending.count, 1))
-		v.applyVisualSelection()
+		v.selectionCursor = charLeft(ta.GetText(), v.selectionCursor, max(v.pending.motionCount, 1))
+		v.applySelection()
 	case 'l':
-		v.selectionCursor = charRight(ta.GetText(), v.selectionCursor, max(v.pending.count, 1))
-		v.applyVisualSelection()
+		v.selectionCursor = charRight(ta.GetText(), v.selectionCursor, max(v.pending.motionCount, 1))
+		v.applySelection()
 	case 'j':
-		for range max(v.pending.count, 1) {
+		for range max(v.pending.motionCount, 1) {
 			clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyDown), setFocus) })
 		}
 	case 'k':
-		for range max(v.pending.count, 1) {
+		for range max(v.pending.motionCount, 1) {
 			clearAndMove(func() { ta.InputHandler()(synth(tcell.KeyUp), setFocus) })
 		}
 	case 'g', 'f', 'F', 't', 'T':
@@ -723,7 +715,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		newPos := ta.GetCursorByteOffset()
 		text := ta.GetText()
 		v.selectionCursor = strings.LastIndexByte(text[:newPos], '\n') + 1
-		v.applyVisualLineSelection()
+		v.applyLineSelection()
 	}
 
 	if v.pending.prefix == 'g' {
@@ -743,7 +735,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 			v.selectionCursor += eol + 1
 			ta.Select(v.selectionCursor, v.selectionCursor)
 			ta.MoveCursorTo(ta.GetCurrentRow(), 0)
-			v.applyVisualLineSelection()
+			v.applyLineSelection()
 		}
 	case 'k':
 		text := ta.GetText()
@@ -752,7 +744,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 			v.selectionCursor = prev + 1
 			ta.Select(v.selectionCursor, v.selectionCursor)
 			ta.MoveCursorTo(ta.GetCurrentRow(), 0)
-			v.applyVisualLineSelection()
+			v.applyLineSelection()
 		}
 	case 'G':
 		text := ta.GetText()
@@ -786,7 +778,7 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		// Switch to char-visual at the current cursor position.
 		v.mode = vimVisual
 		v.selectionAnchor = v.selectionCursor
-		v.applyVisualSelection()
+		v.applySelection()
 		v.editor.refreshTitle()
 	default:
 		return true

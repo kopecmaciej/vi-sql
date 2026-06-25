@@ -437,24 +437,6 @@ func clampWordMotion(m motion) motion {
 	}}
 }
 
-var motions = map[rune]motion{
-	'w': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, false) }},
-	'W': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, true) }},
-	'e': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, false) }},
-	'E': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, true) }},
-	'b': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, false) }},
-	'B': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, true) }},
-	'0': {kind: mExclusive, run: func(t string, p, c int) int { return lineStartAt(t, p) }},
-	'^': {kind: mExclusive, run: func(t string, p, c int) int { return firstNonBlankOffset(t, p) }},
-	'$': {kind: mInclusive, run: endOfLineOffset},
-	'G': {kind: mLinewise, run: func(t string, p, c int) int {
-		if c == 0 {
-			return lastLineStart(t)
-		}
-		return gotoLine(t, c)
-	}},
-}
-
 func charLeft(text string, pos, count int) int {
 	ls := lineStartAt(text, pos)
 	for range max(count, 1) {
@@ -478,6 +460,24 @@ func charRight(text string, pos, count int) int {
 	return pos
 }
 
+var motions = map[rune]motion{
+	'w': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, false) }},
+	'W': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, true) }},
+	'e': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, false) }},
+	'E': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, true) }},
+	'b': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, false) }},
+	'B': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, true) }},
+	'0': {kind: mExclusive, run: func(t string, p, c int) int { return lineStartAt(t, p) }},
+	'^': {kind: mExclusive, run: func(t string, p, c int) int { return firstNonBlankOffset(t, p) }},
+	'$': {kind: mInclusive, run: endOfLineOffset},
+	'G': {kind: mLinewise, run: func(t string, p, c int) int {
+		if c == 0 {
+			return lastLineStart(t)
+		}
+		return gotoLine(t, c)
+	}},
+}
+
 // simpleMotions back h/l/j/k under an operator (plain movement uses TextArea
 // keys directly to preserve column memory).
 var simpleMotions = map[rune]motion{
@@ -487,7 +487,6 @@ var simpleMotions = map[rune]motion{
 	'k': {kind: mLinewise, run: lineUpN},
 }
 
-// gMotions resolve after a `g` prefix.
 var gMotions = map[rune]motion{
 	'g': {kind: mLinewise, run: func(t string, p, c int) int { return gotoLine(t, c) }},
 	'e': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackwardEnd, t, p, c, false) }},
