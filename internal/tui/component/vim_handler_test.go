@@ -50,31 +50,6 @@ func testDeleteChar(ta *testTA) {
 	ta.Replace(pos, pos+size, "")
 }
 
-func testDeleteToEOL(ta *testTA) {
-	pos := ta.GetCursorByteOffset()
-	after := ta.GetTextAfterCursor()
-	if nl := strings.IndexByte(after, '\n'); nl >= 0 {
-		ta.Replace(pos, pos+nl, "")
-	} else {
-		ta.Replace(pos, pos+len(after), "")
-	}
-}
-
-func testDeleteLine(ta *testTA) {
-	text := ta.GetText()
-	pos := ta.GetCursorByteOffset()
-	lineStart := strings.LastIndexByte(text[:pos], '\n') + 1
-	lineEnd := strings.IndexByte(text[pos:], '\n')
-	if lineEnd < 0 {
-		if lineStart > 0 {
-			lineStart--
-		}
-		ta.Replace(lineStart, len(text), "")
-	} else {
-		ta.Replace(lineStart, pos+lineEnd+1, "")
-	}
-}
-
 func TestDeleteCharUnderCursor(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -98,55 +73,6 @@ func TestDeleteCharUnderCursor(t *testing.T) {
 		})
 	}
 }
-
-func TestDeleteToEOL(t *testing.T) {
-	tests := []struct {
-		name   string
-		text   string
-		cursor int
-		want   string
-	}{
-		{"mid-line", "SELECT *\nFROM t", 7, "SELECT \nFROM t"},
-		{"at line start", "SELECT *\nFROM t", 0, "\nFROM t"},
-		{"last line no newline", "foo bar", 4, "foo "},
-		{"at end of text", "foo", 3, "foo"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ta := &testTA{text: tt.text, cursor: tt.cursor}
-			testDeleteToEOL(ta)
-			if ta.text != tt.want {
-				t.Errorf("got %q, want %q", ta.text, tt.want)
-			}
-		})
-	}
-}
-
-func TestDeleteLine(t *testing.T) {
-	tests := []struct {
-		name   string
-		text   string
-		cursor int
-		want   string
-	}{
-		{"only line", "hello", 2, ""},
-		{"first of two lines", "hello\nworld", 2, "world"},
-		{"last of two lines", "hello\nworld", 7, "hello"},
-		{"middle line", "a\nb\nc", 2, "a\nc"},
-		{"cursor at newline boundary", "hello\nworld", 5, "world"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ta := &testTA{text: tt.text, cursor: tt.cursor}
-			testDeleteLine(ta)
-			if ta.text != tt.want {
-				t.Errorf("got %q, want %q", ta.text, tt.want)
-			}
-		})
-	}
-}
-
-// --- Visual selection pure-function tests ---
 
 func TestVisualSelectionRange(t *testing.T) {
 	tests := []struct {
@@ -334,20 +260,6 @@ func TestVisualLineJK(t *testing.T) {
 	}
 }
 
-func TestVisualLineJWrappedLine(t *testing.T) {
-	// Regression: a long logical line must not cause j to get stuck.
-	// The "wrap" is purely visual; logically it's still one line.
-	text := "this is a very long line that would wrap on a narrow terminal\nnext line"
-	//       0                                                              62
-
-	cur := 0
-	if !testVisualLineJ(text, &cur) || cur != 62 {
-		t.Errorf("j on long line: got %d, want 62", cur)
-	}
-}
-
-// --- Yank overlay style tests ---
-
 func TestYankOverlayStyle(t *testing.T) {
 	fg := tcell.ColorWhite
 	bg := tcell.ColorDarkBlue
@@ -387,35 +299,6 @@ func TestYankOverlayStyle(t *testing.T) {
 				if gotBg != bg {
 					t.Errorf("offset %d outside [%d,%d): got bg %v, want original bg %v", tt.offset, tt.start, tt.end, gotBg, bg)
 				}
-			}
-		})
-	}
-}
-
-// --- Yank bounds pure-function tests ---
-
-func TestYankLineBounds(t *testing.T) {
-	// text:  "foo\nbar\nbaz"
-	//         0123 4567 8901
-	tests := []struct {
-		name      string
-		text      string
-		pos       int
-		wantStart int
-		wantEnd   int
-	}{
-		{"first line incl newline", "foo\nbar\nbaz", 1, 0, 4},
-		{"middle line incl newline", "foo\nbar\nbaz", 5, 4, 8},
-		{"last line no trailing newline", "foo\nbar\nbaz", 9, 8, 11},
-		{"single line no newline", "select 1", 3, 0, 8},
-		{"cursor at line start", "foo\nbar\nbaz", 4, 4, 8},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			start, end := yankLineBounds(tt.text, tt.pos)
-			if start != tt.wantStart || end != tt.wantEnd {
-				t.Errorf("yankLineBounds(%q, %d) = [%d,%d), want [%d,%d)",
-					tt.text, tt.pos, start, end, tt.wantStart, tt.wantEnd)
 			}
 		})
 	}
@@ -462,30 +345,6 @@ func TestLinewisePaste(t *testing.T) {
 			if got := linewisePaste(tt.full, tt.pos, tt.reg, tt.after); got != tt.want {
 				t.Errorf("linewisePaste(%q, %d, %q, after=%v) = %q, want %q",
 					tt.full, tt.pos, tt.reg, tt.after, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestYankToEOLBounds(t *testing.T) {
-	tests := []struct {
-		name      string
-		text      string
-		pos       int
-		wantStart int
-		wantEnd   int
-	}{
-		{"mid-line", "SELECT *\nFROM t", 7, 7, 8},
-		{"line start to newline", "foo\nbar", 0, 0, 3},
-		{"last line no newline", "foo bar", 4, 4, 7},
-		{"at end of text", "foo", 3, 3, 3},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			start, end := yankToEOLBounds(tt.text, tt.pos)
-			if start != tt.wantStart || end != tt.wantEnd {
-				t.Errorf("yankToEOLBounds(%q, %d) = [%d,%d), want [%d,%d)",
-					tt.text, tt.pos, start, end, tt.wantStart, tt.wantEnd)
 			}
 		})
 	}

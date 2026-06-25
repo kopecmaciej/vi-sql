@@ -31,37 +31,38 @@ func wordForward(text string, pos int, big bool) int {
 	}
 
 	// Find the class of the current character.
-	r, sz := utf8.DecodeRuneInString(text[pos:])
+	r, _ := utf8.DecodeRuneInString(text[pos:])
 	startClass := runeClass(r, big)
 
 	i := pos
+	var size int
 	// Skip the current class run (unless we're on a blank).
 	if startClass != 0 {
 		for i < n {
-			r, sz = utf8.DecodeRuneInString(text[i:])
+			r, size = utf8.DecodeRuneInString(text[i:])
 			if runeClass(r, big) != startClass {
 				break
 			}
-			i += sz
+			i += size
 		}
 	}
 
 	// Skip blanks — but stop at each empty line boundary.
 	for i < n {
-		r, sz = utf8.DecodeRuneInString(text[i:])
+		r, size = utf8.DecodeRuneInString(text[i:])
 		if r == '\n' {
 			// Check if the next char is also \n (empty line) — that's the stop.
-			next := i + sz
+			next := i + size
 			if next >= n || text[next] == '\n' {
-				return i + sz // land on the empty line (or EOF)
+				return i + size // land on the empty line (or EOF)
 			}
-			i += sz
+			i += size
 			continue
 		}
 		if runeClass(r, big) != 0 {
 			break
 		}
-		i += sz
+		i += size
 	}
 	return i
 }
@@ -75,8 +76,8 @@ func wordForwardEnd(text string, pos int, big bool) int {
 	}
 
 	// Advance at least one char.
-	_, sz := utf8.DecodeRuneInString(text[pos:])
-	i := pos + sz
+	_, size := utf8.DecodeRuneInString(text[pos:])
+	i := pos + size
 
 	// Skip blanks.
 	for i < n {
@@ -84,8 +85,8 @@ func wordForwardEnd(text string, pos int, big bool) int {
 		if runeClass(r, big) != 0 {
 			break
 		}
-		_, sz = utf8.DecodeRuneInString(text[i:])
-		i += sz
+		_, size = utf8.DecodeRuneInString(text[i:])
+		i += size
 	}
 	if i >= n {
 		return n - utf8.RuneLen(lastRune(text))
@@ -96,12 +97,12 @@ func wordForwardEnd(text string, pos int, big bool) int {
 	cls := runeClass(r, big)
 	last := i
 	for i < n {
-		r, sz = utf8.DecodeRuneInString(text[i:])
+		r, size = utf8.DecodeRuneInString(text[i:])
 		if runeClass(r, big) != cls {
 			break
 		}
 		last = i
-		i += sz
+		i += size
 	}
 	return last
 }
@@ -114,8 +115,8 @@ func wordBackward(text string, pos int, big bool) int {
 	}
 
 	// Step back one char.
-	_, sz := utf8.DecodeLastRuneInString(text[:pos])
-	i := pos - sz
+	_, size := utf8.DecodeLastRuneInString(text[:pos])
+	i := pos - size
 
 	// Skip blanks going backward.
 	for i > 0 {
@@ -123,20 +124,20 @@ func wordBackward(text string, pos int, big bool) int {
 		if runeClass(r, big) != 0 {
 			break
 		}
-		_, sz = utf8.DecodeLastRuneInString(text[:i])
-		i -= sz
+		_, size = utf8.DecodeLastRuneInString(text[:i])
+		i -= size
 	}
 
 	// Find the start of this word.
 	r, _ := utf8.DecodeRuneInString(text[i:])
 	cls := runeClass(r, big)
 	for i > 0 {
-		_, sz = utf8.DecodeLastRuneInString(text[:i])
-		r, _ = utf8.DecodeRuneInString(text[i-sz:])
+		_, size = utf8.DecodeLastRuneInString(text[:i])
+		r, _ = utf8.DecodeRuneInString(text[i-size:])
 		if runeClass(r, big) != cls {
 			break
 		}
-		i -= sz
+		i -= size
 	}
 	return i
 }
@@ -149,8 +150,8 @@ func wordBackwardEnd(text string, pos int, big bool) int {
 	}
 
 	// Step back one char.
-	_, sz := utf8.DecodeLastRuneInString(text[:pos])
-	i := pos - sz
+	_, size := utf8.DecodeLastRuneInString(text[:pos])
+	i := pos - size
 
 	// Skip blanks going backward.
 	for i > 0 {
@@ -158,8 +159,8 @@ func wordBackwardEnd(text string, pos int, big bool) int {
 		if runeClass(r, big) != 0 {
 			break
 		}
-		_, sz = utf8.DecodeLastRuneInString(text[:i])
-		i -= sz
+		_, size = utf8.DecodeLastRuneInString(text[:i])
+		i -= size
 	}
 	return i
 }
@@ -257,8 +258,8 @@ func endOfLineOffset(text string, pos, count int) int {
 	}
 	ls := lineStartAt(text, pos)
 	if eol > ls {
-		_, sz := utf8.DecodeLastRuneInString(text[:eol])
-		return eol - sz
+		_, size := utf8.DecodeLastRuneInString(text[:eol])
+		return eol - size
 	}
 	return eol
 }
@@ -324,26 +325,26 @@ func findOnce(text string, pos int, target rune, forward bool) int {
 	if forward {
 		i := pos
 		if i < len(text) {
-			_, sz := utf8.DecodeRuneInString(text[i:])
-			i += sz
+			_, size := utf8.DecodeRuneInString(text[i:])
+			i += size
 		}
 		for i < len(text) {
-			r, sz := utf8.DecodeRuneInString(text[i:])
+			r, size := utf8.DecodeRuneInString(text[i:])
 			if r == '\n' {
 				return -1
 			}
 			if r == target {
 				return i
 			}
-			i += sz
+			i += size
 		}
 		return -1
 	}
 	ls := lineStartAt(text, pos)
 	i := pos
 	for i > ls {
-		_, sz := utf8.DecodeLastRuneInString(text[:i])
-		i -= sz
+		_, size := utf8.DecodeLastRuneInString(text[:i])
+		i -= size
 		if r, _ := utf8.DecodeRuneInString(text[i:]); r == target {
 			return i
 		}
@@ -366,11 +367,11 @@ func findCharOffset(text string, pos int, target rune, forward, till bool, count
 		return cur
 	}
 	if forward {
-		_, sz := utf8.DecodeLastRuneInString(text[:cur])
-		return cur - sz
+		_, size := utf8.DecodeLastRuneInString(text[:cur])
+		return cur - size
 	}
-	_, sz := utf8.DecodeRuneInString(text[cur:])
-	dest := cur + sz
+	_, size := utf8.DecodeRuneInString(text[cur:])
+	dest := cur + size
 	if dest >= pos {
 		return -1
 	}
@@ -400,8 +401,8 @@ func rangeFor(text string, pos, dest int, kind motionKind) (start, end int) {
 	switch kind {
 	case mInclusive:
 		if end < len(text) {
-			_, sz := utf8.DecodeRuneInString(text[end:])
-			end += sz
+			_, size := utf8.DecodeRuneInString(text[end:])
+			end += size
 		}
 	case mLinewise:
 		start = lineStartAt(text, start)
@@ -443,8 +444,8 @@ func charLeft(text string, pos, count int) int {
 		if pos <= ls {
 			break
 		}
-		_, sz := utf8.DecodeLastRuneInString(text[:pos])
-		pos -= sz
+		_, size := utf8.DecodeLastRuneInString(text[:pos])
+		pos -= size
 	}
 	return pos
 }
@@ -454,8 +455,8 @@ func charRight(text string, pos, count int) int {
 		if pos >= len(text) || text[pos] == '\n' {
 			break
 		}
-		_, sz := utf8.DecodeRuneInString(text[pos:])
-		pos += sz
+		_, size := utf8.DecodeRuneInString(text[pos:])
+		pos += size
 	}
 	return pos
 }

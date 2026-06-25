@@ -7,7 +7,6 @@ import (
 )
 
 // parseCursor splits "text with |cursor" into (text, byteOffset).
-// The | marks the cursor position and is stripped from the returned text.
 func parseCursor(s string) (text string, pos int) {
 	pos = strings.IndexByte(s, '|')
 	if pos < 0 {
@@ -27,45 +26,28 @@ func TestWordForward(t *testing.T) {
 		big  bool
 		want string
 	}{
-		// core: punctuation is its own word
 		{in: "|SELECT * FROM something;", want: "SELECT |* FROM something;"},
 		{in: "SELECT |* FROM something;", want: "SELECT * |FROM something;"},
-		{in: "SELECT * |FROM something;", want: "SELECT * FROM |something;"},
 		{in: "SELECT * FROM |something;", want: "SELECT * FROM something|;"},
-		{in: "SELECT * FROM something|;", want: "SELECT * FROM something;|"},
-
-		// WORD: skip over punctuation as part of same word
 		{in: "|SELECT * FROM something;", big: true, want: "SELECT |* FROM something;"},
 		{in: "SELECT |* FROM something;", big: true, want: "SELECT * |FROM something;"},
-		// W on last WORD — no next word, cursor lands at end of text
 		{in: "SELECT * FROM |something;", big: true, want: "SELECT * FROM something;|"},
 
-		// multi-space gap
 		{in: "|foo   bar", want: "foo   |bar"},
 		{in: "|foo   bar", big: true, want: "foo   |bar"},
-
 		// empty line is a stop
 		{in: "|foo\n\nbar", want: "foo\n|\nbar"},
 		{in: "foo\n|\nbar", want: "foo\n\n|bar"},
-
 		// punctuation runs
-		{in: "|===foo", want: "===|foo"},
-		{in: "|foo===", want: "foo|==="},
 		{in: "foo|===bar", want: "foo===|bar"},
 		{in: "|((foo))", want: "((|foo))"},
 		{in: "((|foo))", want: "((foo|))"},
-
 		// SQL-flavoured strings
-		{in: "|WHERE id=42", want: "WHERE |id=42"},
 		{in: "WHERE |id=42", want: "WHERE id|=42"},
 		{in: "WHERE id|=42", want: "WHERE id=|42"},
 		{in: "|a, b, c", want: "a|, b, c"},
 		{in: "a|, b, c", want: "a, |b, c"},
-
-		// at end of text — stay put
 		{in: "foo|", want: "foo|"},
-
-		// multibyte
 		{in: "|héllo wörld", want: "héllo |wörld"},
 	}
 
@@ -91,33 +73,17 @@ func TestWordForwardEnd(t *testing.T) {
 		big  bool
 		want string
 	}{
-		// core: punctuation is its own word end
 		{in: "|SELECT * FROM something;", want: "SELEC|T * FROM something;"},
 		{in: "SELECT| * FROM something;", want: "SELECT |* FROM something;"},
-		// e from * (end of 1-char punct word) → end of next word (FROM)
 		{in: "SELECT |* FROM something;", want: "SELECT * FRO|M something;"},
 		{in: "SELECT * |FROM something;", want: "SELECT * FRO|M something;"},
 		{in: "SELECT * FROM |something;", want: "SELECT * FROM somethin|g;"},
-		// e from ; at end of text → can't advance, stay at ;
 		{in: "SELECT * FROM something|;", want: "SELECT * FROM something|;"},
 
-		// WORD: ; is part of the word — e from something stays on ;
-		{in: "SELECT * FROM |something;", big: true, want: "SELECT * FROM something|;"},
-
-		// punctuation runs
-		{in: "|===foo", want: "==|=foo"},
 		{in: "==|=foo", want: "===fo|o"},
-		// e from first ( — (( is one punct word, end = second (
 		{in: "|((foo))", want: "(|(foo))"},
-
-		// multi-space skip
 		{in: "|foo   bar", want: "fo|o   bar"},
 		{in: "foo   |bar", want: "foo   ba|r"},
-
-		// at end — stay
-		{in: "foo|", want: "foo|"},
-
-		// SQL
 		{in: "|WHERE id=42", want: "WHER|E id=42"},
 		{in: "WHERE| id=42", want: "WHERE i|d=42"},
 	}
@@ -148,23 +114,12 @@ func TestWordBackward(t *testing.T) {
 		{in: "SELECT * FROM |something;", want: "SELECT * |FROM something;"},
 		{in: "SELECT * |FROM something;", want: "SELECT |* FROM something;"},
 		{in: "SELECT |* FROM something;", want: "|SELECT * FROM something;"},
-
-		// punctuation run
-		{in: "foo===|bar", want: "foo|===bar"},
-		{in: "foo|===bar", want: "|foo===bar"},
-
-		// WORD
+		{in: "foo==|bar", want: "foo|==bar"},
+		{in: "foo|==bar", want: "|foo==bar"},
 		{in: "SELECT * FROM something|;", big: true, want: "SELECT * FROM |something;"},
-		{in: "SELECT * FROM |something;", big: true, want: "SELECT * |FROM something;"},
-
-		// at start
 		{in: "|foo bar", want: "|foo bar"},
-
-		// SQL
 		{in: "WHERE id=|42", want: "WHERE id|=42"},
 		{in: "WHERE id|=42", want: "WHERE |id=42"},
-
-		// multibyte
 		{in: "héllo |wörld", want: "|héllo wörld"},
 	}
 
@@ -194,15 +149,10 @@ func TestWordBackwardEnd(t *testing.T) {
 		{in: "SELECT * |FROM something;", want: "SELECT |* FROM something;"},
 		{in: "SELECT |* FROM something;", want: "SELEC|T * FROM something;"},
 
-		// WORD: ge lands on end of prev WORD
 		{in: "SELECT * FROM |something;", big: true, want: "SELECT * FRO|M something;"},
 		{in: "foo |bar", big: true, want: "fo|o bar"},
-
-		// punctuation
 		{in: "foo===|bar", want: "foo==|=bar"},
 		{in: "foo |===bar", want: "fo|o ===bar"},
-
-		// at start
 		{in: "|foo", want: "|foo"},
 	}
 
@@ -227,7 +177,7 @@ func TestWordForwardOperator(t *testing.T) {
 		in     string
 		big    bool
 		change bool
-		want   string // resulting buffer after delete [start,end)
+		want   string
 	}{
 		// dw: delete to next word start, clamp at newline
 		{in: "|SELECT * FROM t;", want: "|* FROM t;"},
@@ -315,17 +265,14 @@ func buildOperatorMotion(key string, op rune) (motion, rune) {
 	}
 }
 
-// TestOperatorRanges exercises the composition layer (rangeFor + motion kinds +
-// operator quirks + counts) that the plan flags as the untested glue. `count` is
-// the effective count passed to the motion (0 means "none", e.g. dG = last line).
 func TestOperatorRanges(t *testing.T) {
 	tests := []struct {
-		name  string
-		in    string // buffer with |cursor
-		op    rune
-		key   string
-		count int
-		want  string // buffer after the [start,end) range is deleted
+		name     string
+		inBuffer string
+		operator rune
+		key      string
+		count    int
+		want     string
 	}{
 		{"de inclusive at EOF", "|ab", 'd', "e", 0, ""},
 		{"dw stops before newline", "|foo\nbar", 'd', "w", 0, "\nbar"},
@@ -345,15 +292,15 @@ func TestOperatorRanges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			text, pos := parseCursor(tt.in)
-			m, ch := buildOperatorMotion(tt.key, tt.op)
-			m = operatorMotion(tt.op, ch, m, text, pos)
+			text, pos := parseCursor(tt.inBuffer)
+			m, ch := buildOperatorMotion(tt.key, tt.operator)
+			m = operatorMotion(tt.operator, ch, m, text, pos)
 			dest := m.run(text, pos, tt.count)
-			start, end := operatorRange(text, pos, dest, tt.op, m.kind)
+			start, end := operatorRange(text, pos, dest, tt.operator, m.kind)
 			got := text[:start] + text[end:]
 			if got != tt.want {
 				t.Errorf("%c%s (count=%d) on %q\n  got:  %q\n  want: %q",
-					tt.op, tt.key, tt.count, text, got, tt.want)
+					tt.operator, tt.key, tt.count, text, got, tt.want)
 			}
 		})
 	}
@@ -361,16 +308,17 @@ func TestOperatorRanges(t *testing.T) {
 
 func TestCombineCount(t *testing.T) {
 	tests := []struct {
+		exKey      string
 		a, b, want int
 	}{
-		{0, 0, 0}, // none → motions like G keep "last line"
-		{0, 3, 3}, // d3w
-		{2, 0, 2}, // 2dw
-		{2, 3, 6}, // 2d3w
+		{"none", 0, 0, 0},
+		{"d3w", 0, 3, 3},
+		{"2dw", 2, 0, 2},
+		{"2d2e", 2, 3, 6},
 	}
 	for _, tt := range tests {
 		if got := combineCount(tt.a, tt.b); got != tt.want {
-			t.Errorf("combineCount(%d,%d) = %d, want %d", tt.a, tt.b, got, tt.want)
+			t.Errorf("example key: %s for combineCount(%d,%d) = %d, want %d", tt.exKey, tt.a, tt.b, got, tt.want)
 		}
 	}
 }

@@ -61,9 +61,7 @@ func (v *vimHandler) resetPending() {
 	v.notifyPending("")
 }
 
-// combineCount folds the pre-operator and post-operator counts (vim multiplies
-// them). 0/0 stays 0 so motions like G still mean "last line" under an operator.
-// combineCount multiplies pre/post counts, so 2d4j will end up with 8dj
+// combineCount multiplies pre/post counts, like in ex: 2d4j
 func combineCount(a, b int) int {
 	if a == 0 && b == 0 {
 		return 0
@@ -176,15 +174,15 @@ func visualSelectionRange(text string, anchor, cursor int) (start, end int) {
 	if cursor >= anchor {
 		end = cursor
 		if cursor < len(text) {
-			_, sz := utf8.DecodeRuneInString(text[cursor:])
-			end = cursor + sz
+			_, size := utf8.DecodeRuneInString(text[cursor:])
+			end = cursor + size
 		}
 		return anchor, end
 	}
 	end = anchor
 	if anchor < len(text) {
-		_, sz := utf8.DecodeRuneInString(text[anchor:])
-		end = anchor + sz
+		_, size := utf8.DecodeRuneInString(text[anchor:])
+		end = anchor + size
 	}
 	return cursor, end
 }
@@ -208,27 +206,6 @@ func visualLineRange(text string, lineA, lineB int) (start, end int) {
 
 func synth(key tcell.Key) *tcell.EventKey {
 	return tcell.NewEventKey(key, 0, tcell.ModNone)
-}
-
-// yankLineBounds returns [lineStart, lineEnd) covering the full line at pos,
-// including the trailing '\n' so that `yy` highlights the whole line.
-func yankLineBounds(text string, pos int) (start, end int) {
-	start = strings.LastIndexByte(text[:pos], '\n') + 1
-	eol := strings.IndexByte(text[pos:], '\n')
-	if eol < 0 {
-		return start, len(text)
-	}
-	return start, pos + eol + 1
-}
-
-// yankToEOLBounds returns [pos, eol) — from pos to just before '\n' (or end of
-// text), matching vim's y$ which does not capture the newline.
-func yankToEOLBounds(text string, pos int) (start, end int) {
-	eol := strings.IndexByte(text[pos:], '\n')
-	if eol < 0 {
-		return pos, len(text)
-	}
-	return pos, pos + eol
 }
 
 // byteToRowCol converts a byte offset to (row, col) where col is rune-count from line start.
