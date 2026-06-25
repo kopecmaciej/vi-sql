@@ -30,7 +30,6 @@ func wordForward(text string, pos int, big bool) int {
 		return n
 	}
 
-	// Find the class of the current character.
 	r, _ := utf8.DecodeRuneInString(text[pos:])
 	startClass := runeClass(r, big)
 
@@ -51,15 +50,14 @@ func wordForward(text string, pos int, big bool) int {
 	for i < n {
 		r, size = utf8.DecodeRuneInString(text[i:])
 		if r == '\n' {
-			// Check if the next char is also \n (empty line) — that's the stop.
 			next := i + size
 			if next >= n || text[next] == '\n' {
-				return i + size // land on the empty line (or EOF)
+				return i + size
 			}
 			i += size
 			continue
 		}
-		if runeClass(r, big) != 0 {
+		if !unicode.IsSpace(r) {
 			break
 		}
 		i += size
@@ -75,17 +73,14 @@ func wordForwardEnd(text string, pos int, big bool) int {
 		return n
 	}
 
-	// Advance at least one char.
 	_, size := utf8.DecodeRuneInString(text[pos:])
-	i := pos + size
+	i := pos + size // Advance at least one char.
 
-	// Skip blanks.
 	for i < n {
-		r, _ := utf8.DecodeRuneInString(text[i:])
-		if runeClass(r, big) != 0 {
+		r, size := utf8.DecodeRuneInString(text[i:])
+		if !unicode.IsSpace(r) {
 			break
 		}
-		_, size = utf8.DecodeRuneInString(text[i:])
 		i += size
 	}
 	if i >= n {
@@ -114,21 +109,18 @@ func wordBackward(text string, pos int, big bool) int {
 		return 0
 	}
 
-	// Step back one char.
 	_, size := utf8.DecodeLastRuneInString(text[:pos])
-	i := pos - size
+	i := pos - size // Step back one char (helpful if on edge of the word)
 
-	// Skip blanks going backward.
 	for i > 0 {
 		r, _ := utf8.DecodeRuneInString(text[i:])
-		if runeClass(r, big) != 0 {
+		if !unicode.IsSpace(r) {
 			break
 		}
 		_, size = utf8.DecodeLastRuneInString(text[:i])
 		i -= size
 	}
 
-	// Find the start of this word.
 	r, _ := utf8.DecodeRuneInString(text[i:])
 	cls := runeClass(r, big)
 	for i > 0 {
@@ -149,14 +141,12 @@ func wordBackwardEnd(text string, pos int, big bool) int {
 		return 0
 	}
 
-	// Step back one char.
 	_, size := utf8.DecodeLastRuneInString(text[:pos])
-	i := pos - size
+	i := pos - size // Step back one char.
 
-	// Skip blanks going backward.
 	for i > 0 {
 		r, _ := utf8.DecodeRuneInString(text[i:])
-		if runeClass(r, big) != 0 {
+		if !unicode.IsSpace(r) {
 			break
 		}
 		_, size = utf8.DecodeLastRuneInString(text[:i])
@@ -169,11 +159,6 @@ func lastRune(s string) rune {
 	r, _ := utf8.DecodeLastRuneInString(s)
 	return r
 }
-
-// --- Motion model: every motion produces a destination byte offset and a kind
-// telling an operator how to turn [pos,dest] into a delete/yank range. Adding a
-// motion is one entry in `motions`; adding an operator is one case in
-// applyOperator — the O(operators × motions) dispatch collapses to O(ops + motions).
 
 type motionKind int
 
@@ -190,8 +175,8 @@ type motion struct {
 	kind motionKind
 }
 
-// repeat applies a single-step motion fn count times (loop-outside counts).
-func repeat(fn func(string, int, bool) int, text string, pos, count int, big bool) int {
+// repeatMotion applies a single-step motion fn count times (loop-outside counts).
+func repeatMotion(fn func(string, int, bool) int, text string, pos, count int, big bool) int {
 	if count < 1 {
 		count = 1
 	}
@@ -462,12 +447,12 @@ func charRight(text string, pos, count int) int {
 }
 
 var motions = map[rune]motion{
-	'w': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, false) }},
-	'W': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordForward, t, p, c, true) }},
-	'e': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, false) }},
-	'E': {kind: mInclusive, run: func(t string, p, c int) int { return repeat(wordForwardEnd, t, p, c, true) }},
-	'b': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, false) }},
-	'B': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackward, t, p, c, true) }},
+	'w': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordForward, t, p, c, false) }},
+	'W': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordForward, t, p, c, true) }},
+	'e': {kind: mInclusive, run: func(t string, p, c int) int { return repeatMotion(wordForwardEnd, t, p, c, false) }},
+	'E': {kind: mInclusive, run: func(t string, p, c int) int { return repeatMotion(wordForwardEnd, t, p, c, true) }},
+	'b': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordBackward, t, p, c, false) }},
+	'B': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordBackward, t, p, c, true) }},
 	'0': {kind: mExclusive, run: func(t string, p, c int) int { return lineStartAt(t, p) }},
 	'^': {kind: mExclusive, run: func(t string, p, c int) int { return firstNonBlankOffset(t, p) }},
 	'$': {kind: mInclusive, run: endOfLineOffset},
@@ -479,8 +464,6 @@ var motions = map[rune]motion{
 	}},
 }
 
-// simpleMotions back h/l/j/k under an operator (plain movement uses TextArea
-// keys directly to preserve column memory).
 var simpleMotions = map[rune]motion{
 	'h': {kind: mExclusive, run: charLeft},
 	'l': {kind: mExclusive, run: charRight},
@@ -490,6 +473,6 @@ var simpleMotions = map[rune]motion{
 
 var gMotions = map[rune]motion{
 	'g': {kind: mLinewise, run: func(t string, p, c int) int { return gotoLine(t, c) }},
-	'e': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackwardEnd, t, p, c, false) }},
-	'E': {kind: mExclusive, run: func(t string, p, c int) int { return repeat(wordBackwardEnd, t, p, c, true) }},
+	'e': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordBackwardEnd, t, p, c, false) }},
+	'E': {kind: mExclusive, run: func(t string, p, c int) int { return repeatMotion(wordBackwardEnd, t, p, c, true) }},
 }

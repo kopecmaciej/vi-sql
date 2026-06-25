@@ -312,7 +312,6 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		return true
 	}
 
-	// Table motions (word, line, document).
 	if m, ok := motions[ch]; ok {
 		v.runMotion(ch, m)
 		v.resetPending()
