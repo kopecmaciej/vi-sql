@@ -384,6 +384,8 @@ func (v *vimHandler) runMotion(ch rune, m motion) {
 	}
 	dest := m.run(text, pos, v.pending.motionCount)
 	ta.Select(dest, dest)
+	_, _, row, col := ta.GetCursor()
+	ta.MoveCursorTo(row, col)
 }
 
 // operatorMotion applies vim's word-motion quirks under an operator: dw/yw clamp
