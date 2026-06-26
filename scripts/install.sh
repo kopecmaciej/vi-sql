@@ -31,7 +31,7 @@ ARCH=$(detect_arch)
 [ "$ARCH" = "unsupported" ] && err "unsupported arch: $(uname -m)"
 
 if [ "$OS" = "Windows" ]; then
-	err "use a release artifact directly on Windows: https://github.com/${REPO}/releases"
+	err "on Windows run the PowerShell installer instead: irm https://raw.githubusercontent.com/${REPO}/master/scripts/install.ps1 | iex"
 fi
 
 VERSION="${VI_SQL_VERSION:-}"

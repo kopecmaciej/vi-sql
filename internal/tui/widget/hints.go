@@ -81,7 +81,7 @@ var appHints = []func(k *config.KeyBindings) string{
 		return fmt.Sprintf("[::b]%s[-:-:-] exports the current result set to CSV, JSON, or SQL INSERT statements.", k.Data.ExportData.String())
 	},
 	func(k *config.KeyBindings) string {
-		return "Run [::b]vi-sql --debug[-:-:-] to enable verbose logging — check /tmp/vi-sql.log for details."
+		return fmt.Sprintf("Run [::b]vi-sql --debug[-:-:-] to enable verbose logging — check %s for details.", config.LogPath)
 	},
 	func(k *config.KeyBindings) string {
 		return "Create your own style by adding a .yaml file to the styles folder in your config directory."

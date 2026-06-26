@@ -23,7 +23,7 @@ const (
 var itemDescriptions = map[string]string{
 	"Enable $EDITOR":    "Open SQL queries in an external editor (vim, nano, etc.) instead of the built-in editor.\n\nOnce enabled, use the 'Move to $EDITOR' keybinding from within the SQL editor to transfer the current query.\n\n[::b]Note: the built-in editor has SQL autocomplete; external editors do not.[::-]",
 	"Set editor":        "Command to invoke as the external editor.\n\nUse a bare command (e.g. 'vim') or prefix with '$' to read from an env var (e.g. '$EDITOR').",
-	"Log File":          "Path where structured log output is written.\n\nDefault: /tmp/vi-sql.log\n\nChange takes effect on restart.",
+	"Log File":          "Path where structured log output is written.\n\nDefaults to vi-sql.log in the OS temp directory.\n\nChange takes effect on restart.",
 	"Log Level":         "Controls how verbose the log output is.\n\n'debug' logs everything; 'info' is suitable for normal use; 'error' logs only failures.\n\nChange takes effect on restart.",
 	"Nerd Font icons":   "Enable Nerd Font symbols for richer icons in the schema tree and UI.\n\nRequires a Nerd Font to be installed and selected in your terminal emulator (e.g. JetBrainsMono Nerd Font).",
 	"Connection page":   "Show the connection selection page on every startup.\n\nWhen disabled, vi-sql connects to the last-used connection automatically.",

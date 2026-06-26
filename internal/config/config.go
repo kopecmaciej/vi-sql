@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,9 +17,10 @@ import (
 
 const (
 	ConfigFile = "config.yaml"
-	LogPath    = "/tmp/vi-sql.log"
 	FileMode   = 0600
 )
+
+var LogPath = filepath.Join(os.TempDir(), "vi-sql.log")
 
 type SQLOptions struct {
 	AlwaysConfirmActions *bool  `yaml:"alwaysConfirmActions,omitempty"`
