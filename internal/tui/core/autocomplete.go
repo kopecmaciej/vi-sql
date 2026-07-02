@@ -16,13 +16,18 @@ const AutocompleteMaxItems = 10
 // QuoteCompletion based on symbol Kind quotes columns and table name parts
 // when needed (e.g. camelCase in postgres or names with numbers like `2fa`).
 func QuoteCompletion(sym completion.Symbol, q util.Quoter) string {
+	quote := quoteIfNeeded
+	if sym.Quoted {
+		// User already opened a quote — always emit a balanced quoted identifier.
+		quote = func(name string, q util.Quoter) string { return q.Ident(name) }
+	}
 	switch sym.Kind {
 	case completion.KindColumn:
-		return quoteIfNeeded(sym.Name, q)
+		return quote(sym.Name, q)
 	case completion.KindTable:
 		parts := strings.Split(sym.Name, ".")
 		for i, p := range parts {
-			parts[i] = quoteIfNeeded(p, q)
+			parts[i] = quote(p, q)
 		}
 		return strings.Join(parts, ".")
 	default:

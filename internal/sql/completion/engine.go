@@ -136,9 +136,13 @@ func (e *Engine) SuggestTokens(tokens []sql.Token, text string, cursorPos int, c
 	}
 	ranked := Rank(candidates, partial, scope)
 	replaceStart := cursorPos - len(sqlCtx.PartialWord)
+	if sqlCtx.QuotedPartial {
+		replaceStart-- // include the opening quote char in the replaced range
+	}
 	for i := range ranked {
 		ranked[i].Replace.Start = replaceStart
 		ranked[i].Replace.End = cursorPos
+		ranked[i].Quoted = sqlCtx.QuotedPartial
 	}
 	return ranked
 }

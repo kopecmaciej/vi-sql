@@ -135,15 +135,15 @@ func extractTableRefs(tokens []sql.Token) []TableRef {
 			if j+2 < len(tokens) && tokens[j+1].Type == sql.TokenDot {
 				second := tokens[j+2]
 				if second.Type == sql.TokenIdentifier || second.Type == sql.TokenQuotedIdentifier {
-					ref.Schema = first.Value
-					ref.Table = second.Value
+					ref.Schema = sql.UnquoteIdent(first.Value)
+					ref.Table = sql.UnquoteIdent(second.Value)
 					j = j + 3
 				} else {
-					ref.Table = first.Value
+					ref.Table = sql.UnquoteIdent(first.Value)
 					j = j + 1
 				}
 			} else {
-				ref.Table = first.Value
+				ref.Table = sql.UnquoteIdent(first.Value)
 				j = j + 1
 			}
 
@@ -154,7 +154,7 @@ func extractTableRefs(tokens []sql.Token) []TableRef {
 				if next.Type == sql.TokenKeyword && strings.ToUpper(next.Value) == "AS" {
 					k = skipWS(tokens, k+1)
 					if k < len(tokens) && (tokens[k].Type == sql.TokenIdentifier || tokens[k].Type == sql.TokenQuotedIdentifier) {
-						ref.Alias = tokens[k].Value
+						ref.Alias = sql.UnquoteIdent(tokens[k].Value)
 					}
 				} else if next.Type == sql.TokenIdentifier && !tableTerminators[strings.ToUpper(next.Value)] {
 					ref.Alias = next.Value

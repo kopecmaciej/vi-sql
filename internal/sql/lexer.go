@@ -95,20 +95,25 @@ func Tokenize(sql string) []Token {
 			continue
 		}
 
-		// ── double-quoted identifier  "…" (with "" escape) ────────────────────
-		if ch == '"' {
-			i++
-			for i < n {
-				if sql[i] == '"' {
-					i++
-					if i < n && sql[i] == '"' { // escaped double quote
-						i++
-						continue
-					}
-					break
-				}
-				i++
+		// ── quoted identifier: "ansi", `mysql`, [sqlserver] ───────────────────
+		// A doubled close char is an escape ("" `` ]]). The bracket form only
+		// opens on an identifier-start char so Postgres array syntax (int[],
+		// arr[1]) still tokenizes as before.
+		if ch == '"' || ch == '`' || (ch == '[' && i+1 < n && isIdentStart(sql[i+1])) {
+			close := ch
+			if ch == '[' {
+				close = ']'
 			}
+			end, terminated := scanQuotedIdent(sql, i, close)
+			if !terminated {
+				// Unterminated: bound to identifier chars so a following keyword
+				// (FROM, WHERE) stays visible to context detection.
+				end = i + 1
+				for end < n && isIdentContinue(sql[end]) {
+					end++
+				}
+			}
+			i = end
 			tokens = append(tokens, Token{TokenQuotedIdentifier, sql[start:i], start, i})
 			continue
 		}
@@ -191,6 +196,26 @@ func Tokenize(sql string) []Token {
 	}
 
 	return tokens
+}
+
+// scanQuotedIdent scans a quoted identifier whose opening quote is at start.
+// It returns the byte offset past the closing quote and whether a close was
+// found before EOF. A doubled close char is treated as an escape (e.g. "" or ]]).
+func scanQuotedIdent(sql string, start int, close byte) (end int, terminated bool) {
+	i := start + 1
+	n := len(sql)
+	for i < n {
+		if sql[i] == close {
+			i++
+			if i < n && sql[i] == close { // doubled close = escaped
+				i++
+				continue
+			}
+			return i, true
+		}
+		i++
+	}
+	return i, false
 }
 
 // ─── character helpers ────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ type Symbol struct {
 	TypeHint  string // optional type info ("integer", "text", …)
 	IsPK      bool
 	IsFK      bool
+	Quoted    bool // partial was typed inside an opening quote → emit a fully-quoted identifier
 	Priority  int
 	Replace   struct{ Start, End int } // byte range to replace in the source text
 }

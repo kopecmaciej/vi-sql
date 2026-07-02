@@ -41,6 +41,11 @@ type CompletionContext struct {
 	// PartialWord is the text already typed at the cursor (may be empty).
 	PartialWord string
 
+	// QuotedPartial is true when the partial is being typed inside an opening
+	// identifier quote ("col, `col, [col). The engine extends the replace range
+	// over that opening quote so completion emits a balanced quoted identifier.
+	QuotedPartial bool
+
 	// PrecedingTokenType is the type of the last non-whitespace token before
 	// the cursor (or the partial word being typed). Used to distinguish
 	// "SELECT col |" (TokenIdentifier → next is a clause keyword) from
@@ -124,7 +129,7 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 		return CompletionContext{Type: CtxStatementStart}
 	}
 
-	partial, lookFrom := extractPartialAndLookFrom(tokens, cursorBytePos)
+	partial, lookFrom, quoted := extractPartialAndLookFrom(tokens, cursorBytePos)
 
 	// Skip trailing whitespace backwards.
 	for lookFrom >= 0 && tokens[lookFrom].Type == TokenWhitespace {
@@ -132,7 +137,7 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 	}
 
 	if lookFrom < 0 {
-		return CompletionContext{Type: CtxStatementStart, PartialWord: partial}
+		return CompletionContext{Type: CtxStatementStart, PartialWord: partial, QuotedPartial: quoted}
 	}
 
 	// Capture the type and value of the last non-whitespace token before the cursor.
@@ -154,13 +159,16 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 			Type:                CtxAfterDot,
 			TableName:           qualifier,
 			PartialWord:         partial,
+			QuotedPartial:       quoted,
 			PrecedingTokenType:  precedingType,
 			PrecedingTokenValue: precedingValue,
 		}
 	}
 
 	// ── walk backwards for nearest clause keyword ─────────────────────────────
-	return walkForContext(tokens, lookFrom, partial, precedingType, precedingValue)
+	ctx := walkForContext(tokens, lookFrom, partial, precedingType, precedingValue)
+	ctx.QuotedPartial = quoted
+	return ctx
 }
 
 // extractPartialAndLookFrom returns the partial word being typed at the cursor
@@ -168,7 +176,7 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 //
 //	"SELECT * FROM ta|ble"  →  partial="ta", lookFrom = index of token before "ta"
 //	"SELECT * FROM |"       →  partial="",   lookFrom = index of the space token
-func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial string, lookFrom int) {
+func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial string, lookFrom int, quoted bool) {
 	lookFrom = -1
 
 	for i, tok := range tokens {
@@ -202,10 +210,12 @@ func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial strin
 					}
 				}
 			case TokenQuotedIdentifier:
-				// Cursor editing inside a quoted identifier (e.g. "tab): treat the
-				// text after the opening quote as the partial word so completion
-				// still filters and the preceding dot is seen for qualification.
-				partial = strings.TrimPrefix(tok.Value[:cursorBytePos-tok.Start], `"`)
+				// Cursor editing inside a quoted identifier (e.g. "tab, `tab, [tab):
+				// treat the text after the opening quote as the partial word so
+				// completion still filters and the preceding dot is seen for
+				// qualification.
+				partial = stripOpenQuote(tok.Value[:cursorBytePos-tok.Start])
+				quoted = true
 				lookFrom = i - 1
 			default:
 				// Non-word token (dot, operator, punctuation, whitespace):
@@ -221,11 +231,33 @@ func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial strin
 	return
 }
 
-// unquoteIdent strips surrounding double quotes and unescapes "" → ".
-func unquoteIdent(s string) string {
-	s = strings.TrimPrefix(s, `"`)
-	s = strings.TrimSuffix(s, `"`)
-	return strings.ReplaceAll(s, `""`, `"`)
+// isOpenQuote reports whether ch opens a quoted identifier ("ansi, `mysql, [sqlserver).
+func isOpenQuote(ch byte) bool {
+	return ch == '"' || ch == '`' || ch == '['
+}
+
+// stripOpenQuote removes a single leading identifier-quote char, if present.
+func stripOpenQuote(s string) string {
+	if len(s) > 0 && isOpenQuote(s[0]) {
+		return s[1:]
+	}
+	return s
+}
+
+// UnquoteIdent strips surrounding identifier quotes and unescapes doubled
+// quote chars (e.g. "" to ", or ]] to ]).
+func UnquoteIdent(s string) string {
+	if len(s) == 0 || !isOpenQuote(s[0]) {
+		return s
+	}
+	open := s[0]
+	close := open
+	if open == '[' {
+		close = ']'
+	}
+	s = strings.TrimPrefix(s, string(open))
+	s = strings.TrimSuffix(s, string(close))
+	return strings.ReplaceAll(s, string(close)+string(close), string(close))
 }
 
 // qualifierBeforeDot returns the identifier immediately before the dot at dotIdx.
@@ -242,7 +274,7 @@ func qualifierBeforeDot(tokens []Token, dotIdx int) string {
 		return t.Value
 	}
 	if t.Type == TokenQuotedIdentifier {
-		return unquoteIdent(t.Value)
+		return UnquoteIdent(t.Value)
 	}
 	return ""
 }

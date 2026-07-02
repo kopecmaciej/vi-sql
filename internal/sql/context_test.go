@@ -137,18 +137,31 @@ func TestDetectContext_QuotedIdentifier(t *testing.T) {
 	tests := []struct {
 		name        string
 		sql         string
+		cursor      int // 0 → end of sql
 		wantType    ContextType
 		wantTable   string
 		wantPartial string
+		wantQuoted  bool
 	}{
-		{"editing quoted table after from", `SELECT * FROM "us`, CtxAfterFrom, "", "us"},
-		{"editing quoted table after qualified dot", `SELECT * FROM "schema"."tab`, CtxAfterDot, "schema", "tab"},
-		{"cursor after dot following quoted qualifier", `SELECT * FROM "schema".`, CtxAfterDot, "schema", ""},
-		{"editing quoted column after dot", `SELECT "users"."na`, CtxAfterDot, "users", "na"},
+		{"editing quoted table after from", `SELECT * FROM "us`, 0, CtxAfterFrom, "", "us", true},
+		{"editing quoted table after qualified dot", `SELECT * FROM "schema"."tab`, 0, CtxAfterDot, "schema", "tab", true},
+		{"cursor after dot following quoted qualifier", `SELECT * FROM "schema".`, 0, CtxAfterDot, "schema", "", false},
+		{"editing quoted column after dot", `SELECT "users"."na`, 0, CtxAfterDot, "users", "na", true},
+		{"ansi column keeps following from in scope", `SELECT "c FROM users`, len(`SELECT "c`), CtxAfterSelect, "", "c", true},
+		{"backtick column after select", "SELECT `c FROM users", len("SELECT `c"), CtxAfterSelect, "", "c", true},
+		{"bracket column after select", `SELECT [c FROM users`, len(`SELECT [c`), CtxAfterSelect, "", "c", true},
+		{"backtick table after from", "SELECT * FROM `us", 0, CtxAfterFrom, "", "us", true},
+		{"bracket table after from", `SELECT * FROM [us`, 0, CtxAfterFrom, "", "us", true},
+		{"backtick column after dot", "SELECT `users`.`na", 0, CtxAfterDot, "users", "na", true},
+		{"bracket column after dot", `SELECT [users].[na`, 0, CtxAfterDot, "users", "na", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := ctx(tt.sql)
+			cursor := tt.cursor
+			if cursor == 0 {
+				cursor = len(tt.sql)
+			}
+			c := ctxAt(tt.sql, cursor)
 			if c.Type != tt.wantType {
 				t.Errorf("Type=%d, want %d", c.Type, tt.wantType)
 			}
@@ -157,6 +170,9 @@ func TestDetectContext_QuotedIdentifier(t *testing.T) {
 			}
 			if c.PartialWord != tt.wantPartial {
 				t.Errorf("PartialWord=%q, want %q", c.PartialWord, tt.wantPartial)
+			}
+			if c.QuotedPartial != tt.wantQuoted {
+				t.Errorf("QuotedPartial=%v, want %v", c.QuotedPartial, tt.wantQuoted)
 			}
 		})
 	}

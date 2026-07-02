@@ -23,6 +23,10 @@ func TestQuoteCompletion(t *testing.T) {
 		{"plain qualified table stays bare", completion.Symbol{Kind: completion.KindTable, Name: "public.users"}, util.ANSIQuoter, "public.users"},
 		{"mixed case qualified table quoted (ansi)", completion.Symbol{Kind: completion.KindTable, Name: "public.Users"}, util.ANSIQuoter, `public."Users"`},
 		{"keyword symbol inserted verbatim", completion.Symbol{Kind: completion.KindKeyword, Name: "SELECT"}, util.ANSIQuoter, "SELECT"},
+		{"quoted flag forces ansi quotes", completion.Symbol{Kind: completion.KindColumn, Name: "category", Quoted: true}, util.ANSIQuoter, `"category"`},
+		{"quoted flag forces backtick quotes", completion.Symbol{Kind: completion.KindColumn, Name: "category", Quoted: true}, util.BacktickQuoter, "`category`"},
+		{"quoted flag forces bracket quotes", completion.Symbol{Kind: completion.KindColumn, Name: "category", Quoted: true}, util.BracketQuoter, "[category]"},
+		{"quoted flag quotes each table part", completion.Symbol{Kind: completion.KindTable, Name: "public.users", Quoted: true}, util.ANSIQuoter, `"public"."users"`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -480,6 +480,11 @@ func TestEngine_WHERE_Columns(t *testing.T) {
 			want: []string{"id", "method", "amount"},
 		},
 		{
+			sql:  `SELECT * FROM "orders"."orders" WHERE `,
+			desc: "quoted schema-qualified table columns available",
+			want: []string{"id", "method", "amount"},
+		},
+		{
 			sql:  "SELECT * FROM users u JOIN orders o ON u.id = o.user_id WHERE ",
 			desc: "columns from both joined tables available",
 			want: []string{"id", "email", "method", "amount"},
@@ -715,6 +720,55 @@ func TestEngine_SELECT_ColumnStarstWithDigit(t *testing.T) {
 	}
 }
 
+// TestEngine_QuotedIdentifier_Columns covers issue #55: an unterminated opening
+// quote before a column must still suggest columns (the following FROM is no
+// longer swallowed), flag the symbol as Quoted, and extend the replace range
+// back over the opening quote so acceptance emits a balanced identifier.
+func TestEngine_QuotedIdentifier_Columns(t *testing.T) {
+	e := NewDefaultEngine()
+	c := cfgWithCols()
+
+	cases := []struct {
+		name     string
+		sql      string
+		want     string
+		openQuot byte
+	}{
+		{"ansi", `SELECT "cr FROM users`, "created_at", '"'},
+		{"backtick", "SELECT `cr FROM users", "created_at", '`'},
+		{"bracket", `SELECT [cr FROM users`, "created_at", '['},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cursor := len("SELECT ") + 3 // just past the opening quote + "cr"
+			syms := e.Suggest(tc.sql, cursor, c)
+
+			var got *Symbol
+			for i := range syms {
+				if syms[i].Name == tc.want {
+					got = &syms[i]
+					break
+				}
+			}
+			if got == nil {
+				t.Fatalf("expected column %q in suggestions: %v", tc.want, symbolNames(syms))
+			}
+			if !got.Quoted {
+				t.Errorf("Quoted=false, want true")
+			}
+			// Replace.Start must point at the opening quote so it is replaced too.
+			if tc.sql[got.Replace.Start] != tc.openQuot {
+				t.Errorf("Replace.Start points at %q, want opening quote %q",
+					tc.sql[got.Replace.Start], tc.openQuot)
+			}
+			if got.Replace.End != cursor {
+				t.Errorf("Replace.End=%d, want %d", got.Replace.End, cursor)
+			}
+		})
+	}
+}
+
 func TestBuildScope(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -737,6 +791,16 @@ func TestBuildScope(t *testing.T) {
 			name:     "schema qualified with alias",
 			sql:      "SELECT * FROM public.users u",
 			wantRefs: []TableRef{{Schema: "public", Table: "users", Alias: "u"}},
+		},
+		{
+			name:     "quoted schema qualified strips quotes",
+			sql:      `SELECT * FROM "audit"."events"`,
+			wantRefs: []TableRef{{Schema: "audit", Table: "events"}},
+		},
+		{
+			name:     "quoted table with quoted alias strips quotes",
+			sql:      `SELECT * FROM "users" AS "u"`,
+			wantRefs: []TableRef{{Table: "users", Alias: "u"}},
 		},
 		{
 			name:     "alias with AS",

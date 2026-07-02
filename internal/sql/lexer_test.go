@@ -80,6 +80,78 @@ func TestTokenize_QuotedIdentifier_EscapedQuote(t *testing.T) {
 	}
 }
 
+// TestTokenize_QuotedIdentifier_Dialects covers backtick (MySQL) and bracket
+// (SQL Server) quoting, including the ]] escape.
+func TestTokenize_QuotedIdentifier_Dialects(t *testing.T) {
+	tests := []struct {
+		sql     string
+		wantVal string
+	}{
+		{"`My Col`", "`My Col`"},
+		{"`a``b`", "`a``b`"}, // doubled backtick escape
+		{`[My Col]`, `[My Col]`},
+		{`[a]]b]`, `[a]]b]`}, // ]] escape
+	}
+	for _, tc := range tests {
+		tokens := Tokenize(tc.sql)
+		if len(tokens) != 1 {
+			t.Errorf("sql=%q: got %d tokens, want 1: %v", tc.sql, len(tokens), tokens)
+			continue
+		}
+		if tokens[0].Type != TokenQuotedIdentifier {
+			t.Errorf("sql=%q: type=%d, want TokenQuotedIdentifier", tc.sql, tokens[0].Type)
+		}
+		if tokens[0].Value != tc.wantVal {
+			t.Errorf("sql=%q: value=%q, want %q", tc.sql, tokens[0].Value, tc.wantVal)
+		}
+	}
+}
+
+// TestTokenize_UnterminatedQuote verifies an unterminated quoted identifier is
+// bounded to its identifier run so a following keyword stays a separate token
+// (regression for issue #55: FROM must not be swallowed).
+func TestTokenize_UnterminatedQuote(t *testing.T) {
+	tests := []struct{ name, sql, wantQuoted string }{
+		{"ansi", `SELECT "c FROM users`, `"c`},
+		{"backtick", "SELECT `c FROM users", "`c"},
+		{"bracket", `SELECT [c FROM users`, `[c`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tokens := Tokenize(tc.sql)
+			var gotQuoted string
+			var sawFrom bool
+			for _, tok := range tokens {
+				if tok.Type == TokenQuotedIdentifier {
+					gotQuoted = tok.Value
+				}
+				if tok.Type == TokenKeyword && tok.Value == "FROM" {
+					sawFrom = true
+				}
+			}
+			if gotQuoted != tc.wantQuoted {
+				t.Errorf("quoted token=%q, want %q", gotQuoted, tc.wantQuoted)
+			}
+			if !sawFrom {
+				t.Errorf("FROM keyword was swallowed by the unterminated quote")
+			}
+		})
+	}
+}
+
+// TestTokenize_BracketNotArray verifies Postgres array syntax is unaffected:
+// [ only opens a bracket identifier when followed by an identifier-start char.
+func TestTokenize_BracketNotArray(t *testing.T) {
+	for _, sql := range []string{"int[]", "arr[1]"} {
+		tokens := Tokenize(sql)
+		for _, tok := range tokens {
+			if tok.Type == TokenQuotedIdentifier {
+				t.Errorf("sql=%q: unexpected quoted identifier %q", sql, tok.Value)
+			}
+		}
+	}
+}
+
 func TestTokenize_LineComment(t *testing.T) {
 	tokens := Tokenize("-- comment\nSELECT")
 	if len(tokens) != 3 {
