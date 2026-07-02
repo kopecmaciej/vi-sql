@@ -40,11 +40,9 @@ type SQLQueryEditor struct {
 	onOpenInEditor   func()
 	onCancel         func()
 	onModeChange     func(indicator string)
-	// yankHighlight is the active highlight byte range [start, end). generation
-	// guards the clearing goroutine: it only clears if no newer yank has started.
-	yankHighlight struct {
+	yankHighlight    struct {
 		start, end int
-		generation uint64
+		generation uint64 // guards clearing goroutine from clearing too early
 	}
 	// tokenCache is shared between syntax highlighting and autocomplete
 	tokenCache struct {

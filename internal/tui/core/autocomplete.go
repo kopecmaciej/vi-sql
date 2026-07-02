@@ -18,7 +18,6 @@ const AutocompleteMaxItems = 10
 func QuoteCompletion(sym completion.Symbol, q util.Quoter) string {
 	quote := quoteIfNeeded
 	if sym.Quoted {
-		// User already opened a quote — always emit a balanced quoted identifier.
 		quote = func(name string, q util.Quoter) string { return q.Ident(name) }
 	}
 	switch sym.Kind {

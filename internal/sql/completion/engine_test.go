@@ -46,8 +46,6 @@ func cfgWithCols() Context {
 	}
 }
 
-// TestEngine_FROM_Tables covers table listing and partial filtering in FROM context,
-// including schema-qualified qualifiers and CTE names.
 func TestEngine_FROM_Tables(t *testing.T) {
 	e := NewDefaultEngine()
 	cases := []struct {
@@ -94,8 +92,6 @@ func TestEngine_FROM_Tables(t *testing.T) {
 	}
 }
 
-// TestEngine_FROM_AfterCompleteTableRef verifies that after a fully-typed table
-// reference the engine offers clause keywords (WHERE, JOIN, ORDER BY) not more tables.
 func TestEngine_FROM_AfterCompleteTableRef(t *testing.T) {
 	cases := []struct {
 		sql  string
@@ -127,8 +123,6 @@ func TestEngine_FROM_AfterCompleteTableRef(t *testing.T) {
 	}
 }
 
-// TestEngine_JOIN_Tables verifies table suggestions after JOIN keywords,
-// including partial filtering.
 func TestEngine_JOIN_Tables(t *testing.T) {
 	e := NewDefaultEngine()
 	cases := []struct {
@@ -170,8 +164,6 @@ func TestEngine_JOIN_Tables(t *testing.T) {
 	}
 }
 
-// TestEngine_JOIN_AfterCompleteRef verifies that after a complete JOIN table ref
-// clause keywords (ON, WHERE) are offered, not more tables.
 func TestEngine_JOIN_AfterCompleteRef(t *testing.T) {
 	e := NewDefaultEngine()
 	cases := []struct {
@@ -201,7 +193,6 @@ func TestEngine_JOIN_AfterCompleteRef(t *testing.T) {
 	}
 }
 
-// TestEngine_JOIN_ON_Columns verifies that column suggestions appear in the ON clause.
 func TestEngine_JOIN_ON_Columns(t *testing.T) {
 	e := NewDefaultEngine()
 	c := cfgWithCols()
@@ -267,7 +258,6 @@ func TestEngine_SELECT_ExpressionPositions(t *testing.T) {
 		}
 	})
 
-	// After AS: no keywords at all (user types a free alias name).
 	t.Run("after AS", func(t *testing.T) {
 		syms := e.Suggest("SELECT id AS ", len("SELECT id AS "), cfg())
 		for _, s := range syms {
@@ -345,13 +335,9 @@ func TestEngine_SELECT_InJoinQuery(t *testing.T) {
 	}
 }
 
-// TestEngine_WHERE_Keywords covers both the expression-start position (after WHERE
-// or AND/OR) and the post-value position (after a column name or literal), using
-// realistic queries including schema-qualified tables and multi-join FROM clauses.
 func TestEngine_WHERE_Keywords(t *testing.T) {
 	e := NewDefaultEngine()
 
-	// Expression-start: unary starters and functions; no binary operators.
 	startCases := []struct {
 		sql  string
 		desc string
@@ -375,7 +361,6 @@ func TestEngine_WHERE_Keywords(t *testing.T) {
 		}
 	}
 
-	// Post-value: binary operators; no expression starters or functions.
 	postValueCases := []struct {
 		sql  string
 		desc string
@@ -399,8 +384,6 @@ func TestEngine_WHERE_Keywords(t *testing.T) {
 	}
 }
 
-// TestEngine_WHERE_PostPredicateClauseKeywords verifies that ORDER BY and other
-// clause keywords appear after a complete WHERE predicate (value position).
 func TestEngine_WHERE_PostPredicateClauseKeywords(t *testing.T) {
 	e := NewDefaultEngine()
 	cases := []struct {
@@ -720,10 +703,6 @@ func TestEngine_SELECT_ColumnStarstWithDigit(t *testing.T) {
 	}
 }
 
-// TestEngine_QuotedIdentifier_Columns covers issue #55: an unterminated opening
-// quote before a column must still suggest columns (the following FROM is no
-// longer swallowed), flag the symbol as Quoted, and extend the replace range
-// back over the opening quote so acceptance emits a balanced identifier.
 func TestEngine_QuotedIdentifier_Columns(t *testing.T) {
 	e := NewDefaultEngine()
 	c := cfgWithCols()
@@ -741,7 +720,7 @@ func TestEngine_QuotedIdentifier_Columns(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cursor := len("SELECT ") + 3 // just past the opening quote + "cr"
+			cursor := len("SELECT ") + 3 // quote + "cr"
 			syms := e.Suggest(tc.sql, cursor, c)
 
 			var got *Symbol
@@ -757,7 +736,6 @@ func TestEngine_QuotedIdentifier_Columns(t *testing.T) {
 			if !got.Quoted {
 				t.Errorf("Quoted=false, want true")
 			}
-			// Replace.Start must point at the opening quote so it is replaced too.
 			if tc.sql[got.Replace.Start] != tc.openQuot {
 				t.Errorf("Replace.Start points at %q, want opening quote %q",
 					tc.sql[got.Replace.Start], tc.openQuot)

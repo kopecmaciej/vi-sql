@@ -1,5 +1,7 @@
 package sql
 
+import "strings"
+
 // DMLKeywords are the top-level statement-opening keywords.
 var DMLKeywords = []string{
 	"SELECT", "INSERT", "UPDATE", "DELETE", "WITH", "MERGE",
@@ -109,23 +111,6 @@ var AdminKeywords = []string{
 	"GRANT", "REVOKE", "EXPLAIN", "ANALYZE", "VACUUM",
 }
 
-// SQLKeywords is a flat list of expression-level keywords for autocomplete
-// consumers that don't use the context-aware engine (e.g. InputBar).
-// Built from the specific slices to avoid duplication.
-var SQLKeywords = func() []string {
-	out := make([]string, 0,
-		len(OperatorKeywords)+len(FunctionKeywords)+len(OrderKeywords)+len(ExpressionKeywords)+9)
-	out = append(out, OperatorKeywords...)
-	out = append(out, FunctionKeywords...)
-	out = append(out, OrderKeywords...)
-	out = append(out, ExpressionKeywords...)
-	out = append(out,
-		"::text", "::int", "::bigint", "::numeric", "::boolean",
-		"::date", "::timestamp", "::jsonb",
-	)
-	return out
-}()
-
 // allKeywordWords is used exclusively by the lexer to build its keyword
 // recognition set. It covers every group — including DDL, transaction, and
 // admin keywords — so all SQL reserved words are syntax-highlighted even
@@ -146,3 +131,20 @@ var allKeywordWords = func() []string {
 	}
 	return out
 }()
+
+// sqlKeywordSet is the full set of SQL reserved words recognised by the lexer.
+// Multi-word entries, like "LEFT JOIN" are split into two separate words so
+// they can be properly classified as 2 TokenKeyword's during tokenization.
+var sqlKeywordSet = func() map[string]bool {
+	m := make(map[string]bool, len(allKeywordWords)*2)
+	for _, kw := range allKeywordWords {
+		for word := range strings.FieldsSeq(kw) {
+			m[strings.ToUpper(word)] = true
+		}
+	}
+	return m
+}()
+
+func IsKeyword(word string) bool {
+	return sqlKeywordSet[strings.ToUpper(word)]
+}

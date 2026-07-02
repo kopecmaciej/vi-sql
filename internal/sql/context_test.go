@@ -111,8 +111,8 @@ func TestDetectContext_AfterDot_NoPartial(t *testing.T) {
 	if c.Type != CtxAfterDot {
 		t.Errorf("got %d, want CtxAfterDot", c.Type)
 	}
-	if c.TableName != "users" {
-		t.Errorf("TableName=%q, want %q", c.TableName, "users")
+	if c.Qualifier != "users" {
+		t.Errorf("Qualifier=%q, want %q", c.Qualifier, "users")
 	}
 	if c.PartialWord != "" {
 		t.Errorf("PartialWord=%q, want empty", c.PartialWord)
@@ -125,8 +125,8 @@ func TestDetectContext_AfterDot_WithPartial(t *testing.T) {
 	if c.Type != CtxAfterDot {
 		t.Errorf("got %d, want CtxAfterDot", c.Type)
 	}
-	if c.TableName != "users" {
-		t.Errorf("TableName=%q, want %q", c.TableName, "users")
+	if c.Qualifier != "users" {
+		t.Errorf("Qualifier=%q, want %q", c.Qualifier, "users")
 	}
 	if c.PartialWord != "na" {
 		t.Errorf("PartialWord=%q, want %q", c.PartialWord, "na")
@@ -165,8 +165,8 @@ func TestDetectContext_QuotedIdentifier(t *testing.T) {
 			if c.Type != tt.wantType {
 				t.Errorf("Type=%d, want %d", c.Type, tt.wantType)
 			}
-			if c.TableName != tt.wantTable {
-				t.Errorf("TableName=%q, want %q", c.TableName, tt.wantTable)
+			if c.Qualifier != tt.wantTable {
+				t.Errorf("Qualifier=%q, want %q", c.Qualifier, tt.wantTable)
 			}
 			if c.PartialWord != tt.wantPartial {
 				t.Errorf("PartialWord=%q, want %q", c.PartialWord, tt.wantPartial)
@@ -183,8 +183,8 @@ func TestDetectContext_SchemaQualified(t *testing.T) {
 	if c.Type != CtxAfterDot {
 		t.Errorf("got %d, want CtxAfterDot", c.Type)
 	}
-	if c.TableName != "public" {
-		t.Errorf("TableName=%q, want %q", c.TableName, "public")
+	if c.Qualifier != "public" {
+		t.Errorf("Qualifier=%q, want %q", c.Qualifier, "public")
 	}
 }
 

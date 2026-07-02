@@ -16,7 +16,7 @@ func (AliasProvider) Applicable(ctx sql.ContextType, _ *QueryScope) bool {
 }
 
 func (AliasProvider) Suggest(ctx sql.CompletionContext, scope *QueryScope, partial string, cfg Context) []Symbol {
-	qualifier := ctx.TableName
+	qualifier := ctx.Qualifier
 	lowerQualifier := strings.ToLower(qualifier)
 
 	if tables, ok := cfg.Index.bySchema[lowerQualifier]; ok {

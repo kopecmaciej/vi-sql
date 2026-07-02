@@ -33,10 +33,9 @@ const CtxAfterDDLObject = CtxExistingObject
 type CompletionContext struct {
 	Type ContextType
 
-	// TableName holds the qualifier before a dot (CtxAfterDot):
-	//   "users"  in  users.‹cursor›
-	//   "public" in  public.‹cursor›
-	TableName string
+	// Qualifier holds the identifier before a dot (CtxAfterDot). It may resolve
+	// to a table/alias or a schema
+	Qualifier string
 
 	// PartialWord is the text already typed at the cursor (may be empty).
 	PartialWord string
@@ -58,12 +57,9 @@ type CompletionContext struct {
 	PrecedingTokenValue string
 }
 
-// SuppressRaw reports whether autocompletion should be suppressed at cursorPos
-// using only the raw text, without tokenizing. It covers:
-//   - partial word starting with a digit (inside a number literal, e.g. "123|", "col = 1|")
-//   - char immediately before the partial is a digit or operator (e.g. "1a|", ">=x|")
-//   - char immediately before the partial is a quote (e.g. "'|", "'hello'x|")
-//   - cursor inside a string literal detected via odd single-quote count (e.g. "'hello world|")
+// SuppressRaw is a cheap pre-check whether autocompletion should be suppressed
+// at cursorPos so we can avoid tokenizing. It covers cursor inside strings, numbers,
+// and right after an operator or quote character.
 func SuppressRaw(text string, cursorPos int) bool {
 	if cursorPos == 0 {
 		return false
@@ -76,7 +72,7 @@ func SuppressRaw(text string, cursorPos int) bool {
 		// Pure numeric partial (e.g. "123") → always suppress.
 		pureNum := true
 		for k := pos; k < cursorPos; k++ {
-			if !isNumContinue(text[k]) {
+			if !isPartOfNumber(text[k]) {
 				pureNum = false
 				break
 			}
@@ -151,13 +147,12 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 		precedingType, precedingValue = resolveStarPrecedingType(tokens, lookFrom)
 	}
 
-	// ── dot-qualified context ─────────────────────────────────────────────────
-	// e.g.  users.‹cursor›  or  public.users.‹cursor›
+	// dot-qualified context e.g. users.‹cursor› or public.users.‹cursor›
 	if tokens[lookFrom].Type == TokenDot {
 		qualifier := qualifierBeforeDot(tokens, lookFrom)
 		return CompletionContext{
 			Type:                CtxAfterDot,
-			TableName:           qualifier,
+			Qualifier:           qualifier,
 			PartialWord:         partial,
 			QuotedPartial:       quoted,
 			PrecedingTokenType:  precedingType,
@@ -165,7 +160,7 @@ func DetectContext(tokens []Token, cursorBytePos int) CompletionContext {
 		}
 	}
 
-	// ── walk backwards for nearest clause keyword ─────────────────────────────
+	// walk backwards for nearest clause keyword
 	ctx := walkForContext(tokens, lookFrom, partial, precedingType, precedingValue)
 	ctx.QuotedPartial = quoted
 	return ctx
@@ -231,12 +226,10 @@ func extractPartialAndLookFrom(tokens []Token, cursorBytePos int) (partial strin
 	return
 }
 
-// isOpenQuote reports whether ch opens a quoted identifier ("ansi, `mysql, [sqlserver).
 func isOpenQuote(ch byte) bool {
 	return ch == '"' || ch == '`' || ch == '['
 }
 
-// stripOpenQuote removes a single leading identifier-quote char, if present.
 func stripOpenQuote(s string) string {
 	if len(s) > 0 && isOpenQuote(s[0]) {
 		return s[1:]
@@ -244,8 +237,6 @@ func stripOpenQuote(s string) string {
 	return s
 }
 
-// UnquoteIdent strips surrounding identifier quotes and unescapes doubled
-// quote chars (e.g. "" to ", or ]] to ]).
 func UnquoteIdent(s string) string {
 	if len(s) == 0 || !isOpenQuote(s[0]) {
 		return s
@@ -329,7 +320,6 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 			return CompletionContext{Type: CtxAfterHaving, PartialWord: partial, PrecedingTokenType: precedingType, PrecedingTokenValue: precedingValue}
 
 		case "BY":
-			// Distinguish ORDER BY vs GROUP BY by looking at the preceding keyword.
 			for j := i - 1; j >= 0; j-- {
 				if tokens[j].Type == TokenWhitespace {
 					continue
@@ -368,7 +358,6 @@ func walkForContext(tokens []Token, startIdx int, partial string, precedingType 
 
 		case "TABLE", "VIEW", "INDEX", "SCHEMA", "DATABASE",
 			"SEQUENCE", "FUNCTION", "PROCEDURE", "TRIGGER", "TYPE":
-			// Look back for the DDL verb to distinguish CREATE from DROP/ALTER/TRUNCATE/RENAME.
 			for j := i - 1; j >= 0; j-- {
 				if tokens[j].Type == TokenWhitespace {
 					continue
