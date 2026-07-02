@@ -10,7 +10,7 @@ import (
 // Column is a minimal column descriptor used by the completion engine.
 type Column struct {
 	Name     string
-	TypeHint string // e.g. "integer", "text", "timestamp"
+	TypeHint string
 	IsPK     bool
 	IsFK     bool
 }

@@ -40,11 +40,12 @@ type SQLQueryEditor struct {
 	onOpenInEditor   func()
 	onCancel         func()
 	onModeChange     func(indicator string)
-	// Yank highlight: active byte range [yankHLStart, yankHLEnd) and a generation
-	// counter so the clearing goroutine doesn't overwrite a newer highlight.
-	yankHLStart int
-	yankHLEnd   int
-	yankHLGen   uint64
+	// yankHighlight is the active highlight byte range [start, end). generation
+	// guards the clearing goroutine: it only clears if no newer yank has started.
+	yankHighlight struct {
+		start, end int
+		generation uint64
+	}
 	// tokenCache is shared between syntax highlighting and autocomplete
 	tokenCache struct {
 		text   string
@@ -186,7 +187,7 @@ func (e *SQLQueryEditor) setHighlighting() {
 		}
 		base := core.SQLTokenStyle(e.tokenCache.tokens, byteOffset, e.style)
 		hStyle := e.App.GetStyles().Global.MoreContrastBackgroundColor.Color()
-		return yankOverlayStyle(base, hStyle, e.yankHLStart, e.yankHLEnd, byteOffset)
+		return yankOverlayStyle(base, hStyle, e.yankHighlight.start, e.yankHighlight.end, byteOffset)
 	})
 }
 
@@ -202,16 +203,16 @@ func yankOverlayStyle(base tcell.Style, bg tcell.Color, start, end, offset int) 
 // BeginYankHighlight highlights [start, end) for 350 ms, then clears.
 // The highlight is applied via the styleFunc so cursor position is untouched.
 func (e *SQLQueryEditor) BeginYankHighlight(start, end int) {
-	e.yankHLGen++
-	e.yankHLStart = start
-	e.yankHLEnd = end
-	gen := e.yankHLGen
+	e.yankHighlight.generation++
+	e.yankHighlight.start = start
+	e.yankHighlight.end = end
+	generation := e.yankHighlight.generation
 	go func() {
 		time.Sleep(350 * time.Millisecond)
 		e.App.QueueUpdateDraw(func() {
-			if e.yankHLGen == gen {
-				e.yankHLStart = 0
-				e.yankHLEnd = 0
+			if e.yankHighlight.generation == generation {
+				e.yankHighlight.start = 0
+				e.yankHighlight.end = 0
 			}
 		})
 	}()
