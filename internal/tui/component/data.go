@@ -1481,3 +1481,8 @@ func (c *Data) OpenHistory() {
 func (c *Data) OpenHistoryWithCallback(onAccept func(query string)) {
 	c.sqlQueryEditor.OpenHistoryWithCallback(onAccept)
 }
+
+// Prettify reformats the SQL editor's buffer.
+func (c *Data) Prettify() {
+	c.sqlQueryEditor.Prettify()
+}

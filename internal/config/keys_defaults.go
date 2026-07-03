@@ -302,4 +302,10 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Description: "Open in $EDITOR",
 		},
 	}
+
+	if vimMode {
+		k.SQLQueryEditor.Prettify = Key{Sequences: []string{"gf"}, Description: "Format SQL"}
+	} else {
+		k.SQLQueryEditor.Prettify = Key{Keys: []string{"Ctrl+f"}, Description: "Format SQL"}
+	}
 }

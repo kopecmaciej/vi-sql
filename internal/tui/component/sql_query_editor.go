@@ -336,27 +336,11 @@ func (e *SQLQueryEditor) SetOnCancel(fn func()) {
 // else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return e.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
-		// Vim mode intercept — runs before all other key handling.
-		// Non-rune keys (Ctrl+Enter, arrows, etc.) fall through unchanged,
-		// so execute, paste, history, and autocomplete bindings are unaffected.
-		if e.vim != nil && e.vim.Handle(event, setFocus) {
-			return
-		}
-
 		k := e.App.GetKeys()
-
-		execute := func() {
-			if e.onExecute != nil {
-				sql := strings.TrimRight(strings.TrimSpace(e.GetText()), ";")
-				if sql != "" {
-					e.onExecute(sql)
-				}
-			}
-		}
 
 		switch {
 		case k.Match(k.Common.Confirm, event):
-			execute()
+			e.Execute()
 			return
 		case k.Match(k.Navigation.FocusDown, event):
 			if !e.TextArea.IsAutocompleteVisible() {
@@ -394,6 +378,11 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		case k.Match(k.Common.Clear, event):
 			e.Replace(0, len(e.GetText()), "")
 			return
+		case k.Match(k.SQLQueryEditor.Prettify, event):
+			// TODO: fix: If no reder occurs we need to reset `sequenceState` manually
+			k.Reset()
+			e.Prettify()
+			return
 		case k.Match(k.SQLQueryEditor.OpenHistory, event):
 			if e.history != nil {
 				e.history.Render()
@@ -404,7 +393,10 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 				e.onOpenInEditor()
 			}
 			return
-		case event.Key() == tcell.KeyEscape && !e.TextArea.IsAutocompleteVisible() && e.onCancel != nil:
+		// Esc in vim insert/visual mode must fall through to the vim intercept
+		// below (mode transition), not cancel out of the editor.
+		case event.Key() == tcell.KeyEscape && !e.TextArea.IsAutocompleteVisible() && e.onCancel != nil &&
+			(e.vim == nil || e.vim.mode == vimNormal):
 			e.onCancel()
 			return
 		case event.Key() == tcell.KeyRune && event.Rune() == '(' && e.IsInsertMode():
@@ -413,12 +405,16 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 			e.TextArea.InputHandler()(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone), setFocus)
 			return
 		}
+
+		// Vim mode intercept — after configured bindings (so they take priority),
+		// before raw TextArea input. Non-rune keys mostly fall through unchanged.
+		if e.vim != nil && e.vim.Handle(event, setFocus) {
+			return
+		}
 		e.TextArea.InputHandler()(event, setFocus)
 	})
 }
 
-// SaveQueryToHistory persists sql to the history file after a successful execution.
-// No-op if history is not initialized.
 func (e *SQLQueryEditor) SaveQueryToHistory(sql string) {
 	if e.history != nil {
 		if err := e.history.SaveToHistory(sql); err != nil {
@@ -427,11 +423,15 @@ func (e *SQLQueryEditor) SaveQueryToHistory(sql string) {
 	}
 }
 
-// OpenHistory renders the SQL history modal.
 func (e *SQLQueryEditor) OpenHistory() {
 	if e.history != nil {
 		e.history.Render()
 	}
+}
+
+func (e *SQLQueryEditor) Prettify() {
+	text := e.GetText()
+	e.Replace(0, len(text), sqlpkg.Format(text))
 }
 
 // OpenHistoryWithCallback renders the SQL history modal and temporarily

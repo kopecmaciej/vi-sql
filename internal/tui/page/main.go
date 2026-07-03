@@ -760,6 +760,14 @@ func (m *Main) openActionsModal() {
 				Handler: historyHandler,
 			},
 		)
+
+		if data.IsQueryTab() {
+			entries = append(entries, modal.ActionEntry{
+				Label:   "Format query",
+				KeyHint: k.SQLQueryEditor.Prettify.String(),
+				Handler: data.Prettify,
+			})
+		}
 	}
 
 	m.actionsModal.Open(entries)

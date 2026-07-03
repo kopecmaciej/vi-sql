@@ -153,6 +153,7 @@ type (
 		Fullscreen  Key `yaml:"fullscreen"`
 		OpenHistory Key `yaml:"openHistory"`
 		TermEditor  Key `yaml:"termEditor"`
+		Prettify    Key `yaml:"prettify"`
 	}
 )
 
