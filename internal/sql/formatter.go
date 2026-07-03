@@ -6,27 +6,33 @@ import (
 	"strings"
 )
 
-const formatIndent = "    "
+const (
+	formatIndent         = "    " //4 x space
+	maxInlineSelectWidth = 80     // TODO : move this to config (possibly)
+)
 
-// clausePhrases are ClauseKeywords split into words and sorted longest-first.
-// Keeps matching correct for prefix pairs like "UNION"/"UNION ALL" regardless
-// of declaration order in ClauseKeywords: without the sort, a shorter phrase
-// declared before a longer one that starts with the same word(s) could match
-// first and consume only part of the intended clause.
-var clausePhrases = func() [][]string {
+// clausePhrasesByFirstWord are ClauseKeywords split into words and group by
+// their first word, so it can be quickly match with tokens eg: phrase:
+// [UNION]:[UNION][ALL] can be quickly paired with token [UNION].
+// We sort, so longer pairs like "UNION ALL" can be match first, before "UNION"
+var clausePhrasesByFirstWord = func() map[string][][]string {
 	phrases := make([][]string, 0, len(ClauseKeywords))
 	for _, kw := range ClauseKeywords {
 		phrases = append(phrases, strings.Fields(strings.ToUpper(kw)))
 	}
 	sort.Slice(phrases, func(a, b int) bool { return len(phrases[a]) > len(phrases[b]) })
-	return phrases
+
+	byFirstWord := make(map[string][][]string)
+	for _, p := range phrases {
+		byFirstWord[p[0]] = append(byFirstWord[p[0]], p)
+	}
+	return byFirstWord
 }()
 
-// Format returns a pretty-printed copy of sql: each top-level clause keyword
-// (FROM, WHERE, JOIN, GROUP BY, ...) starts a new line, parenthesized
-// subqueries indent one level deeper, and semicolon-separated statements are
-// formatted independently. SELECT lists with more than two columns get one
-// column per line; other lists and expressions are left inline.
+// Format modify sql query to pretty-printed state. Each top-level clause keyword
+// starts new line, parenthesized subqueries indent one level deeper, and
+// semicolon-separated statements are formatted independently. SELECT lists are split
+// if their length exceeds maxInlineSelectWidth
 func Format(sql string) string {
 	statements, trailingSemicolon := splitStatements(dropWhitespaceTokens(Tokenize(sql)))
 
@@ -53,8 +59,7 @@ func dropWhitespaceTokens(tokens []Token) []Token {
 	return out
 }
 
-// splitStatements breaks tokens on top-level (paren depth 0) semicolons.
-// trailingSemicolon reports whether tokens ended with such a semicolon, so
+// splitStatements breaks tokens into top-level statements
 func splitStatements(tokens []Token) (statements [][]Token, trailingSemicolon bool) {
 	depth := 0
 	start := 0
@@ -176,11 +181,6 @@ func clauseBreaks(tokens []Token) []bool {
 	return breaks
 }
 
-// maxInlineSelectWidth is the rendered-width budget for a SELECT column list.
-// Lists under the budget are left inline; longer ones get one column per
-// line, breaking after the comma like a trailing-comma style.
-const maxInlineSelectWidth = 80
-
 // selectCommaBreaks marks, for each token index, whether it is a top-level
 // comma in a SELECT column list that should be followed by a line break.
 func selectCommaBreaks(tokens []Token) []bool {
@@ -266,14 +266,17 @@ func inlineWidth(tokens []Token) int {
 }
 
 func matchClausePhrase(tokens []Token, i int) int {
-	for _, phrase := range clausePhrases {
+	if tokens[i].Type != TokenKeyword {
+		return 0
+	}
+	for _, phrase := range clausePhrasesByFirstWord[strings.ToUpper(tokens[i].Value)] {
 		if i+len(phrase) > len(tokens) {
 			continue
 		}
 		matched := true
-		for j, word := range phrase {
+		for j := 1; j < len(phrase); j++ {
 			tk := tokens[i+j]
-			if tk.Type != TokenKeyword || strings.ToUpper(tk.Value) != word {
+			if tk.Type != TokenKeyword || strings.ToUpper(tk.Value) != phrase[j] {
 				matched = false
 				break
 			}
