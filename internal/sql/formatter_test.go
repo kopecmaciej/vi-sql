@@ -53,6 +53,31 @@ func TestFormat(t *testing.T) {
 			sql:  "select id\nfrom users\nwhere active = true",
 			want: "select id\nfrom users\nwhere active = true",
 		},
+		{
+			name: "two column select list stays inline",
+			sql:  "select id, name from users",
+			want: "select id, name\nfrom users",
+		},
+		{
+			name: "short three or more column select list stays inline",
+			sql:  "select id, name, email from users where active = true",
+			want: "select id, name, email\nfrom users\nwhere active = true",
+		},
+		{
+			name: "select list over width budget breaks one per line",
+			sql:  "select first_name, last_name, email_address, phone_number, mailing_address_line_one, shipping_address_line_two from customers",
+			want: "select first_name,\n    last_name,\n    email_address,\n    phone_number,\n    mailing_address_line_one,\n    shipping_address_line_two\nfrom customers",
+		},
+		{
+			name: "select list split ignores commas inside function calls",
+			sql:  "select identifier_one, concat(identifier_two, identifier_three, identifier_four), identifier_number_five from some_table",
+			want: "select identifier_one,\n    concat(identifier_two, identifier_three, identifier_four),\n    identifier_number_five\nfrom some_table",
+		},
+		{
+			name: "select list split applies inside subquery",
+			sql:  "select id from (select first_name, last_name, email_address, phone_number, mailing_address_line_one, shipping_address_line_two from t) s",
+			want: "select id\nfrom (\n    select first_name,\n        last_name,\n        email_address,\n        phone_number,\n        mailing_address_line_one,\n        shipping_address_line_two\n    from t\n) s",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

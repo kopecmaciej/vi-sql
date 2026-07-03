@@ -8,8 +8,11 @@ import (
 
 const formatIndent = "    "
 
-// clausePhrases are ClauseKeywords split into words and sorted longest-first,
-// so a greedy match at a keyword token prefers "LEFT JOIN" over "JOIN".
+// clausePhrases are ClauseKeywords split into words and sorted longest-first.
+// Keeps matching correct for prefix pairs like "UNION"/"UNION ALL" regardless
+// of declaration order in ClauseKeywords: without the sort, a shorter phrase
+// declared before a longer one that starts with the same word(s) could match
+// first and consume only part of the intended clause.
 var clausePhrases = func() [][]string {
 	phrases := make([][]string, 0, len(ClauseKeywords))
 	for _, kw := range ClauseKeywords {
@@ -22,7 +25,8 @@ var clausePhrases = func() [][]string {
 // Format returns a pretty-printed copy of sql: each top-level clause keyword
 // (FROM, WHERE, JOIN, GROUP BY, ...) starts a new line, parenthesized
 // subqueries indent one level deeper, and semicolon-separated statements are
-// formatted independently. Column lists and expressions are left inline.
+// formatted independently. SELECT lists with more than two columns get one
+// column per line; other lists and expressions are left inline.
 func Format(sql string) string {
 	statements, trailingSemicolon := splitStatements(dropWhitespaceTokens(Tokenize(sql)))
 
@@ -87,11 +91,12 @@ func formatStatement(tokens []Token) string {
 		return ""
 	}
 	clauseBreak := clauseBreaks(tokens)
+	selectCommaBreak := selectCommaBreaks(tokens)
 
 	var out strings.Builder
 	depth := 0
 	var subqueryParen []bool
-	pendingBreak := false
+	pendingBreakDepth := -1
 	var prev *Token
 
 	writeBreak := func(d int) {
@@ -112,15 +117,15 @@ func formatStatement(tokens []Token) string {
 			if isSubquery {
 				writeBreak(depth)
 				out.WriteString(")")
-				pendingBreak = false
+				pendingBreakDepth = -1
 				prev = &tokens[i]
 				continue
 			}
 		}
 
 		switch {
-		case pendingBreak:
-			writeBreak(depth)
+		case pendingBreakDepth >= 0:
+			writeBreak(pendingBreakDepth)
 		case i == 0:
 			// no separator before the first token
 		case clauseBreak[i]:
@@ -128,7 +133,7 @@ func formatStatement(tokens []Token) string {
 		case needsSpace(prev, &tok):
 			out.WriteString(" ")
 		}
-		pendingBreak = false
+		pendingBreakDepth = -1
 
 		out.WriteString(tok.Value)
 
@@ -138,10 +143,12 @@ func formatStatement(tokens []Token) string {
 			nested := i+1 < len(tokens) && isDMLStart(tokens[i+1])
 			subqueryParen = append(subqueryParen, nested)
 			if nested {
-				pendingBreak = true
+				pendingBreakDepth = depth
 			}
 		case tok.Type == TokenComment && strings.HasPrefix(tok.Value, "--"):
-			pendingBreak = true
+			pendingBreakDepth = depth
+		case tok.Type == TokenPunctuation && tok.Value == "," && selectCommaBreak[i]:
+			pendingBreakDepth = depth + 1
 		}
 
 		prev = &tokens[i]
@@ -167,6 +174,95 @@ func clauseBreaks(tokens []Token) []bool {
 		i++
 	}
 	return breaks
+}
+
+// maxInlineSelectWidth is the rendered-width budget for a SELECT column list.
+// Lists under the budget are left inline; longer ones get one column per
+// line, breaking after the comma like a trailing-comma style.
+const maxInlineSelectWidth = 80
+
+// selectCommaBreaks marks, for each token index, whether it is a top-level
+// comma in a SELECT column list that should be followed by a line break.
+func selectCommaBreaks(tokens []Token) []bool {
+	breaks := make([]bool, len(tokens))
+	depth := 0
+	for i, t := range tokens {
+		if t.Type == TokenPunctuation {
+			switch t.Value {
+			case "(":
+				depth++
+			case ")":
+				if depth > 0 {
+					depth--
+				}
+			}
+		}
+		if t.Type != TokenKeyword || strings.ToUpper(t.Value) != "SELECT" {
+			continue
+		}
+		start := i + 1
+		if start < len(tokens) && tokens[start].Type == TokenKeyword && strings.ToUpper(tokens[start].Value) == "DISTINCT" {
+			start++
+		}
+		commas, end := selectListRange(tokens, start, depth)
+		if len(commas) == 0 {
+			continue
+		}
+		if depth*len(formatIndent)+inlineWidth(tokens[i:end]) <= maxInlineSelectWidth {
+			continue
+		}
+		for _, ci := range commas {
+			breaks[ci] = true
+		}
+	}
+	return breaks
+}
+
+// selectListRange returns the indexes of top-level (paren depth baseDepth)
+// commas between start and end, plus end itself — the index of the next
+// clause keyword or closing paren at that depth, marking the list's end.
+func selectListRange(tokens []Token, start, baseDepth int) (commas []int, end int) {
+	depth := baseDepth
+	for i := start; i < len(tokens); i++ {
+		t := tokens[i]
+		if t.Type == TokenPunctuation {
+			switch t.Value {
+			case "(":
+				depth++
+				continue
+			case ")":
+				if depth == baseDepth {
+					return commas, i
+				}
+				depth--
+				continue
+			case ",":
+				if depth == baseDepth {
+					commas = append(commas, i)
+				}
+				continue
+			}
+		}
+		if depth == baseDepth && t.Type == TokenKeyword && matchClausePhrase(tokens, i) > 0 {
+			return commas, i
+		}
+	}
+	return commas, len(tokens)
+}
+
+// inlineWidth returns the rendered character width of tokens if placed on one
+// line with no breaks, using the same spacing rule as the main formatting pass.
+func inlineWidth(tokens []Token) int {
+	width := 0
+	var prev *Token
+	for i := range tokens {
+		if needsSpace(prev, &tokens[i]) {
+			width++
+		}
+		width += len(tokens[i].Value)
+		prev = &tokens[i]
+	}
+	return width
 }
 
 func matchClausePhrase(tokens []Token, i int) int {
