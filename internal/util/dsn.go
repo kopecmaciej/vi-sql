@@ -159,6 +159,8 @@ func DetectDriverFromDSN(dsn string) (string, error) {
 		return "mariadb", nil
 	case strings.HasPrefix(lower, "sqlserver://"):
 		return "sqlserver", nil
+	case strings.HasPrefix(lower, "oracle://"):
+		return "oracle", nil
 	case strings.HasPrefix(lower, "sqlite://"),
 		strings.HasPrefix(lower, ":memory:"),
 		strings.HasPrefix(lower, "file:"):
@@ -166,6 +168,17 @@ func DetectDriverFromDSN(dsn string) (string, error) {
 	default:
 		return "", fmt.Errorf("unrecognised DSN scheme in %q", dsn)
 	}
+}
+
+// ParseOracleDSN parses an oracle:// URL into its components.
+// The service name is read from the URL path (e.g. oracle://user:pass@host:1521/ORCL).
+func ParseOracleDSN(dsn string) (*ParsedDSN, error) {
+	return parseURLDSN(dsn, "1521", "")
+}
+
+// BuildOracleDSN constructs an oracle:// connection URL.
+func BuildOracleDSN(host string, port int, service, username, password string) string {
+	return BuildDSN("oracle", host, port, service, username, password, nil)
 }
 
 // BuildPostgresDSN constructs a PostgreSQL connection URL from individual components.

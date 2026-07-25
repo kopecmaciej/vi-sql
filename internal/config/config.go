@@ -442,6 +442,8 @@ func (m *SQLConfig) buildDSNFromFields(password string) string {
 			encrypt = "disable"
 		}
 		return util.BuildSQLServerDSN(m.Host, m.Port, m.Database, m.Username, password, encrypt)
+	case "oracle":
+		return util.BuildOracleDSN(m.Host, m.Port, m.Database, m.Username, password)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {
