@@ -15,6 +15,24 @@ import (
 
 const quote = util.ANSIQuoter
 
+// systemOwners is the list of Oracle built-in schema owners that are hidden
+// from the schema tree, equivalent to filtering information_schema in Postgres.
+var systemOwners = []string{
+	"SYS", "SYSTEM", "OUTLN", "DBSNMP", "APPQOSSYS", "DBSFWUSER",
+	"GGSYS", "ANONYMOUS", "CTXSYS", "DVSYS", "DVF", "GSMADMIN_INTERNAL",
+	"MDSYS", "OLAPSYS", "XDB", "WMSYS", "OJVMSYS", "ORDSYS", "ORDDATA",
+	"ORDPLUGINS", "SI_INFORMTN_SCHEMA", "LBACSYS", "APEX_PUBLIC_USER",
+}
+
+// quotedOwners builds the SQL IN-list literal from systemOwners.
+func quotedOwners() string {
+	quoted := make([]string, len(systemOwners))
+	for i, o := range systemOwners {
+		quoted[i] = "'" + o + "'"
+	}
+	return strings.Join(quoted, ",")
+}
+
 // Dao implements database.Driver for Oracle.
 type Dao struct {
 	client *Client
@@ -42,36 +60,36 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 
 	var version, dbName string
 	if err := d.client.DB.QueryRowContext(ctx,
-		"SELECT BANNER, ORA_DATABASE_NAME FROM V$VERSION WHERE ROWNUM = 1").
+		"SELECT banner, ora_database_name FROM v$version WHERE rownum = 1").
 		Scan(&version, &dbName); err != nil {
-		// V$VERSION may be restricted; try simpler queries
-		_ = d.client.DB.QueryRowContext(ctx, "SELECT BANNER FROM V$VERSION WHERE ROWNUM = 1").Scan(&version)
-		_ = d.client.DB.QueryRowContext(ctx, "SELECT ORA_DATABASE_NAME FROM DUAL").Scan(&dbName)
+		// v$version may be restricted; try simpler queries
+		_ = d.client.DB.QueryRowContext(ctx, "SELECT banner FROM v$version WHERE rownum = 1").Scan(&version)
+		_ = d.client.DB.QueryRowContext(ctx, "SELECT ora_database_name FROM dual").Scan(&dbName)
 	}
 	info.Version = version
 	info.CurrentDB = dbName
 
 	var host string
 	if err := d.client.DB.QueryRowContext(ctx,
-		"SELECT HOST_NAME FROM V$INSTANCE").Scan(&host); err == nil {
+		"SELECT host_name FROM v$instance").Scan(&host); err == nil {
 		info.Host = host
 	}
 
 	var maxConns int64
 	if err := d.client.DB.QueryRowContext(ctx,
-		"SELECT VALUE FROM V$PARAMETER WHERE NAME = 'sessions'").Scan(&maxConns); err == nil {
+		"SELECT value FROM v$parameter WHERE name = 'sessions'").Scan(&maxConns); err == nil {
 		info.MaxConnections = maxConns
 	}
 
 	var sessions int64
 	if err := d.client.DB.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM V$SESSION WHERE TYPE = 'USER'").Scan(&sessions); err == nil {
+		"SELECT COUNT(*) FROM v$session WHERE type = 'USER'").Scan(&sessions); err == nil {
 		info.ActiveSessions = sessions
 	}
 
 	var dbSizeMB float64
-	if err := d.client.DB.QueryRowContext(ctx, `
-		SELECT SUM(bytes) / 1024 / 1024 FROM DBA_DATA_FILES`).Scan(&dbSizeMB); err == nil {
+	if err := d.client.DB.QueryRowContext(ctx,
+		"SELECT SUM(bytes) / 1024 / 1024 FROM dba_data_files").Scan(&dbSizeMB); err == nil {
 		info.DatabaseSize = fmt.Sprintf("%.2f MiB", dbSizeMB)
 	}
 
@@ -81,30 +99,27 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 	var count int64
 	if err := d.client.DB.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM V$SESSION WHERE TYPE = 'USER'").Scan(&count); err != nil {
+		"SELECT COUNT(*) FROM v$session WHERE type = 'USER'").Scan(&count); err != nil {
 		return 0, fmt.Errorf("failed to get active sessions: %w", err)
 	}
 	return count, nil
 }
 
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
-	query := `
-		SELECT t.owner, t.table_name
-		FROM ALL_TABLES t
-		WHERE t.owner NOT IN (
-			'SYS','SYSTEM','OUTLN','DBSNMP','APPQOSSYS','DBSFWUSER',
-			'GGSYS','ANONYMOUS','CTXSYS','DVSYS','DVF','GSMADMIN_INTERNAL',
-			'MDSYS','OLAPSYS','XDB','WMSYS','OJVMSYS','ORDSYS','ORDDATA',
-			'ORDPLUGINS','SI_INFORMTN_SCHEMA','LBACSYS','APEX_PUBLIC_USER'
-		)`
+	excl := quotedOwners()
+	base := `SELECT owner, name, kind FROM (
+		SELECT owner, table_name AS name, 'TABLE' AS kind FROM all_tables WHERE owner NOT IN (` + excl + `)
+		UNION ALL
+		SELECT owner, view_name AS name, 'VIEW' AS kind FROM all_views WHERE owner NOT IN (` + excl + `)
+	)`
 	args := []any{}
 	if nameFilter != "" {
-		query += " AND (UPPER(t.owner) LIKE UPPER(:1) OR UPPER(t.table_name) LIKE UPPER(:2))"
+		base += " WHERE (UPPER(owner) LIKE UPPER(:1) OR UPPER(name) LIKE UPPER(:2))"
 		args = append(args, "%"+nameFilter+"%", "%"+nameFilter+"%")
 	}
-	query += " ORDER BY t.owner, t.table_name"
+	base += " ORDER BY owner, kind, name"
 
-	rows, err := d.client.DB.QueryContext(ctx, query, args...)
+	rows, err := d.client.DB.QueryContext(ctx, base, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
@@ -113,8 +128,8 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 	var result []database.Schema
 	idx := make(map[string]int)
 	for rows.Next() {
-		var owner, tableName string
-		if err := rows.Scan(&owner, &tableName); err != nil {
+		var owner, name, kind string
+		if err := rows.Scan(&owner, &name, &kind); err != nil {
 			return nil, err
 		}
 		i, ok := idx[owner]
@@ -123,7 +138,11 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 			idx[owner] = i
 			result = append(result, database.Schema{Schema: owner})
 		}
-		result[i].Tables = append(result[i].Tables, tableName)
+		if kind == "VIEW" {
+			result[i].Views = append(result[i].Views, name)
+		} else {
+			result[i].Tables = append(result[i].Tables, name)
+		}
 	}
 	return result, rows.Err()
 }
@@ -141,11 +160,11 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 		       CASE WHEN pk.column_name IS NOT NULL THEN 1 ELSE 0 END AS is_pk,
 		       c.column_id,
 		       c.identity_column
-		FROM ALL_TAB_COLUMNS c
+		FROM all_tab_columns c
 		LEFT JOIN (
-		    SELECT ac.column_name
-		    FROM ALL_CONSTRAINTS ac
-		    JOIN ALL_CONS_COLUMNS acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
+		    SELECT acc.column_name
+		    FROM all_constraints ac
+		    JOIN all_cons_columns acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
 		    WHERE ac.owner = :1 AND acc.table_name = :2 AND ac.constraint_type = 'P'
 		) pk ON pk.column_name = c.column_name
 		WHERE c.owner = :3 AND c.table_name = :4
@@ -186,13 +205,13 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 		           WHEN 'C' THEN 'CHECK'
 		           ELSE ac.constraint_type
 		       END,
-		       LISTAGG(acc.column_name, ',') WITHIN GROUP (ORDER BY acc.position),
-		       ac.search_condition
-		FROM ALL_CONSTRAINTS ac
-		JOIN ALL_CONS_COLUMNS acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
+		       (SELECT LISTAGG(a.column_name, ',') WITHIN GROUP (ORDER BY a.position)
+		        FROM all_cons_columns a
+		        WHERE a.owner = ac.owner AND a.constraint_name = ac.constraint_name),
+		       ac.search_condition_vc
+		FROM all_constraints ac
 		WHERE ac.owner = :1 AND ac.table_name = :2
 		  AND ac.constraint_type IN ('P','U','C')
-		GROUP BY ac.constraint_name, ac.constraint_type, ac.search_condition
 		ORDER BY ac.constraint_type, ac.constraint_name`,
 		schema, table)
 	if err != nil {
@@ -227,10 +246,10 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 		       rc.table_name AS ref_table,
 		       LISTAGG(rcc.column_name, ',') WITHIN GROUP (ORDER BY rcc.position),
 		       ac.delete_rule
-		FROM ALL_CONSTRAINTS ac
-		JOIN ALL_CONS_COLUMNS acc  ON ac.constraint_name  = acc.constraint_name  AND ac.owner = acc.owner
-		JOIN ALL_CONSTRAINTS rc    ON ac.r_constraint_name = rc.constraint_name  AND ac.r_owner = rc.owner
-		JOIN ALL_CONS_COLUMNS rcc  ON rc.constraint_name  = rcc.constraint_name AND rc.owner  = rcc.owner
+		FROM all_constraints ac
+		JOIN all_cons_columns acc  ON ac.constraint_name   = acc.constraint_name  AND ac.owner  = acc.owner
+		JOIN all_constraints rc    ON ac.r_constraint_name = rc.constraint_name   AND ac.r_owner = rc.owner
+		JOIN all_cons_columns rcc  ON rc.constraint_name   = rcc.constraint_name  AND rc.owner  = rcc.owner
 		WHERE ac.owner = :1 AND ac.table_name = :2 AND ac.constraint_type = 'R'
 		GROUP BY ac.constraint_name, rc.owner, rc.table_name, ac.delete_rule
 		ORDER BY ac.constraint_name`,
@@ -261,10 +280,10 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 		       ac.table_name,
 		       LISTAGG(acc.column_name, ',') WITHIN GROUP (ORDER BY acc.position),
 		       LISTAGG(rcc.column_name, ',') WITHIN GROUP (ORDER BY rcc.position)
-		FROM ALL_CONSTRAINTS ac
-		JOIN ALL_CONS_COLUMNS acc  ON ac.constraint_name   = acc.constraint_name  AND ac.owner  = acc.owner
-		JOIN ALL_CONSTRAINTS rc    ON ac.r_constraint_name = rc.constraint_name   AND ac.r_owner = rc.owner
-		JOIN ALL_CONS_COLUMNS rcc  ON rc.constraint_name   = rcc.constraint_name  AND rc.owner  = rcc.owner
+		FROM all_constraints ac
+		JOIN all_cons_columns acc  ON ac.constraint_name   = acc.constraint_name  AND ac.owner  = acc.owner
+		JOIN all_constraints rc    ON ac.r_constraint_name = rc.constraint_name   AND ac.r_owner = rc.owner
+		JOIN all_cons_columns rcc  ON rc.constraint_name   = rcc.constraint_name  AND rc.owner  = rcc.owner
 		WHERE rc.owner = :1 AND rc.table_name = :2 AND ac.constraint_type = 'R'
 		GROUP BY ac.owner, ac.table_name, ac.constraint_name
 		ORDER BY ac.owner, ac.table_name`,
@@ -290,8 +309,8 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 
 func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
 	var count int64
-	err := d.client.DB.QueryRowContext(ctx, `
-		SELECT NUM_ROWS FROM ALL_TABLES WHERE OWNER = :1 AND TABLE_NAME = :2`,
+	err := d.client.DB.QueryRowContext(ctx,
+		"SELECT num_rows FROM all_tables WHERE owner = :1 AND table_name = :2",
 		schema, table).Scan(&count)
 	if err != nil {
 		// Fall back to exact count when statistics are unavailable.
@@ -359,7 +378,7 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 
 	if len(pkCols) == 1 {
 		// Use RETURNING INTO to retrieve the generated PK.
-		var pkVal any
+		var pkVal int64
 		returningQuery := fmt.Sprintf(
 			"INSERT INTO %s (%s) VALUES (%s) RETURNING %s INTO :%d",
 			quote.Table(schema, table),
@@ -491,7 +510,7 @@ func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
 	var text string
 	err := d.client.DB.QueryRowContext(ctx,
-		"SELECT TEXT FROM ALL_VIEWS WHERE OWNER = :1 AND VIEW_NAME = :2",
+		"SELECT text FROM all_views WHERE owner = :1 AND view_name = :2",
 		schema, view).Scan(&text)
 	if err != nil {
 		return "", fmt.Errorf("failed to get view DDL: %w", err)
@@ -510,7 +529,7 @@ func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, er
 		               ELSE '' END AS column_type,
 		       c.nullable,
 		       c.identity_column
-		FROM ALL_TAB_COLUMNS c
+		FROM all_tab_columns c
 		WHERE c.owner = :1 AND c.table_name = :2
 		ORDER BY c.column_id`,
 		schema, table)
@@ -551,8 +570,8 @@ func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, er
 	pkRows, err := d.client.DB.QueryContext(ctx, `
 		SELECT ac.constraint_name,
 		       LISTAGG(acc.column_name, ', ') WITHIN GROUP (ORDER BY acc.position)
-		FROM ALL_CONSTRAINTS ac
-		JOIN ALL_CONS_COLUMNS acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
+		FROM all_constraints ac
+		JOIN all_cons_columns acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
 		WHERE ac.owner = :1 AND ac.table_name = :2 AND ac.constraint_type = 'P'
 		GROUP BY ac.constraint_name`,
 		schema, table)
@@ -632,9 +651,9 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 		       CASE WHEN ac.constraint_type = 'P' THEN 1 ELSE 0 END AS is_primary,
 		       ai.index_type,
 		       LISTAGG(aic.column_name, ',') WITHIN GROUP (ORDER BY aic.column_position)
-		FROM ALL_INDEXES ai
-		JOIN ALL_IND_COLUMNS aic ON ai.index_name = aic.index_name AND ai.owner = aic.index_owner
-		LEFT JOIN ALL_CONSTRAINTS ac ON ac.index_name = ai.index_name AND ac.owner = ai.owner AND ac.constraint_type = 'P'
+		FROM all_indexes ai
+		JOIN all_ind_columns aic ON ai.index_name = aic.index_name AND ai.owner = aic.index_owner
+		LEFT JOIN all_constraints ac ON ac.index_name = ai.index_name AND ac.owner = ai.owner AND ac.constraint_type = 'P'
 		WHERE ai.owner = :1 AND ai.table_name = :2
 		GROUP BY ai.index_name, ai.uniqueness, ac.constraint_type, ai.index_type
 		ORDER BY is_primary DESC, ai.index_name`,
@@ -782,7 +801,7 @@ func (d *Dao) ExplainPlan(ctx context.Context, sqlStr string) (string, error) {
 	}
 
 	rows, err := conn.QueryContext(ctx,
-		"SELECT PLAN_TABLE_OUTPUT FROM TABLE(DBMS_XPLAN.DISPLAY('PLAN_TABLE', :1, 'ALL'))", stmtID)
+		"SELECT plan_table_output FROM TABLE(dbms_xplan.display('plan_table', :1, 'ALL'))", stmtID)
 	if err != nil {
 		return "", fmt.Errorf("failed to read explain plan: %w", err)
 	}
@@ -810,7 +829,7 @@ func (d *Dao) ExplainAnalyze(ctx context.Context, sqlStr string) (string, error)
 
 func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]string, error) {
 	rows, err := d.client.DB.QueryContext(ctx, `
-		SELECT column_name FROM ALL_TAB_COLUMNS
+		SELECT column_name FROM all_tab_columns
 		WHERE owner = :1 AND table_name = :2
 		ORDER BY column_id`,
 		schema, table)
@@ -833,8 +852,8 @@ func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]
 func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([]string, error) {
 	rows, err := d.client.DB.QueryContext(ctx, `
 		SELECT acc.column_name
-		FROM ALL_CONSTRAINTS ac
-		JOIN ALL_CONS_COLUMNS acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
+		FROM all_constraints ac
+		JOIN all_cons_columns acc ON ac.constraint_name = acc.constraint_name AND ac.owner = acc.owner
 		WHERE ac.owner = :1 AND ac.table_name = :2 AND ac.constraint_type = 'P'
 		ORDER BY acc.position`,
 		schema, table)

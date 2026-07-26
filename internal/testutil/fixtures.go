@@ -43,6 +43,10 @@ func SampleMariaDBPath() string {
 	return filepath.Join(RepoRoot(), "sample-sql", "sample.mariadb.sql")
 }
 
+func SampleOraclePath() string {
+	return filepath.Join(RepoRoot(), "sample-sql", "sample.oracle.sql")
+}
+
 var (
 	seedOnce sync.Once
 	seedDir  string
