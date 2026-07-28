@@ -20,7 +20,7 @@ type App struct {
 	styles             *config.Styles
 	config             *config.Config
 	keys               *config.KeyBindings
-	focusSnapshot      tview.Primitive
+	focusStack         []tview.Primitive
 	mcpEnabled         bool
 	cursorStyle        tcell.CursorStyle
 	openStyleModal     func()
@@ -132,11 +132,11 @@ func (a *App) SetCursorStyle(style tcell.CursorStyle) {
 }
 
 func (a *App) SnapshotFocus() {
-	a.focusSnapshot = a.GetFocus()
+	a.focusStack = append(a.focusStack, a.GetFocus())
 }
 
 func (a *App) SetFocus(p tview.Primitive) {
-	a.focusSnapshot = a.GetFocus()
+	a.focusStack = append(a.focusStack, a.GetFocus())
 	a.Application.SetFocus(p)
 	a.FocusChanged(p)
 }
@@ -147,9 +147,11 @@ func (a *App) SetFocusOnly(p tview.Primitive) {
 }
 
 func (a *App) RestoreFocus() {
-	if a.focusSnapshot != nil {
-		a.SetFocus(a.focusSnapshot)
-		a.focusSnapshot = nil
+	if len(a.focusStack) > 0 {
+		prev := a.focusStack[len(a.focusStack)-1]
+		a.focusStack = a.focusStack[:len(a.focusStack)-1]
+		a.Application.SetFocus(prev)
+		a.FocusChanged(prev)
 	}
 }
 
