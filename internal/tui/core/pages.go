@@ -31,18 +31,33 @@ func (p *Pages) SetStyle(style *config.Styles) {
 		Background(style.Global.BackgroundColor.Color()))
 }
 
-// AddPage wraps tview.Pages.AddPage with focus tracking.
+// AddPage is a plain pass-through to tview.Pages.AddPage. It does NOT touch
+// the focus stack. Use it for top-level pages (Main, Connection, Options).
+// Transient overlays that should restore focus on dismiss must use
+// AddModalPage / RemoveModalPage instead.
 func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
-	p.app.SnapshotFocus()
-	p.Pages.AddPage(string(view), page, resize, visible)
-	if visible && page.HasFocus() {
-		p.app.FocusChanged(page)
-	}
-	return p.Pages
+	return p.Pages.AddPage(string(view), page, resize, visible)
 }
 
-// RemovePage wraps tview.Pages.RemovePage with focus restoration.
+// AddModalPage snapshots the current focus and adds the page. The captured
+// focus is restored when the page is dismissed via RemoveModalPage. The caller
+// is responsible for SetFocusOnly-ing the focused primitive (or a sub-widget
+// of it) after this call.
+func (p *Pages) AddModalPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
+	p.app.SnapshotFocus()
+	return p.Pages.AddPage(string(view), page, resize, visible)
+}
+
+// RemovePage is a plain pass-through. Use it to dismiss pages added via
+// AddPage. Modal pages added with AddModalPage must be dismissed with
+// RemoveModalPage so the stack stays balanced.
 func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
+	return p.Pages.RemovePage(string(view))
+}
+
+// RemoveModalPage removes a page added via AddModalPage and restores the
+// focus captured at open time.
+func (p *Pages) RemoveModalPage(view tview.Identifier) *tview.Pages {
 	p.Pages.RemovePage(string(view))
 	p.app.RestoreFocus()
 	return p.Pages

@@ -246,7 +246,7 @@ func (c *Changelog) Render() {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	c.App.Pages.AddPage(ChangelogModalId, wrapper, true, true)
+	c.App.Pages.AddModalPage(ChangelogModalId, wrapper, true, true)
 	c.App.SetFocusOnly(c)
 }
 

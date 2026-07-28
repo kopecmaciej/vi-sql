@@ -113,7 +113,7 @@ func (p *Peeker) setKeybindings() {
 			p.ViewModal.MoveToTop()
 			return nil
 		case k.Match(k.Common.Close, event):
-			p.App.Pages.RemovePage(p.GetIdentifier())
+			p.App.Pages.RemoveModalPage(p.GetIdentifier())
 			return nil
 		}
 		return event
@@ -165,7 +165,7 @@ func (p *Peeker) openValueViewer() {
 		row, col := viewer.GetScrollOffset()
 		switch {
 		case k.Match(k.Common.Close, event):
-			p.App.Pages.RemovePage(viewerPageId)
+			p.App.Pages.RemoveModalPage(viewerPageId)
 			return nil
 		case k.Match(k.Navigation.GoTop, event):
 			viewer.ScrollToBeginning()
@@ -185,7 +185,8 @@ func (p *Peeker) openValueViewer() {
 		return event
 	}))
 
-	p.App.Pages.AddPage(viewerPageId, viewer, true, true)
+	p.App.Pages.AddModalPage(viewerPageId, viewer, true, true)
+	p.App.SetFocusOnly(viewer)
 }
 
 // prettyFormatValue returns a human-readable multi-line representation of val
@@ -248,10 +249,11 @@ func (p *Peeker) Render(row database.Row, columns []database.ColumnInfo) {
 
 	p.ViewModal.SetRows(lines)
 
-	p.App.Pages.AddPage(p.GetIdentifier(), p.ViewModal, true, true)
+	p.App.Pages.AddModalPage(p.GetIdentifier(), p.ViewModal, true, true)
+	p.App.SetFocusOnly(p.ViewModal)
 	p.ViewModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		if buttonLabel == "Close" || buttonLabel == "" {
-			p.App.Pages.RemovePage(p.GetIdentifier())
+			p.App.Pages.RemoveModalPage(p.GetIdentifier())
 		}
 	})
 }

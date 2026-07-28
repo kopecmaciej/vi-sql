@@ -107,7 +107,7 @@ func (g *GoToObjectModal) Open(schemas []database.Schema, title string, getNames
 
 	doJump := func() {
 		text := strings.TrimSpace(g.input.GetText())
-		g.App.Pages.RemovePage(GoToObjectModalId)
+		g.App.Pages.RemoveModalPage(GoToObjectModalId)
 		parts := strings.SplitN(text, ".", 2)
 		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 			return
@@ -129,7 +129,7 @@ func (g *GoToObjectModal) Open(schemas []database.Schema, title string, getNames
 			doJump()
 			return nil
 		case k.Match(k.Common.Close, event):
-			g.App.Pages.RemovePage(GoToObjectModalId)
+			g.App.Pages.RemoveModalPage(GoToObjectModalId)
 			return nil
 		}
 		return event
@@ -143,6 +143,6 @@ func (g *GoToObjectModal) Open(schemas []database.Schema, title string, getNames
 			AddItem(nil, 0, 1, false), 0, 2, true).
 		AddItem(nil, 0, 1, false)
 
-	g.App.Pages.AddPage(GoToObjectModalId, wrapper, true, true)
+	g.App.Pages.AddModalPage(GoToObjectModalId, wrapper, true, true)
 	g.App.SetFocusOnly(g.input)
 }

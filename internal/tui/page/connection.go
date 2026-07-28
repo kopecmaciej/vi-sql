@@ -132,15 +132,15 @@ func (c *Connection) openDriverPicker() {
 		return
 	}
 	picker.SetOnSelectFunc(func(driver string) {
-		c.App.Pages.RemovePage(DriverPickerPageId)
+		c.App.Pages.RemoveModalPage(DriverPickerPageId)
 		c.openAddFormWithDriver(driver)
 	})
 	picker.SetOnCancelFunc(func() {
-		c.App.Pages.RemovePage(DriverPickerPageId)
+		c.App.Pages.RemoveModalPage(DriverPickerPageId)
 		c.App.SetFocus(c.table)
 	})
 	picker.Render()
-	c.App.Pages.AddPage(DriverPickerPageId, picker, true, true)
+	c.App.Pages.AddModalPage(DriverPickerPageId, picker, true, true)
 	c.App.SetFocusOnly(picker)
 }
 
@@ -151,21 +151,21 @@ func (c *Connection) openAddFormWithDriver(driver string) {
 		return
 	}
 	form.SetOnSaveFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.Render()
 		c.table.Select(c.table.GetRowCount()-2, 0)
 		c.App.SetFocus(c.table)
 	})
 	form.SetOnCancelFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.App.SetFocus(c.table)
 	})
 	form.SetOnBackFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.openDriverPicker()
 	})
 	form.Render()
-	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.Pages.AddModalPage(ConnectionFormPageId, form, true, true)
 	c.App.SetFocusOnly(form.form)
 }
 
@@ -191,17 +191,17 @@ func (c *Connection) openEditForm() {
 		return
 	}
 	form.SetOnSaveFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.Render()
 		c.table.Select(row, 0)
 		c.App.SetFocus(c.table)
 	})
 	form.SetOnCancelFunc(func() {
-		c.App.Pages.RemovePage(ConnectionFormPageId)
+		c.App.Pages.RemoveModalPage(ConnectionFormPageId)
 		c.App.SetFocus(c.table)
 	})
 	form.Render()
-	c.App.Pages.AddPage(ConnectionFormPageId, form, true, true)
+	c.App.Pages.AddModalPage(ConnectionFormPageId, form, true, true)
 	c.App.SetFocusOnly(form.form)
 }
 

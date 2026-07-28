@@ -786,7 +786,7 @@ func (s *SchemaTree) SetImportFunc(fn func(schema, table string)) {
 
 func (s *SchemaTree) closeInputModal() {
 	s.inputModal.SetText("")
-	s.App.Pages.RemovePage(SchemaInputModalId)
+	s.App.Pages.RemoveModalPage(SchemaInputModalId)
 }
 
 func (s *SchemaTree) showDeleteTableModal(ctx context.Context) {
@@ -802,7 +802,7 @@ func (s *SchemaTree) showDeleteTableModal(ctx context.Context) {
 	s.deleteModal.SetOnConfirm(func() {
 		// Remove the delete modal first so GiveBackFocus restores focus to the
 		// tree before we potentially show an error modal on top.
-		s.App.Pages.RemovePage(SchemaDeleteModalId)
+		s.App.Pages.RemoveModalPage(SchemaDeleteModalId)
 		err := s.Driver.DropTable(ctx, schemaName, tableName)
 		if err != nil {
 			modal.ShowError(s.App.Pages, "Error dropping table", err)
@@ -810,7 +810,8 @@ func (s *SchemaTree) showDeleteTableModal(ctx context.Context) {
 		}
 		s.removeTableNode(parent, current)
 	})
-	s.App.Pages.AddPage(SchemaDeleteModalId, s.deleteModal, true, true)
+	s.App.Pages.AddModalPage(SchemaDeleteModalId, s.deleteModal, true, true)
+	s.App.SetFocusOnly(s.deleteModal)
 }
 
 func (s *SchemaTree) removeTableNode(parent, current *tview.TreeNode) {
@@ -860,7 +861,7 @@ func (s *SchemaTree) showRenameTableModal(ctx context.Context) {
 		}
 		return event
 	})
-	s.App.Pages.AddPage(SchemaInputModalId, core.CenteredFlex(s.inputModal, 2, 1), true, true)
+	s.App.Pages.AddModalPage(SchemaInputModalId, core.CenteredFlex(s.inputModal, 2, 1), true, true)
 	s.App.SetFocusOnly(s.inputModal)
 }
 

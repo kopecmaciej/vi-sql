@@ -153,10 +153,10 @@ func (a *App) setKeybindings() {
 			}
 			return nil
 		case k.Match(k.Global.FullScreenHelp, event):
-			if a.Pages.HasPage(page.HelpPageId) {
-				a.Pages.RemovePage(page.HelpPageId)
-				return nil
-			}
+if a.Pages.HasPage(page.HelpPageId) {
+			a.Pages.RemoveModalPage(page.HelpPageId)
+			return nil
+		}
 			a.openHelp()
 			return nil
 		}
@@ -186,7 +186,7 @@ func (a *App) handleEvents() {
 
 func (a *App) openHelp() {
 	a.help.OpenAt(a.currentFocusID)
-	a.Pages.AddPage(page.HelpPageId, a.help, true, true)
+	a.Pages.AddModalPage(page.HelpPageId, a.help, true, true)
 }
 
 // isTextInputFocused check whether currently focused primitives is
@@ -376,7 +376,7 @@ func (a *App) showChangelogModal(entries []util.ChangelogEntry) {
 			return
 		}
 		a.updateConfigVersion()
-		a.Pages.RemovePage(modal.ChangelogModalId)
+		a.Pages.RemoveModalPage(modal.ChangelogModalId)
 		a.continueStartup()
 	})
 
@@ -419,20 +419,20 @@ func (a *App) startSelfUpdate(tag string) {
 	confirmModal.SetText(fmt.Sprintf("Update vi-sql from %s to %s?", build.Version, tag))
 	confirmModal.SetConfirmButtonLabel("Update")
 	confirmModal.SetOnConfirm(func() {
-		a.Pages.RemovePage("SelfUpdateConfirm")
+		a.Pages.RemoveModalPage("SelfUpdateConfirm")
 
 		progress := tview.NewModal()
 		progress.SetTitle(" Updating vi-sql ")
 		progress.SetText("Starting update…")
 		progress.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
-		a.Pages.AddPage("SelfUpdateProgress", progress, true, true)
+		a.Pages.AddModalPage("SelfUpdateProgress", progress, true, true)
 
 		go func() {
 			err := util.InstallRelease(context.Background(), tag, func(step string) {
 				a.Application.QueueUpdateDraw(func() { progress.SetText(step) })
 			})
 			a.Application.QueueUpdateDraw(func() {
-				a.Pages.RemovePage("SelfUpdateProgress")
+				a.Pages.RemoveModalPage("SelfUpdateProgress")
 				if err != nil {
 					modal.ShowError(a.Pages, "Update failed", err)
 					return
@@ -443,11 +443,11 @@ func (a *App) startSelfUpdate(tag string) {
 				done.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 				done.AddButtons([]string{"Exit"})
 				done.SetDoneFunc(func(_ int, _ string) { os.Exit(0) })
-				a.Pages.AddPage("SelfUpdateDone", done, true, true)
+				a.Pages.AddModalPage("SelfUpdateDone", done, true, true)
 			})
 		}()
 	})
-	a.Pages.AddPage("SelfUpdateConfirm", confirmModal, true, true)
+	a.Pages.AddModalPage("SelfUpdateConfirm", confirmModal, true, true)
 	a.App.SetFocusOnly(confirmModal)
 }
 

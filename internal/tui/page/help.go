@@ -231,7 +231,7 @@ func (h *Help) setKeybindings() {
 	h.sectionList.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case k.Match(k.Common.Close, event):
-			h.App.Pages.RemovePage(HelpPageId)
+			h.App.Pages.RemoveModalPage(HelpPageId)
 			return nil
 		case k.Match(k.Navigation.FocusRight, event), k.Match(k.Common.Select, event):
 			h.App.SetFocusOnly(h.keysTable)
@@ -268,7 +268,7 @@ func (h *Help) setKeybindings() {
 	h.keysTable.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case k.Match(k.Common.Close, event):
-			h.App.Pages.RemovePage(HelpPageId)
+			h.App.Pages.RemoveModalPage(HelpPageId)
 			return nil
 		case k.Match(k.Navigation.FocusLeft, event):
 			h.App.SetFocusOnly(h.sectionList)

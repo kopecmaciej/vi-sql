@@ -53,7 +53,7 @@ func (c *Confirm) setLayout() {
 		} else if c.onCancel != nil {
 			c.onCancel()
 		} else {
-			c.App.Pages.RemovePage(c.GetIdentifier())
+			c.App.Pages.RemoveModalPage(c.GetIdentifier())
 		}
 	})
 }

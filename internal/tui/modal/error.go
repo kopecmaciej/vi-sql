@@ -43,12 +43,12 @@ func ShowError(page *core.Pages, message string, err error) {
 	errModal.AddButtons([]string{"Close", "Copy"})
 
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		page.RemovePage(ErrorModalId)
+		page.RemoveModalPage(ErrorModalId)
 		if buttonLabel == "Copy" {
 			util.Copy(plain)
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorAndSetFocus shows an error modal, logs it, and restores focus on dismiss.
@@ -57,13 +57,13 @@ func ShowErrorAndSetFocus(page *core.Pages, message string, err error, setFocus 
 	errModal, plain := newError(message, err)
 	errModal.AddButtons([]string{"Close", "Copy"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		page.RemovePage(ErrorModalId)
+		page.RemoveModalPage(ErrorModalId)
 		if buttonLabel == "Copy" {
 			util.Copy(plain)
 		}
 		setFocus()
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorWithDone shows an error modal and calls onDone after the user dismisses it.
@@ -73,7 +73,7 @@ func ShowErrorWithDone(page *core.Pages, message string, err error, onDone func(
 	errModal, plain := newError(message, err)
 	errModal.AddButtons([]string{"Close", "Copy"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		page.RemovePage(ErrorModalId)
+		page.RemoveModalPage(ErrorModalId)
 		if buttonLabel == "Copy" {
 			util.Copy(plain)
 		}
@@ -81,7 +81,7 @@ func ShowErrorWithDone(page *core.Pages, message string, err error, onDone func(
 			onDone()
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }
 
 // ShowErrorWithRetry shows an error modal with Fix and Cancel buttons.
@@ -91,7 +91,7 @@ func ShowErrorWithRetry(page *core.Pages, message string, err error, fixFunc fun
 	errModal, plain := newError(message, err)
 	errModal.AddButtons([]string{"Fix", "Copy", "Cancel"})
 	errModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-		page.RemovePage(ErrorModalId)
+		page.RemoveModalPage(ErrorModalId)
 		switch buttonLabel {
 		case "Copy":
 			util.Copy(plain)
@@ -99,5 +99,5 @@ func ShowErrorWithRetry(page *core.Pages, message string, err error, fixFunc fun
 			fixFunc()
 		}
 	})
-	page.AddPage(ErrorModalId, errModal, true, true)
+	page.AddModalPage(ErrorModalId, errModal, true, true)
 }

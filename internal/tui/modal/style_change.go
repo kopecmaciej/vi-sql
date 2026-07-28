@@ -76,10 +76,10 @@ func (sc *StyleChangeModal) setKeybindings() {
 			if sc.applyStyle != nil && sc.originalStyle != "" {
 				_ = sc.applyStyle(sc.originalStyle)
 			}
-			sc.App.Pages.RemovePage(StyleChangeModalId)
+			sc.App.Pages.RemoveModalPage(StyleChangeModalId)
 			return nil
 		case tcell.KeyEnter:
-			sc.App.Pages.RemovePage(StyleChangeModalId)
+			sc.App.Pages.RemoveModalPage(StyleChangeModalId)
 			return nil
 		}
 		return event
@@ -112,5 +112,6 @@ func (sc *StyleChangeModal) Render() {
 			AddItem(nil, 0, 1, false), 40, 0, true).
 		AddItem(nil, 0, 1, false)
 
-	sc.App.Pages.AddPage(StyleChangeModalId, modal, true, true)
+	sc.App.Pages.AddModalPage(StyleChangeModalId, modal, true, true)
+	sc.App.SetFocusOnly(sc.List)
 }

@@ -150,7 +150,7 @@ func (h *History) setKeybindings() {
 		switch {
 		case keys.Match(keys.Common.Select, event):
 			row, _ := h.table.GetSelection()
-			h.App.Pages.RemovePage(HistoryModalId)
+			h.App.Pages.RemoveModalPage(HistoryModalId)
 			if h.onAccept != nil {
 				if idx := row - 1; idx >= 0 && idx < len(h.filtered) {
 					h.onAccept(h.filtered[idx].Query)
@@ -158,7 +158,7 @@ func (h *History) setKeybindings() {
 			}
 			return nil
 		case keys.Match(keys.Common.Close, event):
-			h.App.Pages.RemovePage(HistoryModalId)
+			h.App.Pages.RemoveModalPage(HistoryModalId)
 			if h.onClose != nil {
 				h.onClose()
 			}
@@ -205,7 +205,7 @@ func (h *History) clearHistory() *tcell.EventKey {
 	if err := replaceConnectionEntries(h.connectionID, nil); err != nil {
 		ShowError(h.App.Pages, "Failed to clear history", err)
 	}
-	h.App.Pages.RemovePage(HistoryModalId)
+	h.App.Pages.RemoveModalPage(HistoryModalId)
 	return nil
 }
 
@@ -336,7 +336,7 @@ func (h *History) Render() {
 			AddItem(nil, 2, 0, false), 0, 6, true).
 		AddItem(nil, 0, 1, false)
 
-	h.App.Pages.AddPage(HistoryModalId, wrapper, true, true)
+	h.App.Pages.AddModalPage(HistoryModalId, wrapper, true, true)
 	h.App.SetFocusOnly(h.table)
 }
 

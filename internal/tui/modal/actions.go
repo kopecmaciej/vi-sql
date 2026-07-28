@@ -99,7 +99,7 @@ func (a *ActionsModal) setKeybindings() {
 			a.executeSelected()
 			return nil
 		case event.Key() == tcell.KeyEscape:
-			a.App.Pages.RemovePage(ActionsModalId)
+			a.App.Pages.RemoveModalPage(ActionsModalId)
 			return nil
 		}
 		return event
@@ -127,7 +127,7 @@ func (a *ActionsModal) executeSelected() {
 		return
 	}
 	handler := a.filtered[row].Handler
-	a.App.Pages.RemovePage(ActionsModalId)
+	a.App.Pages.RemoveModalPage(ActionsModalId)
 	if handler != nil {
 		handler()
 	}
@@ -189,6 +189,6 @@ func (a *ActionsModal) Open(entries []ActionEntry) {
 			AddItem(nil, 0, 1, false), 0, 2, true).
 		AddItem(nil, 0, 1, false)
 
-	a.App.Pages.AddPage(ActionsModalId, wrapper, true, true)
+	a.App.Pages.AddModalPage(ActionsModalId, wrapper, true, true)
 	a.App.SetFocusOnly(a.filter)
 }

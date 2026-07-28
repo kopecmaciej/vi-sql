@@ -63,7 +63,7 @@ func (s *ServerInfoModal) setKeybindings() {
 	s.content.SetInputCapture(keys.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
 		case keys.Match(keys.Common.Close, event):
-			s.App.Pages.RemovePage(ServerInfoModalId)
+			s.App.Pages.RemoveModalPage(ServerInfoModalId)
 			return nil
 		case keys.Match(keys.Common.Refresh, event):
 			if s.refreshFn != nil {
@@ -100,7 +100,7 @@ func (s *ServerInfoModal) Open(info *database.ServerInfo, refreshFn func()) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	s.App.Pages.AddPage(ServerInfoModalId, wrapper, true, true)
+	s.App.Pages.AddModalPage(ServerInfoModalId, wrapper, true, true)
 	s.App.SetFocusOnly(s)
 }
 

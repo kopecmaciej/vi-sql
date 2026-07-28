@@ -767,7 +767,7 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 	c.confirmModal.SetConfirmButtonLabel("Delete")
 	c.confirmModal.SetText(confirmText)
 	c.confirmModal.SetOnConfirm(func() {
-		c.App.Pages.RemovePage(c.confirmModal.GetIdentifier())
+		c.App.Pages.RemoveModalPage(c.confirmModal.GetIdentifier())
 		err := c.Driver.DeleteRows(ctx, c.state.Schema, c.state.Table, pks)
 		if err != nil {
 			modal.ShowError(c.App.Pages, "Error deleting row", err)
@@ -783,7 +783,8 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 			c.resultGrid.Select(row, col)
 		}
 	})
-	c.App.Pages.AddPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
+	c.App.Pages.AddModalPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
+	c.App.SetFocusOnly(c.confirmModal)
 	return nil
 }
 
@@ -965,10 +966,10 @@ func (c *Data) confirmIfDestructive(sql string, proceed func()) bool {
 	c.confirmModal.SetConfirmButtonLabel("Execute")
 	c.confirmModal.SetText(text.String())
 	c.confirmModal.SetOnConfirm(func() {
-		c.App.Pages.RemovePage(c.confirmModal.GetIdentifier())
+		c.App.Pages.RemoveModalPage(c.confirmModal.GetIdentifier())
 		proceed()
 	})
-	c.App.Pages.AddPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
+	c.App.Pages.AddModalPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
 	c.App.SetFocusOnly(c.confirmModal)
 	return true
 }
@@ -1146,7 +1147,7 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 	list.ShowSecondaryText(false)
 
 	closeModal := func() {
-		c.App.Pages.RemovePage(refsPageID)
+		c.App.Pages.RemoveModalPage(refsPageID)
 	}
 
 	for _, fk := range relevant {
@@ -1166,7 +1167,7 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 		return event
 	})
 
-	c.App.Pages.AddPage(refsPageID, core.CenteredFlex(list, 2, 2), true, true)
+	c.App.Pages.AddModalPage(refsPageID, core.CenteredFlex(list, 2, 2), true, true)
 	c.App.SetFocusOnly(list)
 
 	return nil
@@ -1268,9 +1269,9 @@ func (c *Data) showExplainViewer(ctx context.Context, sql, result string, analyz
 	})
 	c.explainViewer.Render(result)
 	c.explainViewer.SetDoneFunc(func() {
-		c.App.Pages.RemovePage(ExplainViewerId)
+		c.App.Pages.RemoveModalPage(ExplainViewerId)
 	})
-	c.App.Pages.AddPage(ExplainViewerId, c.explainViewer, true, true)
+	c.App.Pages.AddModalPage(ExplainViewerId, c.explainViewer, true, true)
 	c.App.SetFocusOnly(c.explainViewer.tree.TreeView)
 }
 

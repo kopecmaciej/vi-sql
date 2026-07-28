@@ -434,7 +434,7 @@ func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 	idx.deleteModal.SetConfirmButtonLabel("Drop")
 	idx.deleteModal.SetText(fmt.Sprintf("Drop index [::b]%s[-:-:-]?", indexName))
 	idx.deleteModal.SetOnConfirm(func() {
-		idx.App.Pages.RemovePage(IndexDeleteModalId)
+		idx.App.Pages.RemoveModalPage(IndexDeleteModalId)
 		err := idx.Driver.DropIndex(ctx, idx.schema, indexName)
 		if err != nil {
 			modal.ShowError(idx.App.Pages, "Error dropping index", err)
@@ -444,7 +444,8 @@ func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 		idx.table.Select(row-1, 0)
 	})
 
-	idx.App.Pages.AddPage(IndexDeleteModalId, idx.deleteModal, true, true)
+	idx.App.Pages.AddModalPage(IndexDeleteModalId, idx.deleteModal, true, true)
+	idx.App.SetFocusOnly(idx.deleteModal)
 }
 
 func (idx *Indexes) IsAddFormFocused() bool {

@@ -138,7 +138,7 @@ func (e *ExportModal) Render(_ context.Context, query, schema, table string) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	e.App.Pages.AddPage(ExportModalId, wrapper, true, true)
+	e.App.Pages.AddModalPage(ExportModalId, wrapper, true, true)
 	e.App.SetFocusOnly(e.form)
 }
 
@@ -163,7 +163,7 @@ func (e *ExportModal) RenderWithRows(_ context.Context, rows []database.Row, col
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	e.App.Pages.AddPage(ExportModalId, wrapper, true, true)
+	e.App.Pages.AddModalPage(ExportModalId, wrapper, true, true)
 	e.App.SetFocusOnly(e.form)
 }
 
@@ -191,8 +191,8 @@ func (e *ExportModal) buildForm() {
 	e.rebuildCheckboxes(exportFormats[0])
 
 	e.form.AddButton(" Export ", func() { e.doExport() })
-	e.form.AddButton(" Cancel ", func() { e.App.Pages.RemovePage(ExportModalId) })
-	e.form.SetCancelFunc(func() { e.App.Pages.RemovePage(ExportModalId) })
+	e.form.AddButton(" Cancel ", func() { e.App.Pages.RemoveModalPage(ExportModalId) })
+	e.form.SetCancelFunc(func() { e.App.Pages.RemoveModalPage(ExportModalId) })
 	e.form.ApplyFormNavKeys(e.App.GetKeys())
 }
 
@@ -280,7 +280,7 @@ func (e *ExportModal) doExport() {
 		SheetName:      sheetName,
 	}
 
-	e.App.Pages.RemovePage(ExportModalId)
+	e.App.Pages.RemoveModalPage(ExportModalId)
 	go e.performExport(fullPath, exportFormats[fmtIdx], opts)
 }
 

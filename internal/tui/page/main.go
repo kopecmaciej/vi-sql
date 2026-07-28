@@ -582,14 +582,14 @@ func (m *Main) renameActiveTab() {
 			}
 			m.topBar.RenameActiveTab(newName)
 			m.renameModal.SetText("")
-			m.App.Pages.RemovePage(mainRenameModalId)
+			m.App.Pages.RemoveModalPage(mainRenameModalId)
 		case tcell.KeyEscape:
 			m.renameModal.SetText("")
-			m.App.Pages.RemovePage(mainRenameModalId)
+			m.App.Pages.RemoveModalPage(mainRenameModalId)
 		}
 		return event
 	})
-	m.App.Pages.AddPage(mainRenameModalId, core.CenteredFlex(m.renameModal, 2, 1), true, true)
+	m.App.Pages.AddModalPage(mainRenameModalId, core.CenteredFlex(m.renameModal, 2, 1), true, true)
 	m.App.SetFocusOnly(m.renameModal)
 }
 

@@ -581,7 +581,7 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 			AddItem(nil, 0, 1, false), 0, 4, true).
 		AddItem(nil, 0, 1, false)
 
-	m.App.Pages.AddPage(CreateTableModalId, modal, true, true)
+	m.App.Pages.AddModalPage(CreateTableModalId, modal, true, true)
 	m.App.SetFocusOnly(m.tableNameInput)
 
 	// Update preview when table name changes
@@ -592,5 +592,5 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 
 // Hide removes the modal from the page stack.
 func (m *CreateTableModal) Hide() {
-	m.App.Pages.RemovePage(CreateTableModalId)
+	m.App.Pages.RemoveModalPage(CreateTableModalId)
 }
