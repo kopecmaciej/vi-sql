@@ -444,8 +444,7 @@ func (idx *Indexes) showDeleteIndexModal(ctx context.Context) {
 		idx.table.Select(row-1, 0)
 	})
 
-	idx.App.Pages.AddModalPage(IndexDeleteModalId, idx.deleteModal, true, true)
-	idx.App.SetFocusOnly(idx.deleteModal)
+	idx.App.Pages.ShowModal(IndexDeleteModalId, idx.deleteModal, idx.deleteModal, true, true)
 }
 
 func (idx *Indexes) IsAddFormFocused() bool {

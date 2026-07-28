@@ -112,6 +112,5 @@ func (sc *StyleChangeModal) Render() {
 			AddItem(nil, 0, 1, false), 40, 0, true).
 		AddItem(nil, 0, 1, false)
 
-	sc.App.Pages.AddModalPage(StyleChangeModalId, modal, true, true)
-	sc.App.SetFocusOnly(sc.List)
+	sc.App.Pages.ShowModal(StyleChangeModalId, modal, sc.List, true, true)
 }

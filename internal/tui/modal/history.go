@@ -336,8 +336,7 @@ func (h *History) Render() {
 			AddItem(nil, 2, 0, false), 0, 6, true).
 		AddItem(nil, 0, 1, false)
 
-	h.App.Pages.AddModalPage(HistoryModalId, wrapper, true, true)
-	h.App.SetFocusOnly(h.table)
+	h.App.Pages.ShowModal(HistoryModalId, wrapper, h.table, true, true)
 }
 
 // SaveToHistory saves text to the history file, deduplicating and capping at maxHistory for this connection.

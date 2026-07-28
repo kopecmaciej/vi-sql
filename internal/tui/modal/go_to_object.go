@@ -143,6 +143,5 @@ func (g *GoToObjectModal) Open(schemas []database.Schema, title string, getNames
 			AddItem(nil, 0, 1, false), 0, 2, true).
 		AddItem(nil, 0, 1, false)
 
-	g.App.Pages.AddModalPage(GoToObjectModalId, wrapper, true, true)
-	g.App.SetFocusOnly(g.input)
+	g.App.Pages.ShowModal(GoToObjectModalId, wrapper, g.input, true, true)
 }

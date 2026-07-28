@@ -783,8 +783,7 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 			c.resultGrid.Select(row, col)
 		}
 	})
-	c.App.Pages.AddModalPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
-	c.App.SetFocusOnly(c.confirmModal)
+	c.App.Pages.ShowModal(c.confirmModal.GetIdentifier(), c.confirmModal, c.confirmModal, true, true)
 	return nil
 }
 
@@ -969,8 +968,7 @@ func (c *Data) confirmIfDestructive(sql string, proceed func()) bool {
 		c.App.Pages.RemoveModalPage(c.confirmModal.GetIdentifier())
 		proceed()
 	})
-	c.App.Pages.AddModalPage(c.confirmModal.GetIdentifier(), c.confirmModal, true, true)
-	c.App.SetFocusOnly(c.confirmModal)
+	c.App.Pages.ShowModal(c.confirmModal.GetIdentifier(), c.confirmModal, c.confirmModal, true, true)
 	return true
 }
 
@@ -1167,8 +1165,7 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 		return event
 	})
 
-	c.App.Pages.AddModalPage(refsPageID, core.CenteredFlex(list, 2, 2), true, true)
-	c.App.SetFocusOnly(list)
+	c.App.Pages.ShowModal(refsPageID, core.CenteredFlex(list, 2, 2), list, true, true)
 
 	return nil
 }
@@ -1271,8 +1268,7 @@ func (c *Data) showExplainViewer(ctx context.Context, sql, result string, analyz
 	c.explainViewer.SetDoneFunc(func() {
 		c.App.Pages.RemoveModalPage(ExplainViewerId)
 	})
-	c.App.Pages.AddModalPage(ExplainViewerId, c.explainViewer, true, true)
-	c.App.SetFocusOnly(c.explainViewer.tree.TreeView)
+	c.App.Pages.ShowModal(ExplainViewerId, c.explainViewer, c.explainViewer.tree.TreeView, true, true)
 }
 
 func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventKey {

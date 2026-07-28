@@ -13,21 +13,21 @@ import (
 type App struct {
 	*tview.Application
 
-	Pages              *Pages
-	driver             database.Driver
-	formatter          database.ValueFormatter
-	manager            *manager.ElementManager
-	styles             *config.Styles
-	config             *config.Config
-	keys               *config.KeyBindings
+	Pages                *Pages
+	driver               database.Driver
+	formatter            database.ValueFormatter
+	manager              *manager.ElementManager
+	styles               *config.Styles
+	config               *config.Config
+	keys                 *config.KeyBindings
 	focusStack           []tview.Primitive
 	lastFocusedPrimitive tview.Primitive
 	mcpEnabled           bool
-	cursorStyle        tcell.CursorStyle
-	openStyleModal     func()
-	openConnectionPage func()
-	openOptionsPage    func()
-	toggleMCP          func()
+	cursorStyle          tcell.CursorStyle
+	openStyleModal       func()
+	openConnectionPage   func()
+	openOptionsPage      func()
+	toggleMCP            func()
 }
 
 func (a *App) SetOpenStyleModalFunc(fn func()) { a.openStyleModal = fn }
@@ -132,9 +132,6 @@ func (a *App) SetCursorStyle(style tcell.CursorStyle) {
 	a.cursorStyle = style
 }
 
-// SnapshotFocus pushes the currently focused primitive onto the modal-focus
-// stack so it can be restored by a later RestoreFocus. Callers normally go
-// through Pages.AddModalPage instead of calling this directly.
 func (a *App) SnapshotFocus() {
 	a.focusStack = append(a.focusStack, a.lastFocusedPrimitive)
 }
@@ -149,8 +146,6 @@ func (a *App) SetFocusOnly(p tview.Primitive) {
 	a.FocusChanged(p)
 }
 
-// RestoreFocus pops the last pushed focus and returns focus to it. Callers
-// normally go through Pages.RemoveModalPage instead of calling this directly.
 func (a *App) RestoreFocus() {
 	if len(a.focusStack) == 0 {
 		return

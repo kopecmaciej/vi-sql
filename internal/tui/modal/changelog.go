@@ -246,8 +246,7 @@ func (c *Changelog) Render() {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	c.App.Pages.AddModalPage(ChangelogModalId, wrapper, true, true)
-	c.App.SetFocusOnly(c)
+	c.App.Pages.ShowModal(ChangelogModalId, wrapper, c, true, true)
 }
 
 // changeGroup holds a named set of changelog items that share the same category.

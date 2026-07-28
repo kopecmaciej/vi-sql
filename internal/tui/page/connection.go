@@ -140,8 +140,7 @@ func (c *Connection) openDriverPicker() {
 		c.App.SetFocus(c.table)
 	})
 	picker.Render()
-	c.App.Pages.AddModalPage(DriverPickerPageId, picker, true, true)
-	c.App.SetFocusOnly(picker)
+	c.App.Pages.ShowModal(DriverPickerPageId, picker, picker, true, true)
 }
 
 func (c *Connection) openAddFormWithDriver(driver string) {
@@ -165,8 +164,7 @@ func (c *Connection) openAddFormWithDriver(driver string) {
 		c.openDriverPicker()
 	})
 	form.Render()
-	c.App.Pages.AddModalPage(ConnectionFormPageId, form, true, true)
-	c.App.SetFocusOnly(form.form)
+	c.App.Pages.ShowModal(ConnectionFormPageId, form, form.form, true, true)
 }
 
 func (c *Connection) openEditForm() {
@@ -201,8 +199,7 @@ func (c *Connection) openEditForm() {
 		c.App.SetFocus(c.table)
 	})
 	form.Render()
-	c.App.Pages.AddModalPage(ConnectionFormPageId, form, true, true)
-	c.App.SetFocusOnly(form.form)
+	c.App.Pages.ShowModal(ConnectionFormPageId, form, form.form, true, true)
 }
 
 func (c *Connection) Render() {

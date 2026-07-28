@@ -447,8 +447,7 @@ func (a *App) startSelfUpdate(tag string) {
 			})
 		}()
 	})
-	a.Pages.AddModalPage("SelfUpdateConfirm", confirmModal, true, true)
-	a.App.SetFocusOnly(confirmModal)
+	a.Pages.ShowModal("SelfUpdateConfirm", confirmModal, confirmModal, true, true)
 }
 
 func (a *App) initAndRenderMain() {

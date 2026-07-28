@@ -164,8 +164,7 @@ func (iem *InlineEditModal) Render(fieldName, currentValue string) {
 }
 
 func (iem *InlineEditModal) Show() {
-	iem.App.Pages.AddModalPage(InlineEditModalId, core.CenteredFlex(iem.Form, 1, 1), true, true)
-	iem.App.SetFocusOnly(iem.Form)
+	iem.App.Pages.ShowModal(InlineEditModalId, core.CenteredFlex(iem.Form, 1, 1), iem.Form, true, true)
 }
 
 func (iem *InlineEditModal) Hide() {

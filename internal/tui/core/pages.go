@@ -31,26 +31,19 @@ func (p *Pages) SetStyle(style *config.Styles) {
 		Background(style.Global.BackgroundColor.Color()))
 }
 
-// AddPage is a plain pass-through to tview.Pages.AddPage. It does NOT touch
-// the focus stack. Use it for top-level pages (Main, Connection, Options).
-// Transient overlays that should restore focus on dismiss must use
-// AddModalPage / RemoveModalPage instead.
+// AddPage is a plain pass-through to tview.Pages.AddPage
 func (p *Pages) AddPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
 	return p.Pages.AddPage(string(view), page, resize, visible)
 }
 
 // AddModalPage snapshots the current focus and adds the page. The captured
-// focus is restored when the page is dismissed via RemoveModalPage. The caller
-// is responsible for SetFocusOnly-ing the focused primitive (or a sub-widget
-// of it) after this call.
+// focus is restored when the page is dismissed via RemoveModalPage.
 func (p *Pages) AddModalPage(view tview.Identifier, page tview.Primitive, resize, visible bool) *tview.Pages {
 	p.app.SnapshotFocus()
 	return p.Pages.AddPage(string(view), page, resize, visible)
 }
 
-// RemovePage is a plain pass-through. Use it to dismiss pages added via
-// AddPage. Modal pages added with AddModalPage must be dismissed with
-// RemoveModalPage so the stack stays balanced.
+// RemovePage is a plain pass-through. Used to dismiss pages added via AddPage.
 func (p *Pages) RemovePage(view tview.Identifier) *tview.Pages {
 	return p.Pages.RemovePage(string(view))
 }
@@ -63,7 +56,16 @@ func (p *Pages) RemoveModalPage(view tview.Identifier) *tview.Pages {
 	return p.Pages
 }
 
+// ShowModal snapshots focus, adds the page, and focuses the given primitive.
+// Use RemoveModalPage to dismiss.
+func (p *Pages) ShowModal(view tview.Identifier, page tview.Primitive, focus tview.Primitive, resize, visible bool) *tview.Pages {
+	p.AddModalPage(view, page, resize, visible)
+	p.app.SetFocusOnly(focus)
+	return p.Pages
+}
+
 // HasPage wraps tview.Pages.HasPage.
 func (p *Pages) HasPage(view tview.Identifier) bool {
 	return p.Pages.HasPage(string(view))
 }
+

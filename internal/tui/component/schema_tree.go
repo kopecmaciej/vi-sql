@@ -810,8 +810,7 @@ func (s *SchemaTree) showDeleteTableModal(ctx context.Context) {
 		}
 		s.removeTableNode(parent, current)
 	})
-	s.App.Pages.AddModalPage(SchemaDeleteModalId, s.deleteModal, true, true)
-	s.App.SetFocusOnly(s.deleteModal)
+	s.App.Pages.ShowModal(SchemaDeleteModalId, s.deleteModal, s.deleteModal, true, true)
 }
 
 func (s *SchemaTree) removeTableNode(parent, current *tview.TreeNode) {
@@ -861,8 +860,7 @@ func (s *SchemaTree) showRenameTableModal(ctx context.Context) {
 		}
 		return event
 	})
-	s.App.Pages.AddModalPage(SchemaInputModalId, core.CenteredFlex(s.inputModal, 2, 1), true, true)
-	s.App.SetFocusOnly(s.inputModal)
+	s.App.Pages.ShowModal(SchemaInputModalId, core.CenteredFlex(s.inputModal, 2, 1), s.inputModal, true, true)
 }
 
 func (s *SchemaTree) SelectedTable() (schema, table string) {

@@ -589,8 +589,7 @@ func (m *Main) renameActiveTab() {
 		}
 		return event
 	})
-	m.App.Pages.AddModalPage(mainRenameModalId, core.CenteredFlex(m.renameModal, 2, 1), true, true)
-	m.App.SetFocusOnly(m.renameModal)
+	m.App.Pages.ShowModal(mainRenameModalId, core.CenteredFlex(m.renameModal, 2, 1), m.renameModal, true, true)
 }
 
 func (m *Main) openActionsModal() {

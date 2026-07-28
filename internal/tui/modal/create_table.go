@@ -581,8 +581,7 @@ func (m *CreateTableModal) Render(defaultDDL string) {
 			AddItem(nil, 0, 1, false), 0, 4, true).
 		AddItem(nil, 0, 1, false)
 
-	m.App.Pages.AddModalPage(CreateTableModalId, modal, true, true)
-	m.App.SetFocusOnly(m.tableNameInput)
+	m.App.Pages.ShowModal(CreateTableModalId, modal, m.tableNameInput, true, true)
 
 	// Update preview when table name changes
 	m.tableNameInput.SetChangedFunc(func(text string) {

@@ -100,8 +100,7 @@ func (s *ServerInfoModal) Open(info *database.ServerInfo, refreshFn func()) {
 			AddItem(nil, 0, 1, false), 0, 3, true).
 		AddItem(nil, 0, 1, false)
 
-	s.App.Pages.AddModalPage(ServerInfoModalId, wrapper, true, true)
-	s.App.SetFocusOnly(s)
+	s.App.Pages.ShowModal(ServerInfoModalId, wrapper, s, true, true)
 }
 
 func (s *ServerInfoModal) buildContent(info *database.ServerInfo) string {

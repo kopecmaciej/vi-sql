@@ -160,8 +160,7 @@ func (m *MasterPasswordModal) Render() {
 	}
 
 	m.Form.ApplyClipboard()
-	m.App.Pages.AddModalPage(MasterPasswordModalId, core.CenteredFlex(m.Form, 3, 6), true, true)
-	m.App.SetFocusOnly(m.Form)
+	m.App.Pages.ShowModal(MasterPasswordModalId, core.CenteredFlex(m.Form, 3, 6), m.Form, true, true)
 }
 
 func (m *MasterPasswordModal) Hide() {

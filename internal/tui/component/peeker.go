@@ -185,8 +185,7 @@ func (p *Peeker) openValueViewer() {
 		return event
 	}))
 
-	p.App.Pages.AddModalPage(viewerPageId, viewer, true, true)
-	p.App.SetFocusOnly(viewer)
+	p.App.Pages.ShowModal(viewerPageId, viewer, viewer, true, true)
 }
 
 // prettyFormatValue returns a human-readable multi-line representation of val
@@ -249,8 +248,7 @@ func (p *Peeker) Render(row database.Row, columns []database.ColumnInfo) {
 
 	p.ViewModal.SetRows(lines)
 
-	p.App.Pages.AddModalPage(p.GetIdentifier(), p.ViewModal, true, true)
-	p.App.SetFocusOnly(p.ViewModal)
+	p.App.Pages.ShowModal(p.GetIdentifier(), p.ViewModal, p.ViewModal, true, true)
 	p.ViewModal.SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 		if buttonLabel == "Close" || buttonLabel == "" {
 			p.App.Pages.RemoveModalPage(p.GetIdentifier())
