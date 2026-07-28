@@ -15,7 +15,7 @@ func ShowInfo(page *core.Pages, message string) {
 	m.SetText(message)
 	m.AddButtons([]string{"Ok"})
 	m.SetDoneFunc(func(_ int, _ string) {
-		page.RemovePage(InfoModalId)
+		page.RemoveModalPage(InfoModalId)
 	})
-	page.AddPage(InfoModalId, m, true, true)
+	page.AddModalPage(InfoModalId, m, true, true)
 }

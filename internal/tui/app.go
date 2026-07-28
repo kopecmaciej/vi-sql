@@ -153,10 +153,10 @@ func (a *App) setKeybindings() {
 			}
 			return nil
 		case k.Match(k.Global.FullScreenHelp, event):
-if a.Pages.HasPage(page.HelpPageId) {
-			a.Pages.RemoveModalPage(page.HelpPageId)
-			return nil
-		}
+			if a.Pages.HasPage(page.HelpPageId) {
+				a.Pages.RemoveModalPage(page.HelpPageId)
+				return nil
+			}
 			a.openHelp()
 			return nil
 		}

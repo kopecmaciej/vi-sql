@@ -20,8 +20,9 @@ type App struct {
 	styles             *config.Styles
 	config             *config.Config
 	keys               *config.KeyBindings
-	focusStack         []tview.Primitive
-	mcpEnabled         bool
+	focusStack           []tview.Primitive
+	lastFocusedPrimitive tview.Primitive
+	mcpEnabled           bool
 	cursorStyle        tcell.CursorStyle
 	openStyleModal     func()
 	openConnectionPage func()
@@ -131,35 +132,11 @@ func (a *App) SetCursorStyle(style tcell.CursorStyle) {
 	a.cursorStyle = style
 }
 
-// logFocus reports the primitive that actually received focus.
-func (a *App) logFocus(p tview.Primitive) {
-	id := ""
-	if p != nil {
-		id = string(p.GetIdentifier())
-	}
-	log.Info().Str("focus", id).Msg("FocusChanged")
-}
-
-// logStack reports the current modal-focus stack; called on push/pop so the
-// stack is interpretable independently of which primitive is in focus.
-func (a *App) logStack(op string) {
-	stack := make([]string, 0, len(a.focusStack))
-	for _, v := range a.focusStack {
-		if v == nil {
-			stack = append(stack, "<nil>")
-			continue
-		}
-		stack = append(stack, string(v.GetIdentifier()))
-	}
-	log.Info().Str("op", op).Strs("stack", stack).Msg("FocusStack")
-}
-
 // SnapshotFocus pushes the currently focused primitive onto the modal-focus
 // stack so it can be restored by a later RestoreFocus. Callers normally go
 // through Pages.AddModalPage instead of calling this directly.
 func (a *App) SnapshotFocus() {
-	a.focusStack = append(a.focusStack, a.GetFocus())
-	a.logStack("push")
+	a.focusStack = append(a.focusStack, a.lastFocusedPrimitive)
 }
 
 func (a *App) SetFocus(p tview.Primitive) {
@@ -180,7 +157,6 @@ func (a *App) RestoreFocus() {
 	}
 	prev := a.focusStack[len(a.focusStack)-1]
 	a.focusStack = a.focusStack[:len(a.focusStack)-1]
-	a.logStack("pop")
 	a.Application.SetFocus(prev)
 	a.FocusChanged(prev)
 }
@@ -188,7 +164,7 @@ func (a *App) RestoreFocus() {
 func (a *App) FocusChanged(p tview.Primitive) {
 	a.keys.Reset()
 	a.manager.Broadcast(manager.NewFocusChangedMsg(p.GetIdentifier()))
-	a.logFocus(p)
+	a.lastFocusedPrimitive = p
 }
 
 func (a *App) GetDriver() database.Driver {
