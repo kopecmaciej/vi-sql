@@ -155,6 +155,9 @@ func (a *App) RestoreFocus() {
 	}
 	prev := a.focusStack[len(a.focusStack)-1]
 	a.focusStack = a.focusStack[:len(a.focusStack)-1]
+	if prev == nil {
+		return
+	}
 	a.Application.SetFocus(prev)
 	a.FocusChanged(prev)
 }

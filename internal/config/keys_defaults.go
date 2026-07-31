@@ -212,6 +212,10 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Keys:        []string{"Alt+m"},
 			Description: "Export data",
 		},
+		SearchWithinResults: Key{
+			Keys:        []string{"Ctrl+f"},
+			Description: "Search in results",
+		},
 	}
 	if vimMode {
 		k.Data.CopyCell = Key{Sequences: []string{"yc"}, Description: "Copy cell"}
@@ -220,6 +224,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Data.CopyRowCSV = Key{Sequences: []string{"yrc"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Sequences: []string{"gd"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Sequences: []string{"gr"}, Description: "Find references"}
+		k.Data.SearchWithinResults = Key{Sequences: []string{"gf"}, Description: "Search in results"}
 	} else {
 		k.Data.CopyCell = Key{Runes: []string{"c"}, Description: "Copy cell"}
 		k.Data.CopyRow = Key{Runes: []string{"C"}, Description: "Copy row"}

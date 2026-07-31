@@ -27,7 +27,7 @@ func TestResultGrid_CopyRowAsJSON_NestedJSONStringEmbeddedAsObject(t *testing.T)
 
 	rows := []database.Row{{"id": "1", "meta": `{"key":"value"}`}}
 	cols := []database.ColumnInfo{{Name: "id", DataType: "int"}, {Name: "meta", DataType: "jsonb"}}
-	g.Render(rows, cols, app.GetStyles())
+	g.Render(rows, cols, app.GetStyles(), "")
 	g.Draw(sim)
 
 	ok := g.CopyRowAs(util.ExportJSON, 1, rows, cols)
@@ -57,7 +57,7 @@ func TestResultGrid_Render_BracketValuesVisible(t *testing.T) {
 
 			rows := []database.Row{{tt.col: tt.value}}
 			cols := []database.ColumnInfo{{Name: tt.col, DataType: "jsonb"}}
-			g.Render(rows, cols, app.GetStyles())
+			g.Render(rows, cols, app.GetStyles(), "")
 			g.Draw(sim)
 			sim.Sync()
 

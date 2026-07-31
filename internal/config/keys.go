@@ -119,8 +119,9 @@ type (
 		ClearSelection     Key `yaml:"clearSelection"`
 		ExplainQuery       Key `yaml:"explainQuery"`
 		ExportData         Key `yaml:"exportData"`
-		FollowForeignKey   Key `yaml:"followForeignKey"`
-		FindReferences     Key `yaml:"findReferences"`
+		FollowForeignKey     Key `yaml:"followForeignKey"`
+		FindReferences       Key `yaml:"findReferences"`
+		SearchWithinResults  Key `yaml:"searchWithinResults"`
 	}
 
 	ExplainViewerKeys struct {
@@ -161,7 +162,7 @@ type (
 // in both QueryMode and TableMode; tableOnly are exclusive to TableMode.
 func (kb *KeyBindings) DataKeysSplit() (queryMode, tableOnly []Key) {
 	d := kb.Data
-	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyCell, d.CopyRow, d.CopyRowJSON, d.CopyRowCSV, d.MultipleSelect, d.ClearSelection, d.ExplainQuery, d.ExportData}
+	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyCell, d.CopyRow, d.CopyRowJSON, d.CopyRowCSV, d.MultipleSelect, d.ClearSelection, d.ExplainQuery, d.ExportData, d.SearchWithinResults}
 	tableOnly = []Key{d.EditRow, d.DuplicateRow, d.ToggleOrderBar, d.OrderByColumn, d.HideColumn, d.ResetHiddenColumns, d.FollowForeignKey, d.FindReferences}
 	return
 }
@@ -177,6 +178,7 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 		d.MultipleSelect, d.ClearSelection,
 		d.ExplainQuery,
 		d.ExportData,
+		d.SearchWithinResults,
 	}
 }
 

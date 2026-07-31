@@ -19,8 +19,9 @@ import (
 // callers don't need to parse cell header references or manage row offsets.
 type ResultGrid struct {
 	*core.Table
-	app        *core.App
-	hiddenCols []string
+	app                   *core.App
+	hiddenCols            []string
+	searchHighlightColor  tcell.Color
 }
 
 func NewResultGrid() *ResultGrid {
@@ -52,6 +53,7 @@ func (g *ResultGrid) SetStyle(styles *config.Styles, dataStyle *config.DataStyle
 	g.SetMultiSelectedStyle(tcell.StyleDefault.
 		Background(dataStyle.MultiSelectedRowColor.Color()).
 		Foreground(tcell.ColorWhite))
+	g.searchHighlightColor = dataStyle.SearchHighlightColor.Color()
 }
 
 // ColumnName returns the column name stored in the header-cell reference for col.
@@ -258,8 +260,8 @@ func (g *ResultGrid) flashCells(cells []*tview.TableCell) {
 }
 
 // Render paints the header row and all data rows. The table must be cleared
-// before calling this.
-func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, styles *config.Styles) {
+// before calling this. searchText is the substring to highlight within cell values.
+func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, styles *config.Styles, searchText string) {
 	// Column 0 is a fixed row-number column (#); data columns start at 1.
 	g.SetOffset(0, 0)
 	g.SetFixed(1, 1)
@@ -335,6 +337,9 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 				cellText = fmt.Sprintf("[%s]NULL[-:-:-]", styles.Global.DimColor)
 			} else {
 				cellText = tview.Escape(cellText)
+				if searchText != "" {
+					cellText = highlightMatches(cellText, searchText, g.searchHighlightColor)
+				}
 			}
 			g.SetCell(row+1, col+1, tview.NewTableCell(cellText).
 				SetAlign(tview.AlignLeft).
@@ -357,4 +362,28 @@ func orderedColumnNames(row database.Row, cols []database.ColumnInfo) []string {
 		return names
 	}
 	return database.GetSortedColumnNames(row)
+}
+
+func highlightMatches(text, search string, color tcell.Color) string {
+	lower := strings.ToLower(text)
+	searchLower := strings.ToLower(search)
+	highlightOpen := fmt.Sprintf("[#000000:%s]", color.String())
+	highlightClose := "[-]"
+
+	var result strings.Builder
+	last := 0
+	for {
+		idx := strings.Index(lower[last:], searchLower)
+		if idx == -1 {
+			break
+		}
+		idx += last
+		result.WriteString(text[last:idx])
+		result.WriteString(highlightOpen)
+		result.WriteString(text[idx : idx+len(search)])
+		result.WriteString(highlightClose)
+		last = idx + len(search)
+	}
+	result.WriteString(text[last:])
+	return result.String()
 }
