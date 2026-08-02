@@ -1,0 +1,106 @@
+package component
+
+import (
+	"strings"
+	"time"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/kopecmaciej/vi-sql/internal/config"
+	"github.com/kopecmaciej/vi-sql/internal/database"
+	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+)
+
+type searchState struct {
+	input    *core.InputField
+	text     string
+	active   bool
+	debounce *time.Timer
+}
+
+func (s *searchState) init(c *Data) {
+	s.input = core.NewInputField()
+	s.input.SetLabel(" / ")
+	s.input.SetBorder(true)
+	s.input.SetChangedFunc(func(text string) {
+		s.onChange(c, text)
+	})
+	s.input.SetDoneFunc(func(key tcell.Key) {
+		s.exit(c)
+	})
+}
+
+func (s *searchState) enter(c *Data) {
+	s.active = true
+	s.text = ""
+	s.input.SetText("")
+	c.Render()
+	c.App.SetFocusOnly(s.input)
+}
+
+func (s *searchState) exit(c *Data) {
+	s.active = false
+	s.text = ""
+	s.input.SetText("")
+	if s.debounce != nil {
+		s.debounce.Stop()
+		s.debounce = nil
+	}
+	c.Render()
+	c.reRenderState()
+}
+
+func (s *searchState) onChange(c *Data, text string) {
+	s.text = text
+	c.reRenderState()
+	c.resultGrid.SetSelectable(false, false)
+	if s.debounce != nil {
+		s.debounce.Stop()
+	}
+	s.debounce = time.AfterFunc(400*time.Millisecond, func() {
+		c.App.QueueUpdateDraw(func() {
+			if s.text != "" {
+				c.resultGrid.SetSelectable(true, true)
+			}
+		})
+	})
+}
+
+func (s *searchState) clear() {
+	s.text = ""
+	s.active = false
+	if s.debounce != nil {
+		s.debounce.Stop()
+		s.debounce = nil
+	}
+}
+
+func (s *searchState) filtered(c *Data) []database.Row {
+	rows := c.state.GetAllRows()
+	if s.text == "" {
+		return rows
+	}
+	return filterRowsBySearch(rows, s.text)
+}
+
+func (s *searchState) style(styles *config.Styles) {
+	s.input.SetBackgroundColor(styles.Global.BackgroundColor.Color())
+	s.input.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
+	s.input.SetFieldTextColor(styles.Global.TextColor.Color())
+	s.input.SetLabelStyle(tcell.StyleDefault.
+		Foreground(styles.Global.FocusColor.Color()).
+		Background(styles.Global.BackgroundColor.Color()))
+}
+
+func filterRowsBySearch(rows []database.Row, text string) []database.Row {
+	lower := strings.ToLower(text)
+	filtered := make([]database.Row, 0)
+	for _, row := range rows {
+		for _, v := range row {
+			if strings.Contains(strings.ToLower(database.StringifyValue(v)), lower) {
+				filtered = append(filtered, row)
+				break
+			}
+		}
+	}
+	return filtered
+}

@@ -83,9 +83,7 @@ type Data struct {
 	lastExecTime   time.Duration
 	runner         *QueryRunner
 	scroll         *scrollFetcher
-	searchInput    *core.InputField
-	searchText     string
-	searchMode     bool
+	search         searchState
 }
 
 func newData(mode TabMode) *Data {
@@ -109,7 +107,6 @@ func newData(mode TabMode) *Data {
 		sqlEditModal:   NewSQLEditModal(),
 		peeker:         NewPeeker(),
 		explainViewer:  NewExplainViewer(),
-		searchInput:    core.NewInputField(),
 		state:          &database.TableState{},
 		stateMap:       database.NewStateMap(),
 	}
@@ -142,6 +139,7 @@ func (c *Data) init() error {
 
 	c.resultGrid.SetApp(c.App)
 	c.setLayout()
+	c.search.init(c)
 	c.setStyle()
 	c.setKeybindings(ctx)
 
@@ -212,8 +210,7 @@ func (c *Data) init() error {
 		c.runner.Execute(sql, sqlState.BatchSize, RunCallbacks{
 			OnRunning: func() { c.resultsBar.RenderRunning() },
 			OnSelect: func(rows []database.Row, cols []database.ColumnInfo, query string, execTime time.Duration) {
-				c.searchText = ""
-				c.searchMode = false
+				c.search.clear()
 				sqlState.LastQuery = query
 				if val, ok := database.ExtractLimitValue(sql); ok {
 					sqlState.UserLimit = val
@@ -231,7 +228,7 @@ func (c *Data) init() error {
 					c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows returned"))
 					return
 				}
-				c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.searchText)
+				c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.search.text)
 			},
 			OnStatement: c.statementCallbacks(sql).OnStatement,
 			OnExplain: func(result, bareSql string, analyze bool) {
@@ -276,16 +273,6 @@ func (c *Data) init() error {
 	c.filterBarHandler()
 	c.orderBarHandler()
 
-	c.searchInput.SetLabel(" / ")
-	c.searchInput.SetBorder(true)
-	c.searchInput.SetChangedFunc(func(text string) {
-		c.searchText = text
-		c.reRenderState()
-	})
-	c.searchInput.SetDoneFunc(func(key tcell.Key) {
-		c.exitSearchMode()
-	})
-
 	c.handleEvents()
 
 	return nil
@@ -315,12 +302,7 @@ func (c *Data) setStyle() {
 	c.Flex.SetStyle(styles)
 	c.resultGrid.SetStyle(styles, c.style)
 
-	c.searchInput.SetBackgroundColor(styles.Global.BackgroundColor.Color())
-	c.searchInput.SetFieldBackgroundColor(styles.Global.ContrastBackgroundColor.Color())
-	c.searchInput.SetFieldTextColor(styles.Global.TextColor.Color())
-	c.searchInput.SetLabelStyle(tcell.StyleDefault.
-		Foreground(styles.Global.FocusColor.Color()).
-		Background(styles.Global.BackgroundColor.Color()))
+	c.search.style(styles)
 }
 
 func (c *Data) setLayout() {
@@ -363,16 +345,16 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		case k.Match(k.Data.FullPagePeek, event):
 			return c.handlePeekRow(row, true)
 		case k.Match(k.Data.CopyCell, event):
-			c.resultGrid.CopyCell(row, col, c.filteredRows())
+			c.resultGrid.CopyCell(row, col, c.search.filtered(c))
 			return nil
 		case k.Match(k.Data.CopyRow, event):
-			c.resultGrid.CopyRow(row, c.filteredRows(), c.columns)
+			c.resultGrid.CopyRow(row, c.search.filtered(c), c.columns)
 			return nil
 		case k.Match(k.Data.CopyRowJSON, event):
-			c.resultGrid.CopyRowAs(util.ExportJSON, row, c.filteredRows(), c.columns)
+			c.resultGrid.CopyRowAs(util.ExportJSON, row, c.search.filtered(c), c.columns)
 			return nil
 		case k.Match(k.Data.CopyRowCSV, event):
-			c.resultGrid.CopyRowAs(util.ExportCSV, row, c.filteredRows(), c.columns)
+			c.resultGrid.CopyRowAs(util.ExportCSV, row, c.search.filtered(c), c.columns)
 			return nil
 		case k.Match(k.Common.Refresh, event):
 			c.triggerRefresh(nil, func(err error) {
@@ -418,7 +400,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 		case k.Match(k.Data.FindReferences, event):
 			return c.handleFindReferences(ctx, row, col)
 		case k.Match(k.Data.SearchWithinResults, event):
-			c.enterSearchMode()
+			c.search.enter(c)
 			return nil
 		case k.Match(k.Data.OrderByColumn, event):
 			return c.handleOrderByColumn(col)
@@ -590,7 +572,7 @@ func (c *Data) HasResults() bool {
 // the given export format. Delegates to ResultGrid with the current selection.
 func (c *Data) CopyRowAs(format util.ExportFormat) {
 	row, _ := c.resultGrid.GetSelection()
-	c.resultGrid.CopyRowAs(format, row, c.filteredRows(), c.columns)
+	c.resultGrid.CopyRowAs(format, row, c.search.filtered(c), c.columns)
 }
 
 // SelectedTable returns the schema and table/view currently loaded in this tab.
@@ -640,9 +622,9 @@ func (c *Data) Render() {
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 1, true)
 		default:
 			c.Flex.AddItem(c.sqlQueryEditor, 0, 3, true)
-			if c.searchMode {
-				c.Flex.AddItem(c.searchInput, 3, 0, false)
-				focusPrimitive = c.searchInput
+			if c.search.active {
+				c.Flex.AddItem(c.search.input, 3, 0, false)
+				focusPrimitive = c.search.input
 			}
 			c.Flex.AddItem(c.tableFlex, 0, 7, true)
 		}
@@ -657,9 +639,9 @@ func (c *Data) Render() {
 			c.Flex.AddItem(c.orderBar, 3, 0, false)
 			focusPrimitive = c.orderBar
 		}
-		if c.searchMode {
-			c.Flex.AddItem(c.searchInput, 3, 0, false)
-			focusPrimitive = c.searchInput
+		if c.search.active {
+			c.Flex.AddItem(c.search.input, 3, 0, false)
+			focusPrimitive = c.search.input
 		}
 		c.Flex.AddItem(c.tableFlex, 0, 1, true)
 	}
@@ -756,7 +738,7 @@ func (c *Data) handlePeekRow(row int, fullScreen bool) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
-	rowData := c.resultGrid.RowData(row, c.filteredRows())
+	rowData := c.resultGrid.RowData(row, c.search.filtered(c))
 	if rowData == nil {
 		return nil
 	}
@@ -772,7 +754,7 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 
 	// Collect primary keys: prefer multi-selected rows, fall back to cursor row.
 	selectedRows := c.resultGrid.GetSelectedRows()
-	allRows := c.filteredRows()
+	allRows := c.search.filtered(c)
 	pkCols := c.state.GetPrimaryKey()
 	var pks []database.PrimaryKey
 	if len(selectedRows) > 0 {
@@ -822,7 +804,7 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 }
 
 func (c *Data) rowPrimaryKey(row int) *database.PrimaryKey {
-	return c.resultGrid.RowPrimaryKey(row, c.filteredRows(), c.state.GetPrimaryKey())
+	return c.resultGrid.RowPrimaryKey(row, c.search.filtered(c), c.state.GetPrimaryKey())
 }
 
 // statementCallbacks returns RunCallbacks for a non-SELECT statement result.
@@ -850,8 +832,7 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 	c.resultGrid.ClearSelection()
 	c.state.ClearBuffer()
 	c.scroll.cancel()
-	c.searchText = ""
-	c.searchMode = false
+	c.search.clear()
 	c.runner.Refresh(c.state, RunCallbacks{
 		OnRunning: func() { c.resultsBar.RenderRunning() },
 		OnCountEstimate: func(count int64) {
@@ -885,7 +866,7 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 			if len(rows) == 0 {
 				c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows found"))
 			} else {
-				c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.searchText)
+				c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.search.text)
 			}
 			if onDone != nil {
 				onDone()
@@ -904,12 +885,12 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 // hitting the database. Used after local mutations (delete, hide column, etc.).
 func (c *Data) reRenderState() {
 	c.resultGrid.ClearSelection()
-	rows := c.filteredRows()
+	rows := c.search.filtered(c)
 	c.resultGrid.Clear()
 	c.resultsBar.Render(c.state, c.lastExecTime)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
 	if len(rows) == 0 {
-		if c.searchText != "" {
+		if c.search.text != "" {
 			c.resultGrid.SetFixed(0, 0)
 			c.resultGrid.SetSelectable(false, false)
 			c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows match the search"))
@@ -918,7 +899,7 @@ func (c *Data) reRenderState() {
 		}
 		return
 	}
-	c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.searchText)
+	c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.search.text)
 }
 
 // RunCount fires an exact COUNT(*) for the current table/query and updates the results bar.
@@ -966,7 +947,7 @@ func (c *Data) batchSize() int64 {
 // Preserves the current cursor position.
 func (c *Data) renderAfterAppend() {
 	row, col := c.resultGrid.GetSelection()
-	rows := c.filteredRows()
+	rows := c.search.filtered(c)
 	c.resultGrid.Clear()
 	c.resultsBar.Render(c.state, c.lastExecTime)
 	c.stateMap.Set(c.stateMap.Key(c.state.Schema, c.state.Table), c.state)
@@ -976,48 +957,10 @@ func (c *Data) renderAfterAppend() {
 		c.resultGrid.SetCell(0, 0, tview.NewTableCell("No rows match the search"))
 		return
 	}
-	c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.searchText)
+	c.resultGrid.Render(rows, c.columns, c.App.GetStyles(), c.search.text)
 	if row > 0 && row < c.resultGrid.GetRowCount() {
 		c.resultGrid.Select(row, col)
 	}
-}
-
-func (c *Data) filteredRows() []database.Row {
-	rows := c.state.GetAllRows()
-	if c.searchText == "" {
-		return rows
-	}
-	return filterRowsBySearch(rows, c.searchText)
-}
-
-func filterRowsBySearch(rows []database.Row, text string) []database.Row {
-	lower := strings.ToLower(text)
-	filtered := make([]database.Row, 0)
-	for _, row := range rows {
-		for _, v := range row {
-			if strings.Contains(strings.ToLower(database.StringifyValue(v)), lower) {
-				filtered = append(filtered, row)
-				break
-			}
-		}
-	}
-	return filtered
-}
-
-func (c *Data) enterSearchMode() {
-	c.searchMode = true
-	c.searchText = ""
-	c.searchInput.SetText("")
-	c.Render()
-	c.App.SetFocusOnly(c.searchInput)
-}
-
-func (c *Data) exitSearchMode() {
-	c.searchMode = false
-	c.searchText = ""
-	c.searchInput.SetText("")
-	c.Render()
-	c.reRenderState()
 }
 
 // confirmIfDestructive shows a confirm modal for destructive SQL statements.
@@ -1118,7 +1061,7 @@ func (c *Data) handleFollowForeignKey(row, col int) *tcell.EventKey {
 		return nil
 	}
 
-	rowData := c.resultGrid.RowData(row, c.filteredRows())
+	rowData := c.resultGrid.RowData(row, c.search.filtered(c))
 	if rowData == nil {
 		return nil
 	}
@@ -1162,7 +1105,7 @@ func (c *Data) handleFindReferences(ctx context.Context, row, col int) *tcell.Ev
 		return nil
 	}
 
-	rowData := c.resultGrid.RowData(row, c.filteredRows())
+	rowData := c.resultGrid.RowData(row, c.search.filtered(c))
 	if rowData == nil {
 		return nil
 	}
@@ -1372,7 +1315,7 @@ func (c *Data) handleInlineEdit(ctx context.Context, row, col int) *tcell.EventK
 		return nil
 	}
 
-	originalRow := c.resultGrid.RowData(row, c.filteredRows())
+	originalRow := c.resultGrid.RowData(row, c.search.filtered(c))
 	if originalRow == nil {
 		return nil
 	}
@@ -1443,7 +1386,7 @@ func (c *Data) handleDuplicateRow(ctx context.Context, row int) {
 	if row < 1 {
 		return
 	}
-	rows := c.filteredRows()
+	rows := c.search.filtered(c)
 	dataRow := row - 1
 	if dataRow < 0 || dataRow >= len(rows) {
 		return
@@ -1464,7 +1407,7 @@ func (c *Data) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 		return nil
 	}
 
-	rows := c.filteredRows()
+	rows := c.search.filtered(c)
 	dataRow := row - 1
 	if dataRow < 0 || dataRow >= len(rows) {
 		return nil
@@ -1490,7 +1433,7 @@ func (c *Data) selectedRowsData() ([]database.Row, []string) {
 	if len(indices) == 0 {
 		return nil, nil
 	}
-	allRows := c.filteredRows()
+	allRows := c.search.filtered(c)
 	if len(allRows) == 0 {
 		return nil, nil
 	}

@@ -19,9 +19,9 @@ import (
 // callers don't need to parse cell header references or manage row offsets.
 type ResultGrid struct {
 	*core.Table
-	app                   *core.App
-	hiddenCols            []string
-	searchHighlightColor  tcell.Color
+	app                *core.App
+	hiddenCols         []string
+	searchHighlightHex string
 }
 
 func NewResultGrid() *ResultGrid {
@@ -53,7 +53,7 @@ func (g *ResultGrid) SetStyle(styles *config.Styles, dataStyle *config.DataStyle
 	g.SetMultiSelectedStyle(tcell.StyleDefault.
 		Background(dataStyle.MultiSelectedRowColor.Color()).
 		Foreground(tcell.ColorWhite))
-	g.searchHighlightColor = dataStyle.SearchHighlightColor.Color()
+	g.searchHighlightHex = dataStyle.SearchHighlightColor.String()
 }
 
 // ColumnName returns the column name stored in the header-cell reference for col.
@@ -338,7 +338,7 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 			} else {
 				cellText = tview.Escape(cellText)
 				if searchText != "" {
-					cellText = highlightMatches(cellText, searchText, g.searchHighlightColor)
+					cellText = highlightMatches(cellText, searchText, g.searchHighlightHex)
 				}
 			}
 			g.SetCell(row+1, col+1, tview.NewTableCell(cellText).
@@ -364,11 +364,11 @@ func orderedColumnNames(row database.Row, cols []database.ColumnInfo) []string {
 	return database.GetSortedColumnNames(row)
 }
 
-func highlightMatches(text, search string, color tcell.Color) string {
+func highlightMatches(text, search, highlightHex string) string {
 	lower := strings.ToLower(text)
 	searchLower := strings.ToLower(search)
-	highlightOpen := fmt.Sprintf("[#000000:%s]", color.String())
-	highlightClose := "[-]"
+	highlightOpen := fmt.Sprintf("[:%s]", highlightHex)
+	highlightClose := "[-:-:-]"
 
 	var result strings.Builder
 	last := 0
