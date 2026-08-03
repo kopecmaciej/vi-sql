@@ -106,6 +106,28 @@ func (g *ResultGrid) VisibleColumns(row database.Row, cols []database.ColumnInfo
 	return visible
 }
 
+// FindMatches returns grid (row, col) coordinates of cells containing the
+// search text within filteredRows. Coordinates are 1-indexed: row 0 is the
+// header row and col 0 is the fixed "#" column. Returns nil when text is
+// empty or no rows match.
+func (g *ResultGrid) FindMatches(searchText string, filteredRows []database.Row, cols []database.ColumnInfo) [][2]int {
+	if searchText == "" || len(filteredRows) == 0 {
+		return nil
+	}
+	lowerText := strings.ToLower(searchText)
+	visibleCols := g.VisibleColumns(filteredRows[0], cols)
+
+	var matches [][2]int
+	for i, row := range filteredRows {
+		for j, colName := range visibleCols {
+			if strings.Contains(strings.ToLower(database.StringifyValue(row[colName])), lowerText) {
+				matches = append(matches, [2]int{i + 1, j + 1})
+			}
+		}
+	}
+	return matches
+}
+
 // ClampCol returns col clamped to the valid column range [0, columnCount-1].
 func (g *ResultGrid) ClampCol(col int) int {
 	if count := g.GetColumnCount(); col >= count {

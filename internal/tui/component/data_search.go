@@ -25,6 +25,10 @@ func (s *searchState) init(c *Data) {
 		s.onChange(c, text)
 	})
 	s.input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			s.accept(c)
+			return
+		}
 		s.exit(c)
 	})
 }
@@ -47,6 +51,23 @@ func (s *searchState) exit(c *Data) {
 	}
 	c.Render()
 	c.reRenderState()
+}
+
+func (s *searchState) accept(c *Data) {
+	s.active = false
+	if s.debounce != nil {
+		s.debounce.Stop()
+		s.debounce = nil
+	}
+	c.Render()
+	c.reRenderState()
+	c.App.SetFocusOnly(c.resultGrid)
+
+	rows := s.filtered(c)
+	matches := c.resultGrid.FindMatches(s.text, rows, c.columns)
+	if len(matches) > 0 {
+		c.resultGrid.Select(matches[0][0], matches[0][1])
+	}
 }
 
 func (s *searchState) onChange(c *Data, text string) {

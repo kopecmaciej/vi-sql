@@ -216,6 +216,14 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Keys:        []string{"Ctrl+f"},
 			Description: "Search in results",
 		},
+		SearchNextMatch: Key{
+			Runes:       []string{"n"},
+			Description: "Next match",
+		},
+		SearchPrevMatch: Key{
+			Runes:       []string{"N"},
+			Description: "Prev match",
+		},
 	}
 	if vimMode {
 		k.Data.CopyCell = Key{Sequences: []string{"yc"}, Description: "Copy cell"}

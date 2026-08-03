@@ -380,6 +380,11 @@ func (c *Data) setKeybindings(ctx context.Context) {
 				c.runner.CancelQuery()
 				return nil
 			}
+			if c.search.text != "" {
+				c.search.text = ""
+				c.reRenderState()
+				return nil
+			}
 			c.resultGrid.ClearSelection()
 			return nil
 		case k.Match(k.Data.ExplainQuery, event):
@@ -401,6 +406,12 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			return c.handleFindReferences(ctx, row, col)
 		case k.Match(k.Data.SearchWithinResults, event):
 			c.search.enter(c)
+			return nil
+		case k.Match(k.Data.SearchNextMatch, event):
+			c.searchJump(true)
+			return nil
+		case k.Match(k.Data.SearchPrevMatch, event):
+			c.searchJump(false)
 			return nil
 		case k.Match(k.Data.OrderByColumn, event):
 			return c.handleOrderByColumn(col)
@@ -879,6 +890,48 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 		},
 		OnCancel: func() { c.resultsBar.RenderCancelled() },
 	})
+}
+
+// searchJump moves the selection to the next or previous matching cell. No-op
+// when no search is active.
+func (c *Data) searchJump(forward bool) {
+	if c.search.text == "" {
+		return
+	}
+	rows := c.search.filtered(c)
+	matches := c.resultGrid.FindMatches(c.search.text, rows, c.columns)
+	if len(matches) == 0 {
+		return
+	}
+	curRow, curCol := c.resultGrid.GetSelection()
+
+	if forward {
+		for _, m := range matches {
+			if m[0] > curRow || (m[0] == curRow && m[1] > curCol) {
+				c.resultGrid.Select(m[0], m[1])
+				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+				c.scroll.tryPrefetch(m[0], viewHeight, c.renderAfterAppend)
+				return
+			}
+		}
+		c.resultGrid.Select(matches[0][0], matches[0][1])
+		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+		c.scroll.tryPrefetch(matches[0][0], viewHeight, c.renderAfterAppend)
+	} else {
+		for i := len(matches) - 1; i >= 0; i-- {
+			m := matches[i]
+			if m[0] < curRow || (m[0] == curRow && m[1] < curCol) {
+				c.resultGrid.Select(m[0], m[1])
+				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+				c.scroll.tryPrefetch(m[0], viewHeight, c.renderAfterAppend)
+				return
+			}
+		}
+		last := matches[len(matches)-1]
+		c.resultGrid.Select(last[0], last[1])
+		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
+		c.scroll.tryPrefetch(last[0], viewHeight, c.renderAfterAppend)
+	}
 }
 
 // reRenderState re-renders the table from the current in-memory state without
