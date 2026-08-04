@@ -116,16 +116,43 @@ func (g *ResultGrid) FindMatches(searchText string, filteredRows []database.Row,
 	}
 	lowerText := strings.ToLower(searchText)
 	visibleCols := g.VisibleColumns(filteredRows[0], cols)
+	boolCols := buildBoolCols(cols)
 
 	var matches [][2]int
 	for i, row := range filteredRows {
 		for j, colName := range visibleCols {
-			if strings.Contains(strings.ToLower(database.StringifyValue(row[colName])), lowerText) {
+			if strings.Contains(strings.ToLower(cellSearchText(row[colName], boolCols[colName])), lowerText) {
 				matches = append(matches, [2]int{i + 1, j + 1})
 			}
 		}
 	}
 	return matches
+}
+
+// cellSearchText returns the canonical text used for search matching and
+// display, normalizing Postgres boolean storage ("t"/"f") to "true"/"false".
+func cellSearchText(v any, isBool bool) string {
+	s := database.StringifyValue(v)
+	if isBool {
+		switch s {
+		case "t":
+			return "true"
+		case "f":
+			return "false"
+		}
+	}
+	return s
+}
+
+// buildBoolCols returns a set of column names whose DataType is "boolean".
+func buildBoolCols(cols []database.ColumnInfo) map[string]bool {
+	m := make(map[string]bool, len(cols))
+	for _, col := range cols {
+		if col.DataType == "boolean" {
+			m[col.Name] = true
+		}
+	}
+	return m
 }
 
 // ClampCol returns col clamped to the valid column range [0, columnCount-1].
@@ -297,14 +324,10 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 	visibleCols := g.VisibleColumns(rows[0], cols)
 
 	typeMap := make(map[string]string)
-	boolCols := make(map[string]bool)
 	pkCols := make(map[string]bool)
 	fkCols := make(map[string]bool)
 	for _, col := range cols {
 		typeMap[col.Name] = styles.Icons.TypeSymbol(col.DataType)
-		if col.DataType == "boolean" {
-			boolCols[col.Name] = true
-		}
 		if col.IsPK {
 			pkCols[col.Name] = true
 		}
@@ -312,6 +335,7 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 			fkCols[col.Name] = true
 		}
 	}
+	boolCols := buildBoolCols(cols)
 
 	for col, name := range visibleCols {
 		headerText := name
@@ -343,15 +367,7 @@ func (g *ResultGrid) Render(rows []database.Row, cols []database.ColumnInfo, sty
 			SetMaxWidth(6))
 		for col, colName := range visibleCols {
 			isNull := rowData[colName] == nil
-			cellText := database.StringifyValue(rowData[colName])
-			if boolCols[colName] {
-				switch cellText {
-				case "t":
-					cellText = "true"
-				case "f":
-					cellText = "false"
-				}
-			}
+			cellText := cellSearchText(rowData[colName], boolCols[colName])
 			if len(cellText) > 35 {
 				cellText = cellText[:35] + "..."
 			}

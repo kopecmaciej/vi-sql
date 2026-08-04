@@ -100,7 +100,7 @@ func (s *searchState) filtered(c *Data) []database.Row {
 	if s.text == "" {
 		return rows
 	}
-	return filterRowsBySearch(rows, s.text)
+	return filterRowsBySearch(rows, s.text, c.columns)
 }
 
 func (s *searchState) style(styles *config.Styles) {
@@ -112,12 +112,13 @@ func (s *searchState) style(styles *config.Styles) {
 		Background(styles.Global.BackgroundColor.Color()))
 }
 
-func filterRowsBySearch(rows []database.Row, text string) []database.Row {
+func filterRowsBySearch(rows []database.Row, text string, cols []database.ColumnInfo) []database.Row {
 	lower := strings.ToLower(text)
+	boolCols := buildBoolCols(cols)
 	filtered := make([]database.Row, 0)
 	for _, row := range rows {
-		for _, v := range row {
-			if strings.Contains(strings.ToLower(database.StringifyValue(v)), lower) {
+		for colName, v := range row {
+			if strings.Contains(strings.ToLower(cellSearchText(v, boolCols[colName])), lower) {
 				filtered = append(filtered, row)
 				break
 			}
