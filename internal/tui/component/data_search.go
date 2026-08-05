@@ -51,6 +51,7 @@ func (s *searchState) exit(c *Data) {
 	}
 	c.Render()
 	c.reRenderState()
+	c.App.SetFocusOnly(c.resultGrid)
 }
 
 func (s *searchState) accept(c *Data) {
@@ -97,10 +98,10 @@ func (s *searchState) clear() {
 
 func (s *searchState) filtered(c *Data) []database.Row {
 	rows := c.state.GetAllRows()
-	if s.text == "" {
+	if s.text == "" || len(rows) == 0 {
 		return rows
 	}
-	return filterRowsBySearch(rows, s.text, c.columns)
+	return filterRowsBySearch(rows, s.text, c.columns, c.resultGrid.VisibleColumns(rows[0], c.columns))
 }
 
 func (s *searchState) style(styles *config.Styles) {
@@ -112,13 +113,13 @@ func (s *searchState) style(styles *config.Styles) {
 		Background(styles.Global.BackgroundColor.Color()))
 }
 
-func filterRowsBySearch(rows []database.Row, text string, cols []database.ColumnInfo) []database.Row {
+func filterRowsBySearch(rows []database.Row, text string, cols []database.ColumnInfo, visibleCols []string) []database.Row {
 	lower := strings.ToLower(text)
 	boolCols := buildBoolCols(cols)
 	filtered := make([]database.Row, 0)
 	for _, row := range rows {
-		for colName, v := range row {
-			if strings.Contains(strings.ToLower(cellSearchText(v, boolCols[colName])), lower) {
+		for _, colName := range visibleCols {
+			if strings.Contains(strings.ToLower(cellSearchText(row[colName], boolCols[colName])), lower) {
 				filtered = append(filtered, row)
 				break
 			}

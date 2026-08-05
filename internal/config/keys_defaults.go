@@ -37,6 +37,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		Confirm: Key{Keys: []string{"Ctrl+s"}, Description: "Confirm"},
 	}
 
+	// TODO: Think about better way to handle vim/non vim keys
 	if vimMode {
 		k.Common.Delete = Key{Sequences: []string{"dd"}, Description: "Delete"}
 		k.Common.Copy = Key{Sequences: []string{"yy"}, Description: "Copy"}
@@ -64,15 +65,18 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Navigation.FocusDown = Key{Keys: []string{"Ctrl+j"}, Description: "Focus down"}
 		k.Navigation.FocusLeft = Key{Keys: []string{"Ctrl+h"}, Description: "Focus left"}
 		k.Navigation.FocusRight = Key{Keys: []string{"Ctrl+l"}, Description: "Focus right"}
+		k.Navigation.AutocompleteUp = Key{Keys: []string{"Ctrl+p", "Up"}, Description: "Autocomplete up"}
+		k.Navigation.AutocompleteDown = Key{Keys: []string{"Ctrl+n", "Down"}, Description: "Autocomplete down"}
+		k.Navigation.AutocompleteAccept = Key{Keys: []string{"Ctrl+y", "Enter"}, Description: "Autocomplete accept"}
 	} else {
 		k.Navigation.FocusUp = Key{Keys: []string{"Alt+Up"}, Description: "Focus up"}
 		k.Navigation.FocusDown = Key{Keys: []string{"Alt+Down"}, Description: "Focus down"}
 		k.Navigation.FocusLeft = Key{Keys: []string{"Alt+Left"}, Description: "Focus left"}
 		k.Navigation.FocusRight = Key{Keys: []string{"Alt+Right"}, Description: "Focus right"}
+		k.Navigation.AutocompleteUp = Key{Keys: []string{"Up"}, Description: "Autocomplete up"}
+		k.Navigation.AutocompleteDown = Key{Keys: []string{"Down"}, Description: "Autocomplete down"}
+		k.Navigation.AutocompleteAccept = Key{Keys: []string{"Enter"}, Description: "Autocomplete accept"}
 	}
-	k.Navigation.AutocompleteUp = Key{Keys: []string{"Ctrl+p", "Up"}, Description: "Autocomplete up"}
-	k.Navigation.AutocompleteDown = Key{Keys: []string{"Ctrl+n", "Down"}, Description: "Autocomplete down"}
-	k.Navigation.AutocompleteAccept = Key{Keys: []string{"Ctrl+y", "Enter"}, Description: "Autocomplete accept"}
 
 	k.Global = GlobalKeys{
 		CloseApp: Key{
@@ -212,10 +216,6 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Keys:        []string{"Alt+m"},
 			Description: "Export data",
 		},
-		SearchWithinResults: Key{
-			Keys:        []string{"Ctrl+f"},
-			Description: "Search in results",
-		},
 		SearchNextMatch: Key{
 			Runes:       []string{"n"},
 			Description: "Next match",
@@ -232,7 +232,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Data.CopyRowCSV = Key{Sequences: []string{"yrc"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Sequences: []string{"gd"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Sequences: []string{"gr"}, Description: "Find references"}
-		k.Data.SearchWithinResults = Key{Sequences: []string{"gf"}, Description: "Search in results"}
+		k.Data.SearchWithinResults = Key{Sequences: []string{"gs"}, Description: "Search in results"}
 	} else {
 		k.Data.CopyCell = Key{Runes: []string{"c"}, Description: "Copy cell"}
 		k.Data.CopyRow = Key{Runes: []string{"C"}, Description: "Copy row"}
@@ -240,6 +240,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Data.CopyRowCSV = Key{Keys: []string{"Alt+c"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Keys: []string{"Ctrl+b"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Keys: []string{"Alt+r"}, Description: "Find references"}
+		k.Data.SearchWithinResults = Key{Keys: []string{"Ctrl+f"}, Description: "Search in results"}
 	}
 
 	k.ExplainViewer = ExplainViewerKeys{
