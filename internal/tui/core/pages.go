@@ -43,12 +43,8 @@ func (p *Pages) AddModalPage(view tview.Identifier, page tview.Primitive, resize
 	p.app.SnapshotFocus()
 	p.Pages.AddPage(string(view), page, resize, visible)
 	if visible {
-		// page is typically a wrapper Flex (for centering), which never reports
-		// HasFocus() = true. Broadcast with the page name so focus tracking sees
-		// which modal opened. The caller then calls SetFocusOnly(innerComponent).
 		p.app.keys.Reset()
 		log.Trace().Str("element", string(view)).Msg("focus changed")
-		p.app.manager.Broadcast(manager.NewFocusChangedMsg(view))
 	}
 	return p.Pages
 }

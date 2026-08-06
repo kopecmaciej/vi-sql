@@ -138,7 +138,7 @@ func TestConnectionFormDelete(t *testing.T) {
 
 func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
 	// diver picker first
-	s.MoveRight(3) // -> for now it's postgres
+	s.MoveRight(4) // -> for now it's postgres
 	s.Select()
 
 	s.WaitForPane("Name")
@@ -151,7 +151,7 @@ func AddPsqlConnectionByForm(s *harness.Session, name, dsn string) {
 func AddSQLiteConnectionByForm(s *harness.Session, name, dbPath string) {
 	s.WaitForPane("Pick Driver")
 	// drivers sorted alphabetically: cockroachdb=0, mariadb=1, mysql=2, postgres=3, sqlite=4
-	s.MoveRight(4)
+	s.MoveRight(5)
 	s.Select()
 
 	s.WaitForPane("Name")
