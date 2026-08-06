@@ -813,7 +813,7 @@ func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset i
 	for i, fd := range fieldDescs {
 		dataType := ""
 		if t, ok := typeMap.TypeForOID(fd.DataTypeOID); ok {
-			dataType = t.Name
+			dataType = toSQLStandardTypeName(t.Name)
 		}
 		cols[i] = database.ColumnInfo{Name: fd.Name, DataType: dataType, Ordinal: i + 1}
 	}
@@ -834,9 +834,14 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 	defer rows.Close()
 
 	fieldDescs := rows.FieldDescriptions()
+	typeMap := pgtype.NewMap()
 	colInfos := make([]database.ColumnInfo, len(fieldDescs))
 	for i, fd := range fieldDescs {
-		colInfos[i] = database.ColumnInfo{Name: fd.Name, Ordinal: i + 1}
+		dataType := ""
+		if t, ok := typeMap.TypeForOID(fd.DataTypeOID); ok {
+			dataType = toSQLStandardTypeName(t.Name)
+		}
+		colInfos[i] = database.ColumnInfo{Name: fd.Name, DataType: dataType, Ordinal: i + 1}
 	}
 
 	result, err := scanTextRows(rows)
@@ -959,4 +964,12 @@ func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([
 	}
 
 	return cols, rows.Err()
+}
+
+func toSQLStandardTypeName(name string) string {
+	switch name {
+	case "bool":
+		return "boolean"
+	}
+	return name
 }
