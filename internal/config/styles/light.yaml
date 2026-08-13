@@ -21,6 +21,7 @@ data:
   cellTextColor: "#2C2018"
   selectedRowColor: "#5A8A4A"
   multiSelectedRowColor: "#5A8A4A"
+  searchHighlightColor: "#D9A83C"
 tabBar:
   activeTextColor: "#F5F0E8"
 autocomplete:

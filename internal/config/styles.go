@@ -55,10 +55,10 @@ type (
 	}
 
 	DataStyle struct {
-		CellTextColor           Style `yaml:"cellTextColor"`
-		SelectedRowColor        Style `yaml:"selectedRowColor"`
-		MultiSelectedRowColor   Style `yaml:"multiSelectedRowColor"`
-		SearchHighlightColor    Style `yaml:"searchHighlightColor"`
+		CellTextColor         Style `yaml:"cellTextColor"`
+		SelectedRowColor      Style `yaml:"selectedRowColor"`
+		MultiSelectedRowColor Style `yaml:"multiSelectedRowColor"`
+		SearchHighlightColor  Style `yaml:"searchHighlightColor"`
 	}
 
 	TabBarStyle struct {
