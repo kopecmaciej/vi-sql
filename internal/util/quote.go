@@ -12,7 +12,7 @@ type Quoter byte
 
 const (
 	ANSIQuoter     Quoter = '"' // PostgreSQL, SQLite
-	BacktickQuoter Quoter = '`' // MySQL, MariaDB
+	BacktickQuoter Quoter = '`' // MySQL, MariaDB, GaussDB
 	BracketQuoter  Quoter = '[' // SQL Server
 )
 

@@ -46,6 +46,11 @@ func ParsePostgresDSN(dsn string) (*ParsedDSN, error) {
 	return parseURLDSN(dsn, "5432", "sslmode")
 }
 
+// ParseGaussDBDSN parses a GaussDB DSN (URL form) into its components.
+func ParseGaussDBDSN(dsn string) (*ParsedDSN, error) {
+	return parseURLDSN(dsn, "8000", "sslmode")
+}
+
 // ParseMySQLDSN parses a mysql:// URL into its components.
 func ParseMySQLDSN(dsn string) (*ParsedDSN, error) {
 	return parseURLDSN(dsn, "3306", "tls")
@@ -151,6 +156,8 @@ func DetectDriverFromDSN(dsn string) (string, error) {
 	switch {
 	case strings.HasPrefix(lower, "cockroachdb://"):
 		return "cockroachdb", nil
+	case strings.HasPrefix(lower, "gaussdb://"):
+		return "gaussdb", nil
 	case strings.HasPrefix(lower, "postgres://"), strings.HasPrefix(lower, "postgresql://"):
 		return "postgres", nil
 	case strings.HasPrefix(lower, "mysql://"):
@@ -187,6 +194,14 @@ func BuildPostgresDSN(host string, port int, database, username, password, sslMo
 		sslMode = "disable"
 	}
 	return BuildDSN("postgres", host, port, database, username, password, map[string]string{"sslmode": sslMode})
+}
+
+// BuildGaussDBDSN constructs a GaussDB connection URL from individual components.
+func BuildGaussDBDSN(host string, port int, database, username, password, sslMode string) string {
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	return BuildDSN("gaussdb", host, port, database, username, password, map[string]string{"sslmode": sslMode})
 }
 
 // IsMultiHostDSN reports whether dsn contains multiple hosts in the authority

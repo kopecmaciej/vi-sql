@@ -5,6 +5,7 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/cockroachdb"
+	_ "github.com/kopecmaciej/vi-sql/internal/driver/gaussdb"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/mariadb"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/mysql"
 	_ "github.com/kopecmaciej/vi-sql/internal/driver/postgres"
