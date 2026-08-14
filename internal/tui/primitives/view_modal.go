@@ -300,8 +300,6 @@ func (m *ViewModal) CopySelectedLine(copyFunc func(text string), copyType string
 
 // --- Helpers ---
 
-const maxTypeCap = 12
-
 // wrapText splits text into lines of at most width characters,
 // preferring to break at spaces.
 func wrapText(text string, width int) []string {
@@ -433,9 +431,6 @@ func (m *ViewModal) Draw(screen tcell.Screen) {
 		if len(rl.Type) > maxTypeLen {
 			maxTypeLen = len(rl.Type)
 		}
-	}
-	if maxTypeLen > maxTypeCap {
-		maxTypeLen = maxTypeCap
 	}
 
 	innerWidth := width - 8
