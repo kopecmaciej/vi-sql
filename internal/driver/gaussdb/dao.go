@@ -71,8 +71,11 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 	info.CurrentDB = d.client.Config.Database
 
 	var maxConns int64
-	err = d.client.DB.QueryRowContext(ctx,
-		"SELECT setting::int FROM pg_settings WHERE name = 'max_connections'").Scan(&maxConns)
+	maxConnsQuery := "SELECT setting::int FROM pg_settings WHERE name = 'max_connections'"
+	if d.client.IsMySQLCompat() {
+		maxConnsQuery = "SELECT setting::int FROM gs_settings WHERE name = 'max_connections'"
+	}
+	err = d.client.DB.QueryRowContext(ctx, maxConnsQuery).Scan(&maxConns)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to get max connections")
 	} else {
@@ -80,8 +83,11 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 	}
 
 	var dbSize string
-	err = d.client.DB.QueryRowContext(ctx,
-		"SELECT pg_size_pretty(pg_database_size(current_database()))").Scan(&dbSize)
+	dbSizeQuery := "SELECT pg_size_pretty(pg_database_size(current_database()))"
+	if d.client.IsMySQLCompat() {
+		dbSizeQuery = `SELECT pg_size_pretty(COALESCE(SUM(data_length + index_length), 0)) FROM information_schema.tables WHERE table_schema = current_database()`
+	}
+	err = d.client.DB.QueryRowContext(ctx, dbSizeQuery).Scan(&dbSize)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to get database size")
 	} else {
@@ -89,9 +95,15 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 	}
 
 	var cacheHit string
-	err = d.client.DB.QueryRowContext(ctx, `
+	cacheHitQuery := `
 		SELECT to_char(round(blks_hit::numeric / nullif(blks_hit + blks_read, 0) * 100, 1), 'FM990.0') || '%'
-		FROM pg_stat_database WHERE datname = current_database()`).Scan(&cacheHit)
+		FROM pg_stat_database WHERE datname = current_database()`
+	if d.client.IsMySQLCompat() {
+		cacheHitQuery = `
+			SELECT to_char(round(blks_hit::numeric / nullif(blks_hit + blks_read, 0) * 100, 1), 'FM990.0') || '%'
+			FROM gs_stat_database WHERE datname = current_database()`
+	}
+	err = d.client.DB.QueryRowContext(ctx, cacheHitQuery).Scan(&cacheHit)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to get cache hit ratio")
 	} else {
@@ -113,9 +125,13 @@ func (d *Dao) GetServerInfo(ctx context.Context) (*database.ServerInfo, error) {
 }
 
 func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
+	view := "pg_stat_activity"
+	if d.client.IsMySQLCompat() {
+		view = "gs_stat_activity"
+	}
 	var count int64
 	err := d.client.DB.QueryRowContext(ctx,
-		"SELECT count(*) FROM pg_stat_activity WHERE state IS NOT NULL").Scan(&count)
+		"SELECT count(*) FROM "+view+" WHERE state IS NOT NULL").Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get active sessions: %w", err)
 	}
@@ -123,18 +139,28 @@ func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 }
 
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
-	query := `
+	// MySQL-compatible mode has no string_agg and exposes MySQL system schemas.
+	aggTables := "COALESCE(string_agg(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
+	aggViews := "COALESCE(string_agg(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
+	systemSchemas := "'information_schema', 'pg_catalog', 'pg_toast'"
+	if d.client.IsMySQLCompat() {
+		aggTables = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
+		aggViews = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
+		systemSchemas = "'information_schema', 'mysql', 'performance_schema', 'pg_catalog', 'pg_toast'"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT s.schema_name,
-		       COALESCE(string_agg(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END, ',' ORDER BY t.table_name), ''),
-		       COALESCE(string_agg(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END, ',' ORDER BY t.table_name), '')
+		       %s,
+		       %s
 		FROM information_schema.schemata s
 		LEFT JOIN information_schema.tables t
 			ON s.schema_name = t.table_schema AND t.table_type IN ('BASE TABLE', 'VIEW')
-		WHERE s.schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-			AND s.schema_name NOT LIKE 'pg\_temp\_%'
-			AND s.schema_name NOT LIKE 'pg\_toast\_temp\_%'
+		WHERE s.schema_name NOT IN (%s)
+			AND s.schema_name NOT LIKE 'pg\_temp\_%%'
+			AND s.schema_name NOT LIKE 'pg\_toast\_temp\_%%'
 			AND s.schema_name NOT IN ('blockchain', 'db4ai', 'dbe_pldebugger', 'snapshot', 'sqladvisor', 'sys')
-	`
+	`, aggTables, aggViews, systemSchemas)
 	args := []any{}
 	argIdx := 1
 
@@ -185,8 +211,18 @@ func splitNonEmpty(s string) []string {
 }
 
 func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
-	var def string
 	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(view)
+	if d.client.IsMySQLCompat() {
+		var name, createView, charset, collation string
+		err := d.client.DB.QueryRowContext(ctx,
+			"SHOW CREATE VIEW "+fqTable).Scan(&name, &createView, &charset, &collation)
+		if err != nil {
+			return "", fmt.Errorf("failed to get view DDL: %w", err)
+		}
+		return createView, nil
+	}
+
+	var def string
 	err := d.client.DB.QueryRowContext(ctx,
 		"SELECT pg_get_viewdef($1::regclass, true)", fqTable).Scan(&def)
 	if err != nil {
@@ -197,6 +233,13 @@ func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, erro
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
+	if d.client.IsMySQLCompat() {
+		return d.getTableColumnsM(ctx, schema, table)
+	}
+	return d.getTableColumnsA(ctx, schema, table)
+}
+
+func (d *Dao) getTableColumnsA(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
 	query := `
 		SELECT
 			c.column_name,
@@ -253,7 +296,48 @@ func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]data
 	return columns, rows.Err()
 }
 
+// getTableColumnsM uses the MySQL-compatible information_schema, which
+// reports the full type in column_type, key role in column_key and
+// auto_increment in extra.
+func (d *Dao) getTableColumnsM(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT column_name, column_type, COALESCE(is_nullable, 'NO') = 'YES',
+		       column_default, COALESCE(column_key, '') = 'PRI', ordinal_position,
+		       COALESCE(column_comment, ''), COALESCE(extra, '')
+		FROM information_schema.columns
+		WHERE table_schema = $1 AND table_name = $2
+		ORDER BY ordinal_position`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table columns: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []database.ColumnInfo
+	for rows.Next() {
+		var col database.ColumnInfo
+		var isPK, isNullable bool
+		var extra string
+		if err := rows.Scan(&col.Name, &col.DataType, &isNullable,
+			&col.Default, &isPK, &col.Ordinal, &col.Comment, &extra); err != nil {
+			return nil, fmt.Errorf("failed to scan column: %w", err)
+		}
+		col.IsNullable = isNullable
+		col.IsPK = isPK
+		col.IsAutoGenerated = strings.Contains(extra, "auto_increment")
+		columns = append(columns, col)
+	}
+
+	return columns, rows.Err()
+}
+
 func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]database.ConstraintInfo, error) {
+	if d.client.IsMySQLCompat() {
+		return d.getTableConstraintsM(ctx, schema, table)
+	}
+	return d.getTableConstraintsA(ctx, schema, table)
+}
+
+func (d *Dao) getTableConstraintsA(ctx context.Context, schema, table string) ([]database.ConstraintInfo, error) {
 	query := `
 		SELECT
 			tc.constraint_name,
@@ -294,7 +378,54 @@ func (d *Dao) GetTableConstraints(ctx context.Context, schema, table string) ([]
 	return constraints, rows.Err()
 }
 
+// getTableConstraintsM uses the MySQL-compatible information_schema where
+// check clauses live in check_constraints and column lists are aggregated
+// with GROUP_CONCAT.
+func (d *Dao) getTableConstraintsM(ctx context.Context, schema, table string) ([]database.ConstraintInfo, error) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT tc.constraint_name, tc.constraint_type,
+		       COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position SEPARATOR ','), ''),
+		       COALESCE(cc.check_clause, '')
+		FROM information_schema.table_constraints tc
+		LEFT JOIN information_schema.key_column_usage kcu
+			ON tc.constraint_name = kcu.constraint_name
+			AND tc.table_schema = kcu.table_schema
+		LEFT JOIN information_schema.check_constraints cc
+			ON tc.constraint_name = cc.constraint_name
+			AND tc.constraint_schema = cc.constraint_schema
+		WHERE tc.table_schema = $1 AND tc.table_name = $2
+		GROUP BY tc.constraint_name, tc.constraint_type, cc.check_clause
+		ORDER BY tc.constraint_type, tc.constraint_name`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table constraints: %w", err)
+	}
+	defer rows.Close()
+
+	var constraints []database.ConstraintInfo
+	for rows.Next() {
+		var c database.ConstraintInfo
+		var colsRaw string
+		if err := rows.Scan(&c.Name, &c.Type, &colsRaw, &c.Def); err != nil {
+			return nil, fmt.Errorf("failed to scan constraint: %w", err)
+		}
+		if colsRaw != "" {
+			if strings.TrimSpace(colsRaw) != "NULL" {
+				c.Columns = strings.Split(colsRaw, ",")
+			}
+		}
+		constraints = append(constraints, c)
+	}
+	return constraints, rows.Err()
+}
+
 func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
+	if d.client.IsMySQLCompat() {
+		return d.getTableForeignKeysM(ctx, schema, table)
+	}
+	return d.getTableForeignKeysA(ctx, schema, table)
+}
+
+func (d *Dao) getTableForeignKeysA(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
 	query := `
 		SELECT
 			c.conname,
@@ -353,7 +484,54 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 	return fks, rows.Err()
 }
 
+// getTableForeignKeysM uses the MySQL-compatible information_schema which
+// exposes foreign keys through key_column_usage and referential_constraints.
+func (d *Dao) getTableForeignKeysM(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT kcu.constraint_name,
+		       COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position SEPARATOR ','), ''),
+		       kcu.referenced_table_schema,
+		       kcu.referenced_table_name,
+		       COALESCE(GROUP_CONCAT(kcu.referenced_column_name ORDER BY kcu.ordinal_position SEPARATOR ','), ''),
+		       rc.update_rule, rc.delete_rule
+		FROM information_schema.key_column_usage kcu
+		JOIN information_schema.referential_constraints rc
+			ON kcu.constraint_name = rc.constraint_name
+			AND kcu.table_schema = rc.constraint_schema
+			AND kcu.table_name = rc.table_name
+		WHERE kcu.table_schema = $1 AND kcu.table_name = $2
+		  AND kcu.referenced_table_name IS NOT NULL
+		GROUP BY kcu.constraint_name, kcu.referenced_table_schema,
+		         kcu.referenced_table_name, rc.update_rule, rc.delete_rule
+		ORDER BY kcu.constraint_name`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get foreign keys: %w", err)
+	}
+	defer rows.Close()
+
+	var fks []database.ForeignKeyInfo
+	for rows.Next() {
+		var fk database.ForeignKeyInfo
+		var colStr, refColStr string
+		if err := rows.Scan(&fk.Name, &colStr, &fk.ReferencedSchema,
+			&fk.ReferencedTable, &refColStr, &fk.OnUpdate, &fk.OnDelete); err != nil {
+			return nil, fmt.Errorf("failed to scan foreign key: %w", err)
+		}
+		fk.Columns = strings.Split(colStr, ",")
+		fk.ReferencedCols = strings.Split(refColStr, ",")
+		fks = append(fks, fk)
+	}
+	return fks, rows.Err()
+}
+
 func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) ([]database.IncomingForeignKeyInfo, error) {
+	if d.client.IsMySQLCompat() {
+		return d.getIncomingForeignKeysM(ctx, schema, table)
+	}
+	return d.getIncomingForeignKeysA(ctx, schema, table)
+}
+
+func (d *Dao) getIncomingForeignKeysA(ctx context.Context, schema, table string) ([]database.IncomingForeignKeyInfo, error) {
 	query := `
 		SELECT
 			ns.nspname,
@@ -395,6 +573,37 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 	}
 
 	return fks, rows.Err()
+}
+
+// getIncomingForeignKeysM finds tables that reference the given table via a
+// foreign key, using MySQL-compatible information_schema.
+func (d *Dao) getIncomingForeignKeysM(ctx context.Context, schema, table string) ([]database.IncomingForeignKeyInfo, error) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT kcu.table_schema, kcu.table_name,
+		       COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position SEPARATOR ','), ''),
+		       COALESCE(GROUP_CONCAT(kcu.referenced_column_name ORDER BY kcu.ordinal_position SEPARATOR ','), '')
+		FROM information_schema.key_column_usage kcu
+		WHERE kcu.referenced_table_schema = $1 AND kcu.referenced_table_name = $2
+		  AND kcu.referenced_column_name IS NOT NULL
+		GROUP BY kcu.table_schema, kcu.table_name, kcu.constraint_name
+		ORDER BY kcu.table_schema, kcu.table_name`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get incoming foreign keys: %w", err)
+	}
+	defer rows.Close()
+
+	var result []database.IncomingForeignKeyInfo
+	for rows.Next() {
+		var fk database.IncomingForeignKeyInfo
+		var colStr, refColStr string
+		if err := rows.Scan(&fk.Schema, &fk.Table, &colStr, &refColStr); err != nil {
+			return nil, fmt.Errorf("failed to scan incoming foreign key: %w", err)
+		}
+		fk.Columns = strings.Split(colStr, ",")
+		fk.ReferencedCols = strings.Split(refColStr, ",")
+		result = append(result, fk)
+	}
+	return result, rows.Err()
 }
 
 func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr string) ([]string, error) {
@@ -442,6 +651,21 @@ func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr stri
 }
 
 func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
+	if d.client.IsMySQLCompat() {
+		var count *int64
+		err := d.client.DB.QueryRowContext(ctx, `
+			SELECT table_rows
+			FROM information_schema.tables
+			WHERE table_schema = $1 AND table_name = $2`, schema, table).Scan(&count)
+		if err != nil {
+			return 0, false, err
+		}
+		if count == nil {
+			return 0, false, nil
+		}
+		return *count, true, nil
+	}
+
 	var count int64
 	err := d.client.DB.QueryRowContext(ctx,
 		`SELECT reltuples::bigint
@@ -510,6 +734,19 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		fqTable, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+
+	if d.client.IsMySQLCompat() {
+		result, err := d.client.DB.ExecContext(ctx, query, args...)
+		if err != nil {
+			return database.PrimaryKey{}, fmt.Errorf("failed to insert row: %w", err)
+		}
+		if len(pkCols) == 1 {
+			if id, err := result.LastInsertId(); err == nil {
+				return database.PrimaryKey{Columns: map[string]any{pkCols[0]: id}}, nil
+			}
+		}
+		return database.PrimaryKey{}, nil
+	}
 
 	if len(pkCols) > 0 {
 		quotedPK := make([]string, len(pkCols))
@@ -776,6 +1013,10 @@ func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
 }
 
 func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.IndexInfo, error) {
+	if d.client.IsMySQLCompat() {
+		return d.getIndexesM(ctx, schema, table)
+	}
+
 	query := `
 		SELECT
 			i.relname AS index_name,
@@ -812,6 +1053,35 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 		indexes = append(indexes, idx)
 	}
 
+	return indexes, rows.Err()
+}
+
+// getIndexesM uses the MySQL-compatible information_schema.statistics view.
+func (d *Dao) getIndexesM(ctx context.Context, schema, table string) ([]database.IndexInfo, error) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT index_name, non_unique, index_type,
+		       GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',')
+		FROM information_schema.statistics
+		WHERE table_schema = $1 AND table_name = $2
+		GROUP BY index_name, non_unique, index_type
+		ORDER BY index_name`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get indexes: %w", err)
+	}
+	defer rows.Close()
+
+	var indexes []database.IndexInfo
+	for rows.Next() {
+		var idx database.IndexInfo
+		var colsRaw string
+		if err := rows.Scan(&idx.Name, &idx.IsUnique, &idx.Type, &colsRaw); err != nil {
+			return nil, fmt.Errorf("failed to scan index: %w", err)
+		}
+		idx.IsUnique = !idx.IsUnique
+		idx.IsPrimary = idx.Name == "PRIMARY"
+		idx.Columns = strings.Split(colsRaw, ",")
+		indexes = append(indexes, idx)
+	}
 	return indexes, rows.Err()
 }
 
@@ -1064,8 +1334,6 @@ func scanRows(rows *sql.Rows) ([]database.Row, error) {
 		return nil, err
 	}
 
-	log.Debug().Strs("columns", cols).Int("count", len(cols)).Msg("scanRows: scanning columns")
-
 	var result []database.Row
 	for rows.Next() {
 		values := make([]any, len(cols))
@@ -1094,7 +1362,6 @@ func scanRows(rows *sql.Rows) ([]database.Row, error) {
 		result = append(result, row)
 	}
 
-	log.Debug().Int("rows_scanned", len(result)).Msg("scanRows: done")
 	return result, rows.Err()
 }
 
