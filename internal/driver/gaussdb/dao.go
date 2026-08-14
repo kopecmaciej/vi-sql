@@ -124,22 +124,26 @@ func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	query := `
-		SELECT schema_name
-		FROM information_schema.schemata
-		WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-			AND schema_name NOT LIKE 'pg\_temp\_%'
-			AND schema_name NOT LIKE 'pg\_toast\_temp\_%'
-			AND schema_name NOT IN ('blockchain', 'db4ai', 'dbe_pldebugger', 'snapshot', 'sqladvisor', 'sys')
+		SELECT s.schema_name,
+		       COALESCE(string_agg(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END, ',' ORDER BY t.table_name), ''),
+		       COALESCE(string_agg(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END, ',' ORDER BY t.table_name), '')
+		FROM information_schema.schemata s
+		LEFT JOIN information_schema.tables t
+			ON s.schema_name = t.table_schema AND t.table_type IN ('BASE TABLE', 'VIEW')
+		WHERE s.schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+			AND s.schema_name NOT LIKE 'pg\_temp\_%'
+			AND s.schema_name NOT LIKE 'pg\_toast\_temp\_%'
+			AND s.schema_name NOT IN ('blockchain', 'db4ai', 'dbe_pldebugger', 'snapshot', 'sqladvisor', 'sys')
 	`
 	args := []any{}
 	argIdx := 1
 
 	if nameFilter != "" {
-		query += fmt.Sprintf(` AND LOWER(schema_name) LIKE LOWER($%d)`, argIdx)
+		query += fmt.Sprintf(` AND (LOWER(s.schema_name) LIKE LOWER($%d) OR LOWER(t.table_name) LIKE LOWER($%d))`, argIdx, argIdx)
 		args = append(args, "%"+nameFilter+"%")
 	}
 
-	query += ` ORDER BY schema_name`
+	query += ` GROUP BY s.schema_name ORDER BY s.schema_name`
 
 	rows, err := d.client.DB.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -149,48 +153,35 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 
 	var result []database.Schema
 	for rows.Next() {
-		var schema string
-		if err := rows.Scan(&schema); err != nil {
+		var schema, tablesRaw, viewsRaw string
+		if err := rows.Scan(&schema, &tablesRaw, &viewsRaw); err != nil {
 			return nil, fmt.Errorf("failed to scan schema row: %w", err)
 		}
 		result = append(result, database.Schema{
 			Schema: schema,
+			Tables: splitNonEmpty(tablesRaw),
+			Views:  splitNonEmpty(viewsRaw),
 		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 
-	tableQuery := `
-		SELECT table_name, table_type
-		FROM information_schema.tables
-		WHERE table_schema = $1 AND table_type IN ('BASE TABLE', 'VIEW')
-		ORDER BY table_name
-	`
-	for i := range result {
-		tableRows, err := d.client.DB.QueryContext(ctx, tableQuery, result[i].Schema)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list tables for schema %s: %w", result[i].Schema, err)
-		}
-		for tableRows.Next() {
-			var tableName, tableType string
-			if err := tableRows.Scan(&tableName, &tableType); err != nil {
-				tableRows.Close()
-				return nil, fmt.Errorf("failed to scan table row: %w", err)
-			}
-			if tableType == "BASE TABLE" {
-				result[i].Tables = append(result[i].Tables, tableName)
-			} else if tableType == "VIEW" {
-				result[i].Views = append(result[i].Views, tableName)
-			}
-		}
-		tableRows.Close()
-		if err := tableRows.Err(); err != nil {
-			return nil, err
+	return result, nil
+}
+
+func splitNonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	tags := parts[:0]
+	for _, p := range parts {
+		if p != "" {
+			tags = append(tags, p)
 		}
 	}
-
-	return result, nil
+	return tags
 }
 
 func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
@@ -348,8 +339,14 @@ func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan foreign key: %w", err)
 		}
-		fk.Columns = resolveAttNames(ctx, d.client.DB, schema, table, conkeyRaw)
-		fk.ReferencedCols = resolveAttNames(ctx, d.client.DB, fk.ReferencedSchema, fk.ReferencedTable, confkeyRaw)
+		fk.Columns, err = resolveAttNames(ctx, d.client.DB, schema, table, conkeyRaw)
+		if err != nil {
+			return nil, err
+		}
+		fk.ReferencedCols, err = resolveAttNames(ctx, d.client.DB, fk.ReferencedSchema, fk.ReferencedTable, confkeyRaw)
+		if err != nil {
+			return nil, err
+		}
 		fks = append(fks, fk)
 	}
 
@@ -386,18 +383,24 @@ func (d *Dao) GetIncomingForeignKeys(ctx context.Context, schema, table string) 
 		if err := rows.Scan(&fk.Schema, &fk.Table, &conkeyRaw, &confkeyRaw); err != nil {
 			return nil, fmt.Errorf("failed to scan incoming foreign key: %w", err)
 		}
-		fk.Columns = resolveAttNames(ctx, d.client.DB, fk.Schema, fk.Table, conkeyRaw)
-		fk.ReferencedCols = resolveAttNames(ctx, d.client.DB, schema, table, confkeyRaw)
+		fk.Columns, err = resolveAttNames(ctx, d.client.DB, fk.Schema, fk.Table, conkeyRaw)
+		if err != nil {
+			return nil, err
+		}
+		fk.ReferencedCols, err = resolveAttNames(ctx, d.client.DB, schema, table, confkeyRaw)
+		if err != nil {
+			return nil, err
+		}
 		fks = append(fks, fk)
 	}
 
 	return fks, rows.Err()
 }
 
-func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr string) []string {
+func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr string) ([]string, error) {
 	arrStr = strings.Trim(arrStr, "{}")
 	if arrStr == "" {
-		return nil
+		return nil, nil
 	}
 	parts := strings.Split(arrStr, ",")
 	for i := range parts {
@@ -413,16 +416,19 @@ func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr stri
 	attMap := make(map[string]string)
 	rows, err := db.QueryContext(ctx, query, schema, table)
 	if err != nil {
-		return parts
+		return nil, fmt.Errorf("failed to resolve attribute names for %s.%s: %w", schema, table, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var name string
 		var attnum int
 		if err := rows.Scan(&name, &attnum); err != nil {
-			return parts
+			return nil, fmt.Errorf("failed to scan attribute name: %w", err)
 		}
 		attMap[fmt.Sprintf("%d", attnum)] = name
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	result := make([]string, len(parts))
 	for i, p := range parts {
@@ -432,7 +438,7 @@ func resolveAttNames(ctx context.Context, db *sql.DB, schema, table, arrStr stri
 			result[i] = p
 		}
 	}
-	return result
+	return result, nil
 }
 
 func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (int64, bool, error) {
@@ -512,8 +518,6 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 		}
 		query += " RETURNING " + strings.Join(quotedPK, ", ")
 
-		var returnArgs []any
-		returnArgs = append(returnArgs, args...)
 		var returnVals []any
 		for range pkCols {
 			returnVals = append(returnVals, new(any))
@@ -812,21 +816,80 @@ func (d *Dao) GetIndexes(ctx context.Context, schema, table string) ([]database.
 }
 
 func parseIndexColumns(definition string) []string {
-	start := strings.Index(definition, "(")
-	end := strings.LastIndex(definition, ")")
-	if start < 0 || end < 0 || end <= start {
+	open := strings.IndexByte(definition, '(')
+	if open < 0 {
 		return nil
 	}
-	colPart := definition[start+1 : end]
-	parts := strings.Split(colPart, ",")
-	result := make([]string, 0, len(parts))
-	for _, p := range parts {
-		col := strings.TrimSpace(p)
-		if col != "" {
-			result = append(result, col)
+	closeIdx := matchingParen(definition, open)
+	if closeIdx < 0 {
+		return nil
+	}
+	content := definition[open+1 : closeIdx]
+
+	var result []string
+	depth := 0
+	start := 0
+	inSingle, inDouble := false, false
+	for i := 0; i < len(content); i++ {
+		c := content[i]
+		switch {
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			}
+		case inDouble:
+			if c == '"' {
+				inDouble = false
+			}
+		case c == '\'':
+			inSingle = true
+		case c == '"':
+			inDouble = true
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+		case c == ',' && depth == 0:
+			if col := strings.TrimSpace(content[start:i]); col != "" {
+				result = append(result, col)
+			}
+			start = i + 1
 		}
 	}
+	if col := strings.TrimSpace(content[start:]); col != "" {
+		result = append(result, col)
+	}
 	return result
+}
+
+func matchingParen(s string, open int) int {
+	depth := 0
+	inSingle, inDouble := false, false
+	for i := open; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			}
+		case inDouble:
+			if c == '"' {
+				inDouble = false
+			}
+		case c == '\'':
+			inSingle = true
+		case c == '"':
+			inDouble = true
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def database.IndexDefinition) error {

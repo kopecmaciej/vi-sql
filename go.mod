@@ -113,3 +113,7 @@ require (
 )
 
 replace github.com/gdamore/tcell/v2 => github.com/kopecmaciej/tcell/v2 v2.13.12
+
+exclude google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
+
+exclude google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8
