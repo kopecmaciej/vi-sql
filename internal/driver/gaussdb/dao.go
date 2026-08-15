@@ -211,25 +211,16 @@ func splitNonEmpty(s string) []string {
 }
 
 func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, error) {
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(view)
-	if d.client.IsMySQLCompat() {
-		var name, createView, charset, collation string
-		err := d.client.DB.QueryRowContext(ctx,
-			"SHOW CREATE VIEW "+fqTable).Scan(&name, &createView, &charset, &collation)
-		if err != nil {
-			return "", fmt.Errorf("failed to get view DDL: %w", err)
-		}
-		return createView, nil
-	}
-
+	viewName := schema + "." + view
 	var def string
 	err := d.client.DB.QueryRowContext(ctx,
-		"SELECT pg_get_viewdef($1::regclass, true)", fqTable).Scan(&def)
+		"SELECT pg_get_viewdef($1, true)", viewName).Scan(&def)
 	if err != nil {
 		return "", fmt.Errorf("failed to get view DDL: %w", err)
 	}
-	return fmt.Sprintf("CREATE OR REPLACE VIEW %s AS\n%s",
-		fqTable, strings.TrimSpace(def)), nil
+	return fmt.Sprintf("CREATE VIEW %s.%s AS\n%s",
+		util.BacktickQuoter.Ident(schema), util.BacktickQuoter.Ident(view),
+		strings.TrimSpace(def)), nil
 }
 
 func (d *Dao) GetTableColumns(ctx context.Context, schema, table string) ([]database.ColumnInfo, error) {
@@ -378,44 +369,90 @@ func (d *Dao) getTableConstraintsA(ctx context.Context, schema, table string) ([
 	return constraints, rows.Err()
 }
 
-// getTableConstraintsM uses the MySQL-compatible information_schema where
-// check clauses live in check_constraints and column lists are aggregated
-// with GROUP_CONCAT.
+// getTableConstraintsM uses the MySQL-compatible information_schema.
+// PRIMARY KEY column lists are taken from columns.column_key (the
+// constraint_name on the PK is auto-generated and does not match
+// key_column_usage); UNIQUE column lists come from key_column_usage.
 func (d *Dao) getTableConstraintsM(ctx context.Context, schema, table string) ([]database.ConstraintInfo, error) {
-	rows, err := d.client.DB.QueryContext(ctx, `
-		SELECT tc.constraint_name, tc.constraint_type,
-		       COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position SEPARATOR ','), ''),
-		       COALESCE(cc.check_clause, '')
+	// 1) Constraint names and types.
+	crows, err := d.client.DB.QueryContext(ctx, `
+		SELECT constraint_name, constraint_type
+		FROM information_schema.table_constraints
+		WHERE table_schema = $1 AND table_name = $2
+		  AND constraint_type IN ('PRIMARY KEY', 'UNIQUE')
+		ORDER BY constraint_type, constraint_name`, schema, table)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get table constraints: %w", err)
+	}
+	defer crows.Close()
+
+	var constraints []database.ConstraintInfo
+	for crows.Next() {
+		var c database.ConstraintInfo
+		if err := crows.Scan(&c.Name, &c.Type); err != nil {
+			return nil, fmt.Errorf("failed to scan constraint: %w", err)
+		}
+		constraints = append(constraints, c)
+	}
+	if err := crows.Err(); err != nil {
+		return nil, err
+	}
+
+	// 2) PRIMARY KEY columns come from columns.column_key.
+	var pkCols string
+	err = d.client.DB.QueryRowContext(ctx, `
+		SELECT GROUP_CONCAT(column_name ORDER BY ordinal_position SEPARATOR ',')
+		FROM information_schema.columns
+		WHERE table_schema = $1 AND table_name = $2 AND column_key = 'PRI'`, schema, table).
+		Scan(&pkCols)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("failed to get primary key columns: %w", err)
+	}
+
+	// 3) UNIQUE columns come from key_column_usage.
+	urows, err := d.client.DB.QueryContext(ctx, `
+		SELECT tc.constraint_name,
+		       COALESCE(GROUP_CONCAT(kcu.column_name ORDER BY kcu.ordinal_position SEPARATOR ','), '')
 		FROM information_schema.table_constraints tc
 		LEFT JOIN information_schema.key_column_usage kcu
 			ON tc.constraint_name = kcu.constraint_name
 			AND tc.table_schema = kcu.table_schema
-		LEFT JOIN information_schema.check_constraints cc
-			ON tc.constraint_name = cc.constraint_name
-			AND tc.constraint_schema = cc.constraint_schema
+			AND tc.table_name = kcu.table_name
 		WHERE tc.table_schema = $1 AND tc.table_name = $2
-		GROUP BY tc.constraint_name, tc.constraint_type, cc.check_clause
-		ORDER BY tc.constraint_type, tc.constraint_name`, schema, table)
+		  AND tc.constraint_type = 'UNIQUE'
+		GROUP BY tc.constraint_name`, schema, table)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get table constraints: %w", err)
+		return nil, fmt.Errorf("failed to get unique constraint columns: %w", err)
 	}
-	defer rows.Close()
+	defer urows.Close()
 
-	var constraints []database.ConstraintInfo
-	for rows.Next() {
-		var c database.ConstraintInfo
-		var colsRaw string
-		if err := rows.Scan(&c.Name, &c.Type, &colsRaw, &c.Def); err != nil {
-			return nil, fmt.Errorf("failed to scan constraint: %w", err)
+	uniqueCols := make(map[string][]string)
+	for urows.Next() {
+		var name, colsRaw string
+		if err := urows.Scan(&name, &colsRaw); err != nil {
+			return nil, fmt.Errorf("failed to scan unique constraint: %w", err)
 		}
 		if colsRaw != "" {
-			if strings.TrimSpace(colsRaw) != "NULL" {
-				c.Columns = strings.Split(colsRaw, ",")
+			uniqueCols[name] = strings.Split(colsRaw, ",")
+		}
+	}
+	if err := urows.Err(); err != nil {
+		return nil, err
+	}
+
+	for i := range constraints {
+		switch constraints[i].Type {
+		case "PRIMARY KEY":
+			if pkCols != "" {
+				constraints[i].Columns = strings.Split(pkCols, ",")
+			}
+		case "UNIQUE":
+			if cols, ok := uniqueCols[constraints[i].Name]; ok {
+				constraints[i].Columns = cols
 			}
 		}
-		constraints = append(constraints, c)
 	}
-	return constraints, rows.Err()
+	return constraints, nil
 }
 
 func (d *Dao) GetTableForeignKeys(ctx context.Context, schema, table string) ([]database.ForeignKeyInfo, error) {
@@ -892,72 +929,14 @@ func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
 }
 
 func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
-	columns, err := d.GetTableColumns(ctx, schema, table)
+	tableName := schema + "." + table
+	var ddl string
+	err := d.client.DB.QueryRowContext(ctx,
+		"SELECT pg_get_tabledef($1)", tableName).Scan(&ddl)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get table DDL: %w", err)
 	}
-	constraints, err := d.GetTableConstraints(ctx, schema, table)
-	if err != nil {
-		return "", err
-	}
-	fks, err := d.GetTableForeignKeys(ctx, schema, table)
-	if err != nil {
-		return "", err
-	}
-	return buildGaussDBDDL(schema, table, columns, constraints, fks), nil
-}
-
-func buildGaussDBDDL(schema, table string, cols []database.ColumnInfo, constraints []database.ConstraintInfo, fks []database.ForeignKeyInfo) string {
-	var lines []string
-	for _, col := range cols {
-		line := fmt.Sprintf("  %s %s", util.BacktickQuoter.Ident(col.Name), col.DataType)
-		if col.Default != nil && *col.Default != "" {
-			line += " DEFAULT " + *col.Default
-		}
-		if !col.IsNullable {
-			line += " NOT NULL"
-		}
-		lines = append(lines, line)
-	}
-	for _, c := range constraints {
-		quoted := make([]string, len(c.Columns))
-		for i, col := range c.Columns {
-			quoted[i] = util.BacktickQuoter.Ident(col)
-		}
-		switch c.Type {
-		case "PRIMARY KEY":
-			lines = append(lines, fmt.Sprintf("  CONSTRAINT %s PRIMARY KEY (%s)",
-				util.BacktickQuoter.Ident(c.Name), strings.Join(quoted, ", ")))
-		case "UNIQUE":
-			lines = append(lines, fmt.Sprintf("  CONSTRAINT %s UNIQUE (%s)",
-				util.BacktickQuoter.Ident(c.Name), strings.Join(quoted, ", ")))
-		case "CHECK":
-			lines = append(lines, fmt.Sprintf("  CONSTRAINT %s CHECK (%s)",
-				util.BacktickQuoter.Ident(c.Name), c.Def))
-		}
-	}
-	for _, fk := range fks {
-		fkCols := make([]string, len(fk.Columns))
-		for i, col := range fk.Columns {
-			fkCols[i] = util.BacktickQuoter.Ident(col)
-		}
-		refCols := make([]string, len(fk.ReferencedCols))
-		for i, col := range fk.ReferencedCols {
-			refCols[i] = util.BacktickQuoter.Ident(col)
-		}
-		refTable := util.BacktickQuoter.Ident(fk.ReferencedSchema) + "." + util.BacktickQuoter.Ident(fk.ReferencedTable)
-		line := fmt.Sprintf("  CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s)",
-			util.BacktickQuoter.Ident(fk.Name), strings.Join(fkCols, ", "), refTable, strings.Join(refCols, ", "))
-		if fk.OnUpdate != "" && fk.OnUpdate != "NO ACTION" {
-			line += " ON UPDATE " + fk.OnUpdate
-		}
-		if fk.OnDelete != "" && fk.OnDelete != "NO ACTION" {
-			line += " ON DELETE " + fk.OnDelete
-		}
-		lines = append(lines, line)
-	}
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
-	return fmt.Sprintf("CREATE TABLE %s (\n%s\n)", fqTable, strings.Join(lines, ",\n"))
+	return ddl, nil
 }
 
 func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
