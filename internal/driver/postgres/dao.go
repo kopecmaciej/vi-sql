@@ -834,7 +834,6 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 	defer rows.Close()
 
 	fieldDescs := rows.FieldDescriptions()
-	typeMap := pgtype.NewMap()
 	colInfos := make([]database.ColumnInfo, len(fieldDescs))
 	typeMap := pgtype.NewMap()
 	for i, fd := range fieldDescs {
@@ -972,12 +971,4 @@ func (d *Dao) getPrimaryKeyColumns(ctx context.Context, schema, table string) ([
 	}
 
 	return cols, rows.Err()
-}
-
-func toSQLStandardTypeName(name string) string {
-	switch name {
-	case "bool":
-		return "boolean"
-	}
-	return name
 }
