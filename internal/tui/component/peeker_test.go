@@ -55,3 +55,29 @@ func TestPeeker_Render_JsonbArrayVisible(t *testing.T) {
 		})
 	}
 }
+
+func TestPeeker_Render_PostgresBooleanVisible(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "true", raw: "t", want: "true"},
+		{name: "false", raw: "f", want: "false"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			app, sim := testutil.NewTestApp(t)
+			p := NewPeeker()
+			require.NoError(t, p.Init(app))
+
+			p.Render(database.Row{"active": tt.raw}, []database.ColumnInfo{
+				{Name: "active", DataType: "boolean"},
+			})
+			p.ViewModal.Draw(sim)
+			sim.Sync()
+
+			assert.True(t, testutil.ScreenContains(sim, tt.want),
+				"value %q should be visible in the peeker\nscreen:\n%s", tt.want, testutil.ScreenFull(sim))
+		})
+	}
+}

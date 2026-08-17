@@ -35,7 +35,7 @@ type RunCallbacks struct {
 type QueryRunner struct {
 	driver      database.Driver
 	schedule    func(func()) // app.QueueUpdateDraw
-	onHistory   func(sql string)
+	onHistory   func(sql string, d time.Duration)
 	onBroadcast func(manager.QueryResult)
 
 	mu      sync.Mutex
@@ -46,7 +46,7 @@ type QueryRunner struct {
 func NewQueryRunner(
 	driver database.Driver,
 	schedule func(func()),
-	onHistory func(sql string),
+	onHistory func(sql string, d time.Duration),
 	onBroadcast func(manager.QueryResult),
 ) *QueryRunner {
 	return &QueryRunner{
@@ -133,16 +133,18 @@ func (r *QueryRunner) runExplain(ctx context.Context, sql string, cbs RunCallbac
 		result string
 		err    error
 	)
+	start := time.Now()
 	if analyze {
 		result, err = r.driver.ExplainAnalyze(ctx, bare)
 	} else {
 		result, err = r.driver.ExplainPlan(ctx, bare)
 	}
+	execTime := time.Since(start)
 	if err != nil {
 		r.dispatchError(ctx, err, cbs)
 		return
 	}
-	r.onHistory(sql)
+	r.onHistory(sql, execTime)
 	r.schedule(func() {
 		if cbs.OnExplain != nil {
 			cbs.OnExplain(result, bare, analyze)
@@ -158,7 +160,7 @@ func (r *QueryRunner) runSelect(ctx context.Context, sql string, batchSize, offs
 		return
 	}
 	execTime := time.Since(start)
-	r.onHistory(sql)
+	r.onHistory(sql, execTime)
 
 	colNames := make([]string, len(cols))
 	for i, col := range cols {
@@ -190,7 +192,7 @@ func (r *QueryRunner) runStatement(ctx context.Context, sql string, cbs RunCallb
 		return
 	}
 	execTime := time.Since(start)
-	r.onHistory(sql)
+	r.onHistory(sql, execTime)
 	r.onBroadcast(manager.QueryResult{
 		Query:    sql,
 		Affected: affected,

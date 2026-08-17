@@ -4,7 +4,7 @@
 
 ---
 
-Terminal UI for SQL databases built with passion for the terminal — Browse schemas, run queries, edit rows, inspect query plans, and expose your session to AI tools via a built-in MCP server.
+A terminal UI for SQL databases built with passion. Browse schemas, run queries, edit rows, inspect query plans, and expose your session to AI tools via a built-in MCP server.
 
 <a href="./assets/query_autocomplete.png"><img src="./assets/query_autocomplete.png"></a>
 
@@ -36,21 +36,29 @@ Terminal UI for SQL databases built with passion for the terminal — Browse sch
 
 ## Install
 
+Installing with [cURL](https://curl.se):
+
 ```sh
 curl -fsSL https://vi-sql.com/install.sh | sh
 ```
 
-Pin a specific version:
+You can also pin a specific version:
 
 ```sh
 VI_SQL_VERSION=v0.0.3 curl -fsSL https://vi-sql.com/install.sh | sh
 ```
 
-Or download a binary directly from the [releases page](https://github.com/kopecmaciej/vi-sql/releases).
+If you use [Homebrew](https://brew.sh), installation is straightforward:
 
-### Build from source
+```sh
+brew install vi-sql
+```
 
-Requires Go 1.25+.
+Precompiled binaries are available on the [releases page](https://github.com/kopecmaciej/vi-sql/releases).
+
+### Building from source
+
+_Requires Go 1.25+_.
 
 ```sh
 git clone https://github.com/kopecmaciej/vi-sql.git
@@ -88,7 +96,7 @@ Jump straight to a table:
 vi-sql --jump public/users
 ```
 
-Config and data paths vary by OS. Run `vi-sql --paths` to see the exact locations on your system (config, keybindings, styles, icons, log).
+Config and data paths vary by OS. Run `vi-sql --paths` to see the exact locations on your system (Config, Keybindings, Styles, Icons, and Log).
 
 ## MCP server
 

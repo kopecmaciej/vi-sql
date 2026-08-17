@@ -3,6 +3,7 @@ package modal
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type historyEntry struct {
 	ConnectionID string
 	Query        string
 	Time         time.Time
+	Duration     time.Duration
 }
 
 // History is a two-panel modal: a filterable table of past queries on top,
@@ -263,23 +265,27 @@ func (h *History) renderTable() {
 	})
 
 	styles := h.App.GetStyles()
-	headers := []string{"  #  ", "  TIMESTAMP   ", "  QUERY"}
+	headers := []string{"#", "TIMESTAMP", "DURATION", "QUERY"}
 	for col, header := range headers {
 		cell := tview.NewTableCell(header).
 			SetTextColor(styles.Others.TableHeaderTextColor.Color()).
 			SetBackgroundColor(styles.Global.ContrastBackgroundColor.Color()).
 			SetSelectable(false)
-		if col == 2 {
+		if col == 3 {
 			cell.SetExpansion(1)
 		}
 		h.table.SetCell(0, col, cell)
 	}
 
 	for i, e := range h.filtered {
-		num := fmt.Sprintf(" %03d ", i+1)
+		num := fmt.Sprintf("%03d", i+1)
 		date := "             " // 13 chars to match "Jan 02 15:04" width
 		if !e.Time.IsZero() {
-			date = " " + e.Time.Local().Format("Jan 02 15:04") + " "
+			date = e.Time.Local().Format("Jan 02 15:04")
+		}
+		durStr := "      "
+		if e.Duration > 0 {
+			durStr = formatDuration(e.Duration)
 		}
 		preview := buildPreview(e.Query)
 
@@ -288,7 +294,9 @@ func (h *History) renderTable() {
 			Foreground(styles.Global.TextColor.Color()).Background(bg)))
 		h.table.SetCell(i+1, 1, tview.NewTableCell(date).SetStyle(tcell.StyleDefault.
 			Foreground(styles.Global.DimColor.Color()).Background(bg)))
-		h.table.SetCell(i+1, 2, tview.NewTableCell(preview).SetStyle(tcell.StyleDefault.
+		h.table.SetCell(i+1, 2, tview.NewTableCell(durStr).SetStyle(tcell.StyleDefault.
+			Foreground(styles.Global.DimColor.Color()).Background(bg)))
+		h.table.SetCell(i+1, 3, tview.NewTableCell(preview).SetStyle(tcell.StyleDefault.
 			Foreground(styles.Global.TextColor.Color()).Background(bg)).SetExpansion(1))
 	}
 
@@ -340,7 +348,7 @@ func (h *History) Render() {
 }
 
 // SaveToHistory saves text to the history file, deduplicating and capping at maxHistory for this connection.
-func (h *History) SaveToHistory(text string) error {
+func (h *History) SaveToHistory(text string, d time.Duration) error {
 	entries, err := h.loadHistory()
 	if err != nil {
 		return err
@@ -356,6 +364,7 @@ func (h *History) SaveToHistory(text string) error {
 		ConnectionID: h.connectionID,
 		Query:        strings.TrimSpace(text),
 		Time:         time.Now(),
+		Duration:     d,
 	})
 
 	if len(updated) > maxHistory {
@@ -462,7 +471,9 @@ func writeAllEntries(entries []historyEntry) error {
 
 	for _, e := range entries {
 		escaped := strings.ReplaceAll(e.Query, "\n", `\n`)
-		line := e.ConnectionID + "|" + e.Time.UTC().Format(time.RFC3339) + "|" + escaped + "\n"
+		line := fmt.Sprintf("%s|%s|%d|%s\n",
+			e.ConnectionID, e.Time.UTC().Format(time.RFC3339),
+			e.Duration.Nanoseconds(), escaped)
 		if _, err = f.WriteString(line); err != nil {
 			return err
 		}
@@ -494,7 +505,6 @@ func buildPreview(query string) string {
 	return s
 }
 
-// parseHistoryLine parses a line in the format "UUID|RFC3339|query".
 func parseHistoryLine(line string) (historyEntry, bool) {
 	connID, rest, ok := strings.Cut(line, "|")
 	if !ok {
@@ -505,11 +515,20 @@ func parseHistoryLine(line string) (historyEntry, bool) {
 	}
 
 	var t time.Time
+	var d time.Duration
 	var raw string
 	if before, after, ok := strings.Cut(rest, "|"); ok {
 		if parsed, err := time.Parse(time.RFC3339, before); err == nil {
 			t = parsed
-			raw = after
+			if durStr, query, ok := strings.Cut(after, "|"); ok {
+				if ns, err := strconv.ParseInt(durStr, 10, 64); err == nil {
+					d = time.Duration(ns) * time.Nanosecond
+					raw = query
+				}
+			}
+			if raw == "" {
+				raw = after
+			}
 		}
 	}
 	if raw == "" {
@@ -520,6 +539,7 @@ func parseHistoryLine(line string) (historyEntry, bool) {
 		ConnectionID: connID,
 		Query:        strings.ReplaceAll(raw, `\n`, "\n"),
 		Time:         t,
+		Duration:     d,
 	}, true
 }
 
@@ -529,4 +549,17 @@ func getHistoryFilePath() string {
 		return ""
 	}
 	return configDir + "/history.txt"
+}
+
+func formatDuration(d time.Duration) string {
+	if d == 0 {
+		return "-"
+	}
+	if d < time.Millisecond {
+		return fmt.Sprintf("%dμs", d.Microseconds())
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }

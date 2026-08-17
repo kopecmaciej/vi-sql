@@ -464,6 +464,12 @@ func (m *SQLConfig) buildDSNFromFields(password string) string {
 		return util.BuildSQLServerDSN(m.Host, m.Port, m.Database, m.Username, password, encrypt)
 	case "oracle":
 		return util.BuildOracleDSN(m.Host, m.Port, m.Database, m.Username, password)
+	case "gaussdb":
+		sslMode := m.SSLMode
+		if sslMode == "" {
+			sslMode = "disable"
+		}
+		return util.BuildGaussDBDSN(m.Host, m.Port, m.Database, m.Username, password, sslMode)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {

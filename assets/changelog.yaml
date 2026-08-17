@@ -1,4 +1,11 @@
 entries:
+  - version: 0.2.1
+    breaking: false
+    title: Query duration in history, master password crash fix, paste with autocomplete
+    changes:
+      - "New: History modal shows how long each query took to run"
+      - "Fix: No more crash after entering the master password when the focus stack is empty"
+      - "Fix: Pasting text while autocomplete is active works correctly"
   - version: 0.2.0
     breaking: false
     title: Oracle driver, focus stack fix, config lifecycle improvements

@@ -415,9 +415,9 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 	})
 }
 
-func (e *SQLQueryEditor) SaveQueryToHistory(sql string) {
+func (e *SQLQueryEditor) SaveQueryToHistory(sql string, d time.Duration) {
 	if e.history != nil {
-		if err := e.history.SaveToHistory(sql); err != nil {
+		if err := e.history.SaveToHistory(sql, d); err != nil {
 			log.Error().Err(err).Msg("Failed to save to history")
 		}
 	}

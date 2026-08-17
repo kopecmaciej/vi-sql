@@ -63,6 +63,7 @@ type IconStyle struct {
 	DriverMariaDB     Style `yaml:"driverMariaDB"`
 	DriverSQLite      Style `yaml:"driverSQLite"`
 	DriverCockroachDB Style `yaml:"driverCockroachDB"`
+	DriverGaussDB     Style `yaml:"driverGaussDB"`
 	DriverDefault     Style `yaml:"driverDefault"`
 }
 
@@ -78,6 +79,8 @@ func (s *IconStyle) DriverIcon(driver string) string {
 		return string(s.DriverSQLite)
 	case "cockroachdb":
 		return string(s.DriverCockroachDB)
+	case "gaussdb":
+		return string(s.DriverGaussDB)
 	default:
 		return string(s.DriverDefault)
 	}

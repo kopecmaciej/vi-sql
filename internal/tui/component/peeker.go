@@ -230,7 +230,7 @@ func (p *Peeker) Render(row database.Row, columns []database.ColumnInfo) {
 
 	lines := make([]primitives.RowLine, 0, len(columns))
 	for _, col := range columns {
-		val := database.StringifyValue(row[col.Name])
+		val := util.NormalizeBooleanValue(database.StringifyValue(row[col.Name]), col.DataType == "boolean")
 		typ := col.DataType
 		if col.IsPK {
 			typ += " (PK)"

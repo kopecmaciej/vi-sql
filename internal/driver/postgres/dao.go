@@ -836,6 +836,7 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 	fieldDescs := rows.FieldDescriptions()
 	typeMap := pgtype.NewMap()
 	colInfos := make([]database.ColumnInfo, len(fieldDescs))
+	typeMap := pgtype.NewMap()
 	for i, fd := range fieldDescs {
 		dataType := ""
 		if t, ok := typeMap.TypeForOID(fd.DataTypeOID); ok {
@@ -850,6 +851,13 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 	}
 
 	return result, colInfos, nil
+}
+
+func toSQLStandardTypeName(name string) string {
+	if name == "bool" {
+		return "boolean"
+	}
+	return name
 }
 
 func (d *Dao) ExecuteStatement(ctx context.Context, stmt string) (int64, error) {
