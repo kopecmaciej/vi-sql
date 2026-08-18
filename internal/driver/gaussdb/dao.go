@@ -142,12 +142,12 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 	// MySQL-compatible mode has no string_agg and exposes MySQL system schemas.
 	aggTables := "COALESCE(string_agg(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
 	aggViews := "COALESCE(string_agg(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
-	systemSchemas := "'information_schema', 'pg_catalog', 'pg_toast'"
+	systemSchemas := "'information_schema', 'pg_toast'"
 	switch d.client.Capabilities.CompatMode {
 	case CompatMySQL:
 		aggTables = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
 		aggViews = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
-		systemSchemas = "'information_schema', 'mysql', 'performance_schema', 'pg_catalog', 'pg_toast'"
+		systemSchemas = "'information_schema', 'mysql', 'performance_schema', 'pg_toast'"
 	}
 
 	query := fmt.Sprintf(`
@@ -172,7 +172,26 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 
 	query += ` GROUP BY s.schema_name ORDER BY s.schema_name`
 
-	rows, err := d.client.DB.QueryContext(ctx, query, args...)
+	// In MySQL-compatible mode GROUP_CONCAT truncates at 1024 bytes by default
+	// (group_concat_max_len), silently dropping tables of large system schemas
+	// like dbe_perf (~380 entries). Pin a single connection and raise the limit
+	// before running the aggregation.
+	var queryDB interface {
+		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	} = d.client.DB
+	if d.client.Capabilities.CompatMode == CompatMySQL {
+		pinned, err := d.client.DB.Conn(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to pin connection for schema listing: %w", err)
+		}
+		defer pinned.Close()
+		if _, err := pinned.ExecContext(ctx, "SET SESSION group_concat_max_len = 1048576"); err != nil {
+			return nil, fmt.Errorf("failed to raise group_concat_max_len: %w", err)
+		}
+		queryDB = pinned
+	}
+
+	rows, err := queryDB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list schemas: %w", err)
 	}
