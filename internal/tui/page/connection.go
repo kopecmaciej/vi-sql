@@ -210,7 +210,14 @@ func (c *Connection) Render() {
 	row, _ := c.table.GetSelection()
 	c.updatePreview(row)
 
+	sw, _ := c.App.ScreenSize()
+
 	width := c.computeContentWidth()
+	// Never let the content overflow the terminal width so the page stays
+	// horizontally centered regardless of how wide the saved connections are.
+	if sw > 0 && width > sw {
+		width = sw
+	}
 	wrap := func(inner tview.Primitive, focus bool) *core.Flex {
 		row := core.NewFlex()
 		row.SetDirection(tview.FlexColumn)

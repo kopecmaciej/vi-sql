@@ -24,6 +24,7 @@ type App struct {
 	lastFocusedPrimitive tview.Primitive
 	mcpEnabled           bool
 	cursorStyle          tcell.CursorStyle
+	screen               tcell.Screen
 	openStyleModal       func()
 	openConnectionPage   func()
 	openOptionsPage      func()
@@ -31,6 +32,15 @@ type App struct {
 }
 
 func (a *App) SetOpenStyleModalFunc(fn func()) { a.openStyleModal = fn }
+
+// ScreenSize returns the terminal size captured from the last draw. It
+// returns 0, 0 if no frame has been drawn yet.
+func (a *App) ScreenSize() (int, int) {
+	if a.screen == nil {
+		return 0, 0
+	}
+	return a.screen.Size()
+}
 
 func (a *App) OpenStyleModal() {
 	if a.openStyleModal != nil {
@@ -86,6 +96,7 @@ func NewApp(appConfig *config.Config) *App {
 	}
 
 	app.SetBeforeDrawFunc(func(screen tcell.Screen) bool {
+		app.screen = screen
 		screen.SetCursorStyle(app.cursorStyle)
 		return false
 	})
