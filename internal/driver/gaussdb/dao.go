@@ -1284,6 +1284,11 @@ func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset i
 
 	result, err := scanRows(rows)
 	if err != nil {
+		if !bypassSubquery {
+			if textResult, textErr := d.scanQueryRowsAsText(ctx, paged, colInfos); textErr == nil {
+				return paged, textResult, colInfos, nil
+			}
+		}
 		return "", nil, nil, err
 	}
 
@@ -1309,6 +1314,9 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 
 	result, err := scanRows(rows)
 	if err != nil {
+		if textResult, textErr := d.scanQueryRowsAsText(ctx, query, colInfos); textErr == nil {
+			return textResult, colInfos, nil
+		}
 		return nil, nil, err
 	}
 
@@ -1382,6 +1390,32 @@ func (d *Dao) GetTableColumnNames(ctx context.Context, schema, table string) ([]
 	}
 
 	return names, rows.Err()
+}
+
+// scanQueryRowsAsText re-runs a query casting every column to ::text. GaussDB
+// mislabels some OID/XID columns (e.g. pg_database.datfrozenxid64 in
+// MySQL-compatible mode) as XID while sending int8-sized payloads that
+// gaussdb-go's Uint32Codec cannot decode. Casting to text makes the server
+// send text values, bypassing the broken codec path.
+func (d *Dao) scanQueryRowsAsText(ctx context.Context, query string, colInfos []database.ColumnInfo) ([]database.Row, error) {
+	names := make([]string, len(colInfos))
+	for i, ci := range colInfos {
+		names[i] = ci.Name
+	}
+
+	casts := make([]string, len(names))
+	for i, n := range names {
+		casts[i] = "t." + util.BacktickQuoter.Ident(n) + "::text"
+	}
+
+	textQuery := fmt.Sprintf("SELECT %s FROM (%s) AS t", strings.Join(casts, ", "), query)
+	rows, err := d.client.DB.QueryContext(ctx, textQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return scanRows(rows)
 }
 
 func scanRows(rows *sql.Rows) ([]database.Row, error) {
