@@ -374,6 +374,14 @@ func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) err
 				}
 				sqlConfig.Password = encryptedPass
 			}
+			// A config rebuilt from the edit form does not carry over row
+			// identity or usage tracking — preserve them on update.
+			if sqlConfig.ID == "" {
+				sqlConfig.ID = connection.ID
+			}
+			if sqlConfig.LastUsed.IsZero() {
+				sqlConfig.LastUsed = connection.LastUsed
+			}
 			c.Connections[i] = *sqlConfig
 			found = true
 			break
