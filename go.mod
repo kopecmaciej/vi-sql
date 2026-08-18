@@ -114,6 +114,11 @@ require (
 
 replace github.com/gdamore/tcell/v2 => github.com/kopecmaciej/tcell/v2 v2.13.12
 
+// Local fork that accepts 8-byte payloads for Uint32Codec OIDs (GaussDB
+// reports some XID-family columns as XID while sending int8-sized values,
+// e.g. pg_database.datfrozenxid64 in MySQL-compatible mode).
+replace github.com/HuaweiCloudDeveloper/gaussdb-go => ./third_party/gaussdb-go
+
 exclude google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55
 
 exclude google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8

@@ -20,14 +20,24 @@ const (
 	CompatMySQL CompatMode = "M" // MySQL-compatible (M-Compatibility)
 )
 
-type Client struct {
-	DB         *sql.DB
-	Config     *config.SQLConfig
+// ServerCapabilities describes what the connected GaussDB instance supports.
+// Feature flags are derived from the detected compatibility mode so callers
+// gate on capabilities rather than on the mode itself.
+type ServerCapabilities struct {
 	CompatMode CompatMode
+	Version    string
+
+	SupportsReturning    bool
+	SupportsExplainJSON  bool
+	SupportsExplainPerf  bool
+	SupportsChangeColumn bool
+	SupportsLastInsertID bool
 }
 
-func (c *Client) IsMySQLCompat() bool {
-	return c.CompatMode == CompatMySQL
+type Client struct {
+	DB           *sql.DB
+	Config       *config.SQLConfig
+	Capabilities ServerCapabilities
 }
 
 func NewClient(cfg *config.SQLConfig) *Client {
@@ -74,39 +84,65 @@ func (c *Client) Connect() error {
 
 	log.Info().Str("host", c.Config.Host).Int("port", c.Config.Port).Str("database", c.Config.Database).Msg("Connected to GaussDB")
 	c.DB = db
-	c.detectCompatMode(ctx)
+	c.detectCapabilities(ctx)
 	return nil
 }
 
-// detectCompatMode determines whether the connected database runs in
-// MySQL-compatible (M) or PostgreSQL-compatible (A) mode so that metadata
-// queries can use the matching information_schema dialect.
-func (c *Client) detectCompatMode(ctx context.Context) {
+// detectCapabilities determines the compatibility mode (so metadata queries
+// use the matching information_schema dialect) and fills in the feature
+// flags the server supports.
+func (c *Client) detectCapabilities(ctx context.Context) {
+	caps := ServerCapabilities{}
+
+	if err := c.DB.QueryRowContext(ctx, "SELECT version()").Scan(&caps.Version); err != nil {
+		log.Warn().Err(err).Msg("Failed to get GaussDB version")
+	}
+
 	mode := CompatA
 
-	// Probe the information_schema dialect directly: MySQL-compatible mode
-	// exposes column_key / column_type / extra which do not exist in the
-	// PG-flavored information_schema.
-	var count int
+	// The database's compatibility mode is stored in pg_database.datcompatibility
+	// (M/MYSQL/B are MySQL-compatible; A/PG/ORA/C/TD use the PG-flavored catalogs).
+	var compat *string
 	if err := c.DB.QueryRowContext(ctx, `
-		SELECT count(*) FROM information_schema.columns
-		WHERE table_name = 'columns' AND column_name = 'column_key'`).Scan(&count); err == nil && count > 0 {
-		mode = CompatMySQL
+		SELECT datcompatibility FROM pg_database WHERE datname = current_database()`).Scan(&compat); err == nil && compat != nil {
+		switch strings.ToUpper(strings.TrimSpace(*compat)) {
+		case "M", "MYSQL", "B":
+			mode = CompatMySQL
+		}
+		// A-mode (or unknown) databases fall back to the default below.
 	} else {
-		// Fallback to the sql_compatibility GUC when the probe is not
-		// conclusive (value set varies across versions: M/MYSQL/B are
-		// MySQL-compatible; A/PG/ORA/C/TD use the PG-flavored catalogs).
-		var compat string
-		if err := c.DB.QueryRowContext(ctx, "SHOW sql_compatibility").Scan(&compat); err == nil {
-			switch strings.ToUpper(strings.TrimSpace(compat)) {
-			case "M", "MYSQL", "B":
-				mode = CompatMySQL
+		// Fallback: probe the information_schema dialect directly. MySQL
+		// compatible mode exposes column_key / column_type / extra which do
+		// not exist in the PG-flavored information_schema; otherwise consult
+		// the sql_compatibility GUC.
+		var count int
+		if err := c.DB.QueryRowContext(ctx, `
+			SELECT count(*) FROM information_schema.columns
+			WHERE table_name = 'columns' AND column_name = 'column_key'`).Scan(&count); err == nil && count > 0 {
+			mode = CompatMySQL
+		} else {
+			var guc string
+			if err := c.DB.QueryRowContext(ctx, "SHOW sql_compatibility").Scan(&guc); err == nil {
+				switch strings.ToUpper(strings.TrimSpace(guc)) {
+				case "M", "MYSQL", "B":
+					mode = CompatMySQL
+				}
 			}
 		}
 	}
 
-	c.CompatMode = mode
-	log.Info().Str("compat_mode", string(mode)).Msg("Detected GaussDB compatibility mode")
+	caps.CompatMode = mode
+	caps.SupportsReturning = mode == CompatA      // M-mode rejects RETURNING on INSERT (0A000)
+	caps.SupportsExplainJSON = true               // EXPLAIN (FORMAT JSON) is inherited
+	caps.SupportsExplainPerf = true               // EXPLAIN (ANALYZE, FORMAT JSON) is inherited
+	caps.SupportsChangeColumn = mode == CompatMySQL
+	caps.SupportsLastInsertID = mode == CompatMySQL
+
+	c.Capabilities = caps
+	log.Info().
+		Str("compat_mode", string(mode)).
+		Str("version", caps.Version).
+		Msg("Detected GaussDB compatibility mode")
 }
 
 func (c *Client) Close() {
