@@ -67,7 +67,7 @@ func (c *Client) Connect() error {
 		if sslMode == "" {
 			sslMode = "disable"
 		}
-		dsn = util.BuildGaussDBDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode)
+		dsn = util.BuildGaussDBDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode, c.Config.TargetSessionAttrs)
 	}
 
 	log.Info().Str("host", c.Config.Host).Int("port", c.Config.Port).Str("database", c.Config.Database).Msg("Connecting to GaussDB")

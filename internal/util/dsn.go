@@ -8,12 +8,13 @@ import (
 
 // ParsedDSN holds the components of a database connection URL.
 type ParsedDSN struct {
-	Host     string
-	Port     string
-	Database string
-	Username string
-	Password string
-	SSLMode  string
+	Host              string
+	Port              string
+	Database          string
+	Username          string
+	Password          string
+	SSLMode           string
+	TargetSessionAttrs string
 }
 
 func parseURLDSN(dsn, defaultPort, tlsParam string) (*ParsedDSN, error) {
@@ -23,10 +24,11 @@ func parseURLDSN(dsn, defaultPort, tlsParam string) (*ParsedDSN, error) {
 	}
 
 	result := &ParsedDSN{
-		Host:     u.Hostname(),
-		Port:     u.Port(),
-		Database: strings.TrimPrefix(u.Path, "/"),
-		SSLMode:  u.Query().Get(tlsParam),
+		Host:               u.Hostname(),
+		Port:               u.Port(),
+		Database:           strings.TrimPrefix(u.Path, "/"),
+		SSLMode:            u.Query().Get(tlsParam),
+		TargetSessionAttrs: u.Query().Get("target_session_attrs"),
 	}
 
 	if u.User != nil {
@@ -197,11 +199,19 @@ func BuildPostgresDSN(host string, port int, database, username, password, sslMo
 }
 
 // BuildGaussDBDSN constructs a GaussDB connection URL from individual components.
-func BuildGaussDBDSN(host string, port int, database, username, password, sslMode string) string {
+// targetSessionAttrs (primary/standby/any) selects which cluster role to
+// connect to; it defaults to primary when empty.
+func BuildGaussDBDSN(host string, port int, database, username, password, sslMode, targetSessionAttrs string) string {
 	if sslMode == "" {
 		sslMode = "disable"
 	}
-	return BuildDSN("gaussdb", host, port, database, username, password, map[string]string{"sslmode": sslMode})
+	if targetSessionAttrs == "" {
+		targetSessionAttrs = "primary"
+	}
+	return BuildDSN("gaussdb", host, port, database, username, password, map[string]string{
+		"sslmode":              sslMode,
+		"target_session_attrs": targetSessionAttrs,
+	})
 }
 
 // IsMultiHostDSN reports whether dsn contains multiple hosts in the authority

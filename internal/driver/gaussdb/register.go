@@ -33,15 +33,17 @@ func init() {
 			{Kind: database.FieldPassword, Label: "Password"},
 			{Kind: database.FieldInput, Label: "Database"},
 			{Kind: database.FieldDropDown, Label: "SSL Mode", Default: "disable", Options: []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}},
+			{Kind: database.FieldDropDown, Label: "Target Session", Default: "primary", Options: []string{"primary", "standby", "any"}},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
 		},
 		PreFill: func(conn *config.SQLConfig) map[string]string {
 			m := map[string]string{
-				"DSN":      conn.DSN,
-				"Host":     conn.Host,
-				"Username": conn.Username,
-				"Database": conn.Database,
-				"SSL Mode": conn.SSLMode,
+				"DSN":           conn.DSN,
+				"Host":          conn.Host,
+				"Username":      conn.Username,
+				"Database":      conn.Database,
+				"SSL Mode":      conn.SSLMode,
+				"Target Session": conn.TargetSessionAttrs,
 			}
 			if conn.Port > 0 {
 				m["Port"] = fmt.Sprintf("%d", conn.Port)
@@ -73,6 +75,7 @@ func buildGaussDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 		out := *editConn
 		out.Name = name
 		out.Timeout = timeout
+		out.TargetSessionAttrs = fields["Target Session"]
 		return &out, nil
 	}
 
@@ -112,6 +115,7 @@ func buildGaussDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 		cfg.Password = parsed.Password
 		cfg.Database = parsed.Database
 		cfg.SSLMode = parsed.SSLMode
+		cfg.TargetSessionAttrs = parsed.TargetSessionAttrs
 		cfg.DSN = cfg.GetSafeDSN()
 		return cfg, nil
 	}
@@ -127,14 +131,15 @@ func buildGaussDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 		name = host + ":" + portStr
 	}
 	return &config.SQLConfig{
-		Driver:   "gaussdb",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: fields["Username"],
-		Password: password,
-		Database: fields["Database"],
-		SSLMode:  fields["SSL Mode"],
-		Timeout:  timeout,
+		Driver:             "gaussdb",
+		Name:               name,
+		Host:               host,
+		Port:               port,
+		Username:           fields["Username"],
+		Password:           password,
+		Database:           fields["Database"],
+		SSLMode:            fields["SSL Mode"],
+		TargetSessionAttrs: fields["Target Session"],
+		Timeout:            timeout,
 	}, nil
 }

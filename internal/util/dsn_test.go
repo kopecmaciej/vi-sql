@@ -116,6 +116,30 @@ func TestBuildPostgresDSN(t *testing.T) {
 	}
 }
 
+func TestBuildGaussDBDSN_TargetSessionAttrs(t *testing.T) {
+	t.Run("defaults to primary", func(t *testing.T) {
+		got := BuildGaussDBDSN("host", 8000, "mydb", "user", "pass", "disable", "")
+		assert.Equal(t, "gaussdb://user:pass@host:8000/mydb?sslmode=disable&target_session_attrs=primary", got)
+	})
+
+	t.Run("explicit primary", func(t *testing.T) {
+		got := BuildGaussDBDSN("host", 8000, "mydb", "user", "pass", "disable", "primary")
+		assert.Equal(t, "gaussdb://user:pass@host:8000/mydb?sslmode=disable&target_session_attrs=primary", got)
+	})
+
+	t.Run("standby", func(t *testing.T) {
+		got := BuildGaussDBDSN("host", 8000, "mydb", "user", "pass", "disable", "standby")
+		assert.Equal(t, "gaussdb://user:pass@host:8000/mydb?sslmode=disable&target_session_attrs=standby", got)
+	})
+}
+
+func TestParseGaussDBDSN_TargetSessionAttrs(t *testing.T) {
+	parsed, err := ParseGaussDBDSN("gaussdb://user:pass@host:8000/mydb?sslmode=disable&target_session_attrs=any")
+	require.NoError(t, err)
+	assert.Equal(t, "any", parsed.TargetSessionAttrs)
+	assert.Equal(t, "disable", parsed.SSLMode)
+}
+
 func TestBuildThenParseDSNRoundtrip(t *testing.T) {
 	dsn := BuildPostgresDSN("db.example.com", 5432, "production", "admin", "s3cr3t", "require")
 	parsed, err := ParsePostgresDSN(dsn)

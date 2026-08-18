@@ -39,7 +39,11 @@ type SQLConfig struct {
 	SSLMode  string     `yaml:"sslMode"`
 	Name     string     `yaml:"name"`
 	Timeout  int        `yaml:"timeout"`
-	Options  SQLOptions `yaml:"options"`
+
+	// TargetSessionAttrs is GaussDB-only: which cluster role to connect to
+	// (primary/standby/any). Empty means the default (primary).
+	TargetSessionAttrs string `yaml:"targetSessionAttrs,omitempty"`
+	Options            SQLOptions `yaml:"options"`
 	LastUsed time.Time  `yaml:"lastUsed,omitempty"`
 }
 
@@ -469,7 +473,7 @@ func (m *SQLConfig) buildDSNFromFields(password string) string {
 		if sslMode == "" {
 			sslMode = "disable"
 		}
-		return util.BuildGaussDBDSN(m.Host, m.Port, m.Database, m.Username, password, sslMode)
+		return util.BuildGaussDBDSN(m.Host, m.Port, m.Database, m.Username, password, sslMode, m.TargetSessionAttrs)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {
