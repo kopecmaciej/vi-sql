@@ -970,10 +970,64 @@ func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) erro
 }
 
 func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName string) error {
+	if d.client.IsMySQLCompat() {
+		return d.renameColumnM(ctx, schema, table, old, newName)
+	}
+
 	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
 	_, err := d.client.DB.ExecContext(ctx,
 		fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
 			fqTable, util.BacktickQuoter.Ident(old), util.BacktickQuoter.Ident(newName)))
+	if err != nil {
+		return fmt.Errorf("failed to rename column: %w", err)
+	}
+	log.Info().Str("schema", schema).Str("table", table).Str("old", old).Str("new", newName).Msg("Column renamed")
+	return nil
+}
+
+// renameColumnM rewrites the column via CHANGE COLUMN, the only column-rename
+// form the MySQL-compatible grammar accepts (both "RENAME COLUMN x TO y" and
+// "RENAME x TO y" are rejected with SQLSTATE 42601). CHANGE requires the full
+// replacement definition, so type, nullability, default, auto_increment, a
+// non-default per-column collation and the comment are rebuilt from
+// information_schema to keep the rename non-destructive.
+func (d *Dao) renameColumnM(ctx context.Context, schema, table, old, newName string) error {
+	var colType, isNullable, colDefault, extra, comment, collation, tableCollation string
+	err := d.client.DB.QueryRowContext(ctx, `
+		SELECT c.column_type, c.is_nullable, COALESCE(c.column_default, ''),
+		       COALESCE(c.extra, ''), COALESCE(c.column_comment, ''),
+		       COALESCE(c.collation_name, ''),
+		       COALESCE((SELECT t.table_collation FROM information_schema.tables t
+		                 WHERE t.table_schema = c.table_schema AND t.table_name = c.table_name), '')
+		FROM information_schema.columns c
+		WHERE c.table_schema = $1 AND c.table_name = $2 AND c.column_name = $3`,
+		schema, table, old).Scan(&colType, &isNullable, &colDefault, &extra, &comment, &collation, &tableCollation)
+	if err != nil {
+		return fmt.Errorf("failed to get column definition: %w", err)
+	}
+
+	def := colType
+	if collation != "" && collation != tableCollation {
+		def += " COLLATE " + collation
+	}
+	if isNullable == "NO" {
+		def += " NOT NULL"
+	}
+	// In MySQL-compatible mode information_schema reports the literal string
+	// "AUTO_INCREMENT" as the default of auto_increment columns; emitting it
+	// would become a DEFAULT clause and fail, so it is skipped here.
+	if strings.Contains(extra, "auto_increment") {
+		def += " AUTO_INCREMENT"
+	} else if colDefault != "" {
+		def += " DEFAULT " + colDefault
+	}
+	if comment != "" {
+		def += " COMMENT '" + strings.ReplaceAll(comment, "'", "''") + "'"
+	}
+
+	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	_, err = d.client.DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s %s",
+		fqTable, util.BacktickQuoter.Ident(old), util.BacktickQuoter.Ident(newName), def))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
