@@ -3,7 +3,6 @@ package page
 import (
 	"fmt"
 	"sort"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -222,8 +221,7 @@ func (c *Connection) Render() {
 	}
 
 	c.AddItem(wrap(c.table, true), 0, 1, true)
-	previewHeight := c.preview.GetRowCount() + 1
-	c.AddItem(wrap(c.preview, false), previewHeight, 0, false)
+	c.AddItem(wrap(c.preview, false), 7, 0, false)
 
 	c.renderFooter()
 	c.AddItem(c.footer, 2, 0, false)
@@ -311,45 +309,32 @@ func (c *Connection) computeContentWidth() int {
 	}
 	tableWidth := tableContent + 4 + len(headers) // border (2) + inner padding (2) + inter-column spacing
 
-	// The page width is driven by the table only. Long DSNs must not stretch
-	// the page; they wrap to multiple lines inside the preview instead.
-	return tableWidth
-}
+	previewLabelMax := runes(" Timeout ")
+	previewValueMax := runes("— ")
+	for _, conn := range conns {
+		dsn := conn.GetSafeDSN()
+		if dsn == "" {
+			dsn = "—"
+		}
+		username := conn.Username
+		if username == "" {
+			username = "—"
+		}
+		ssl := conn.SSLMode
+		if ssl == "" {
+			ssl = "—"
+		}
+		timeout := "default"
+		if conn.Timeout > 0 {
+			timeout = fmt.Sprintf("%ds", conn.Timeout)
+		}
+		for _, v := range []string{dsn, username, ssl, timeout} {
+			previewValueMax = max(previewValueMax, runes(v)+1)
+		}
+	}
+	previewWidth := previewLabelMax + previewValueMax + 4
 
-// wrapText breaks s into lines of at most width runes. It breaks on space
-// boundaries when possible and hard-breaks long tokens (e.g. DSN URLs) that
-// exceed the width.
-func wrapText(s string, width int) []string {
-	if width <= 0 {
-		return []string{s}
-	}
-	var lines []string
-	runes := []rune(s)
-	if len(runes) == 0 {
-		return []string{""}
-	}
-	for len(runes) > 0 {
-		if len(runes) <= width {
-			lines = append(lines, string(runes))
-			break
-		}
-		breakAt := -1
-		for i := width - 1; i >= 0; i-- {
-			if unicode.IsSpace(runes[i]) {
-				breakAt = i
-				break
-			}
-		}
-		if breakAt <= 0 {
-			breakAt = width // hard-break a long token
-		}
-		lines = append(lines, string(runes[:breakAt]))
-		runes = runes[breakAt:]
-		for len(runes) > 0 && unicode.IsSpace(runes[0]) {
-			runes = runes[1:]
-		}
-	}
-	return lines
+	return max(tableWidth, previewWidth)
 }
 
 func (c *Connection) renderFooter() {
@@ -555,38 +540,22 @@ func (c *Connection) updatePreview(row int) {
 	c.preview.Clear()
 	c.preview.SetTitle(fmt.Sprintf(" %s ", conn.Name))
 
-	r := 0
-	c.preview.SetCell(r, 0, label("DSN"))
-	// The preview shares the page width with the table; the value column is
-	// the page width minus the label column, borders and padding. Long DSNs
-	// wrap onto multiple rows instead of stretching the page.
-	dsnWidth := c.computeContentWidth() - 14
-	if dsnWidth < 30 {
-		dsnWidth = 30
-	}
-	dsnLines := wrapText(dsn, dsnWidth)
-	for i, line := range dsnLines {
-		c.preview.SetCell(r+i, 1, value(line))
-	}
-	r += len(dsnLines)
-
-	c.preview.SetCell(r, 0, label("User"))
-	c.preview.SetCell(r, 1, value(username))
-	r++
-	c.preview.SetCell(r, 0, label("SSL"))
-	c.preview.SetCell(r, 1, value(ssl))
-	r++
-	c.preview.SetCell(r, 0, label("Timeout"))
-	c.preview.SetCell(r, 1, value(timeout))
-	r++
+	c.preview.SetCell(0, 0, label("DSN"))
+	c.preview.SetCell(0, 1, value(dsn))
+	c.preview.SetCell(1, 0, label("User"))
+	c.preview.SetCell(1, 1, value(username))
+	c.preview.SetCell(2, 0, label("SSL"))
+	c.preview.SetCell(2, 1, value(ssl))
+	c.preview.SetCell(3, 0, label("Timeout"))
+	c.preview.SetCell(3, 1, value(timeout))
 
 	errorColor := styles.Global.ErrorColor.Color()
 	warningColor := styles.Global.WarningColor.Color()
 	switch {
 	case conn.Password != "" && !util.IsEncrypted(conn.Password):
-		c.preview.SetCell(r, 0, tview.NewTableCell(" ⚠ ").
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
 			SetStyle(tcell.StyleDefault.Foreground(errorColor).Background(bg)))
-		c.preview.SetCell(r, 1, tview.NewTableCell(fmt.Sprintf("[%s]password stored unencrypted[-]", styles.Global.ErrorColor)).SetExpansion(1))
+		c.preview.SetCell(4, 1, tview.NewTableCell(fmt.Sprintf("[%s]password stored unencrypted[-]", styles.Global.ErrorColor)).SetExpansion(1))
 	case !conn.IsPasswordReadable():
 		storedMethod := util.ParseMethodTag(conn.Password)
 		currentMethod := c.App.GetConfig().Security.Method
@@ -596,8 +565,8 @@ func (c *Connection) updatePreview(row int) {
 		} else {
 			msg = fmt.Sprintf("[%s]password unreadable — key mismatch, re-enter[-]", styles.Global.WarningColor)
 		}
-		c.preview.SetCell(r, 0, tview.NewTableCell(" ⚠ ").
+		c.preview.SetCell(4, 0, tview.NewTableCell(" ⚠ ").
 			SetStyle(tcell.StyleDefault.Foreground(warningColor).Background(bg)))
-		c.preview.SetCell(r, 1, tview.NewTableCell(msg).SetExpansion(1))
+		c.preview.SetCell(4, 1, tview.NewTableCell(msg).SetExpansion(1))
 	}
 }
