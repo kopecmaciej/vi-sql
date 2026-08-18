@@ -314,34 +314,9 @@ func (c *Connection) computeContentWidth() int {
 	for _, w := range colWidths {
 		tableContent += w
 	}
-	tableWidth := tableContent + 4 + len(headers) // border (2) + inner padding (2) + inter-column spacing
-
-	previewLabelMax := runes(" Timeout ")
-	previewValueMax := runes("— ")
-	for _, conn := range conns {
-		dsn := conn.GetSafeDSN()
-		if dsn == "" {
-			dsn = "—"
-		}
-		username := conn.Username
-		if username == "" {
-			username = "—"
-		}
-		ssl := conn.SSLMode
-		if ssl == "" {
-			ssl = "—"
-		}
-		timeout := "default"
-		if conn.Timeout > 0 {
-			timeout = fmt.Sprintf("%ds", conn.Timeout)
-		}
-		for _, v := range []string{dsn, username, ssl, timeout} {
-			previewValueMax = max(previewValueMax, runes(v)+1)
-		}
-	}
-	previewWidth := previewLabelMax + previewValueMax + 4
-
-	return max(tableWidth, previewWidth)
+	// The page width is driven by the table alone so the whole block stays
+	// centered; the preview fills the same box (its cells expand to it).
+	return tableContent + 4 + len(headers) // border (2) + inner padding (2) + inter-column spacing
 }
 
 func (c *Connection) renderFooter() {
