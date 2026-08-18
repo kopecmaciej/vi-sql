@@ -1249,8 +1249,11 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
 	indexName := util.BacktickQuoter.Ident(def.Name)
 
+	// MySQL-compatible mode rejects USING entirely (verified: both USING btree
+	// and USING hash fail with SQLSTATE 42601); GaussDB picks the access method
+	// itself there, so only A-mode emits an explicit access method.
 	usingClause := ""
-	if def.Type != "" && def.Type != "btree" {
+	if d.client.Capabilities.CompatMode != CompatMySQL && def.Type != "" && def.Type != "btree" {
 		usingClause = fmt.Sprintf(" USING %s", def.Type)
 	}
 
