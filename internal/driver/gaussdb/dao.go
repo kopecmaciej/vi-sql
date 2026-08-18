@@ -1328,7 +1328,7 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 
 	colInfos := make([]database.ColumnInfo, len(cols))
 	for i, ct := range cols {
-		colInfos[i] = database.ColumnInfo{Name: ct.Name(), Ordinal: i + 1}
+		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: ct.DatabaseTypeName(), Ordinal: i + 1}
 	}
 
 	result, err := scanRows(rows)
