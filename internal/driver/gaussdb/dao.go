@@ -761,8 +761,24 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 	}
 	defer rows.Close()
 
+	cols, err := rows.ColumnTypes()
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get column types: %w", err)
+	}
+
+	colInfos := make([]database.ColumnInfo, len(cols))
+	for i, ct := range cols {
+		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: ct.DatabaseTypeName(), Ordinal: i + 1}
+	}
+
 	result, err := scanRows(rows)
 	if err != nil {
+		// Some OID/XID-family columns arrive with int8-sized payloads that
+		// gaussdb-go's Uint32Codec cannot decode (e.g. gs_variable_info in
+		// M-mode); retry with every column cast to ::text.
+		if textResult, textErr := d.scanQueryRowsAsText(ctx, query, colInfos); textErr == nil {
+			return query, textResult, nil
+		}
 		return "", nil, err
 	}
 
