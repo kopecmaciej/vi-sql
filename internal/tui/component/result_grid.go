@@ -69,21 +69,21 @@ func (g *ResultGrid) ColumnName(col int) string {
 
 // RowData returns the row map for the given table row index (1-indexed, row 0
 // is the header). Returns nil if out of range.
-func (g *ResultGrid) RowData(row int, allRows []database.Row) database.Row {
+func (g *ResultGrid) RowData(row int, displayedRows []database.Row) database.Row {
 	dataRow := row - 1
-	if dataRow < 0 || dataRow >= len(allRows) {
+	if dataRow < 0 || dataRow >= len(displayedRows) {
 		return nil
 	}
-	return allRows[dataRow]
+	return displayedRows[dataRow]
 }
 
 // RowPrimaryKey builds a PrimaryKey for the given row. Returns nil if pkCols
 // is empty or row is out of range.
-func (g *ResultGrid) RowPrimaryKey(row int, allRows []database.Row, pkCols []string) *database.PrimaryKey {
+func (g *ResultGrid) RowPrimaryKey(row int, displayedRows []database.Row, pkCols []string) *database.PrimaryKey {
 	if len(pkCols) == 0 {
 		return nil
 	}
-	rowData := g.RowData(row, allRows)
+	rowData := g.RowData(row, displayedRows)
 	if rowData == nil {
 		return nil
 	}
@@ -186,12 +186,12 @@ func (g *ResultGrid) FlashRow(row int) {
 }
 
 // CopyCell copies the value at (row, col) to the clipboard and flashes the cell.
-func (g *ResultGrid) CopyCell(row, col int, allRows []database.Row) bool {
+func (g *ResultGrid) CopyCell(row, col int, displayedRows []database.Row) bool {
 	colName := g.ColumnName(col)
 	if colName == "" {
 		return false
 	}
-	rowData := g.RowData(row, allRows)
+	rowData := g.RowData(row, displayedRows)
 	if rowData == nil {
 		return false
 	}
@@ -201,11 +201,11 @@ func (g *ResultGrid) CopyCell(row, col int, allRows []database.Row) bool {
 }
 
 // CopyRow copies visable columns of selected rows and flashed those rows.
-func (g *ResultGrid) CopyRow(row int, allRows []database.Row, cols []database.ColumnInfo) bool {
-	if len(allRows) == 0 {
+func (g *ResultGrid) CopyRow(row int, displayedRows []database.Row, cols []database.ColumnInfo) bool {
+	if len(displayedRows) == 0 {
 		return false
 	}
-	visibleCols := g.VisibleColumns(allRows[0], cols)
+	visibleCols := g.VisibleColumns(displayedRows[0], cols)
 
 	rowIndices := g.GetSelectedRows()
 	if len(rowIndices) == 0 {
@@ -217,7 +217,7 @@ func (g *ResultGrid) CopyRow(row int, allRows []database.Row, cols []database.Co
 
 	var lines []string
 	for _, r := range rowIndices {
-		rowData := g.RowData(r, allRows)
+		rowData := g.RowData(r, displayedRows)
 		if rowData == nil {
 			continue
 		}
@@ -240,11 +240,11 @@ func (g *ResultGrid) CopyRow(row int, allRows []database.Row, cols []database.Co
 // CopyRowAs formats the selected row(s) as the given export format and copies
 // to clipboard. JSON with a single row is unwrapped to an object; multiple
 // rows are a JSON array. CSV includes a header row.
-func (g *ResultGrid) CopyRowAs(format util.ExportFormat, row int, allRows []database.Row, cols []database.ColumnInfo) bool {
-	if len(allRows) == 0 {
+func (g *ResultGrid) CopyRowAs(format util.ExportFormat, row int, displayedRows []database.Row, cols []database.ColumnInfo) bool {
+	if len(displayedRows) == 0 {
 		return false
 	}
-	visibleCols := g.VisibleColumns(allRows[0], cols)
+	visibleCols := g.VisibleColumns(displayedRows[0], cols)
 
 	rowIndices := g.GetSelectedRows()
 	if len(rowIndices) == 0 {
@@ -256,7 +256,7 @@ func (g *ResultGrid) CopyRowAs(format util.ExportFormat, row int, allRows []data
 
 	var rows []map[string]any
 	for _, r := range rowIndices {
-		if data := g.RowData(r, allRows); data != nil {
+		if data := g.RowData(r, displayedRows); data != nil {
 			rows = append(rows, data)
 		}
 	}

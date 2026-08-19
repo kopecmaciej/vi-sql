@@ -765,17 +765,17 @@ func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKe
 
 	// Collect primary keys: prefer multi-selected rows, fall back to cursor row.
 	selectedRows := c.resultGrid.GetSelectedRows()
-	allRows := c.search.filtered(c)
+	displayedRows := c.search.filtered(c)
 	pkCols := c.state.GetPrimaryKey()
 	var pks []database.PrimaryKey
 	if len(selectedRows) > 0 {
 		for _, r := range selectedRows {
-			if pk := c.resultGrid.RowPrimaryKey(r, allRows, pkCols); pk != nil {
+			if pk := c.resultGrid.RowPrimaryKey(r, displayedRows, pkCols); pk != nil {
 				pks = append(pks, *pk)
 			}
 		}
 	} else {
-		pk := c.resultGrid.RowPrimaryKey(row, allRows, pkCols)
+		pk := c.resultGrid.RowPrimaryKey(row, displayedRows, pkCols)
 		if pk == nil {
 			return nil
 		}
@@ -1502,14 +1502,14 @@ func (c *Data) selectedRowsData() ([]database.Row, []string) {
 	if len(indices) == 0 {
 		return nil, nil
 	}
-	allRows := c.search.filtered(c)
-	if len(allRows) == 0 {
+	displayedRows := c.search.filtered(c)
+	if len(displayedRows) == 0 {
 		return nil, nil
 	}
-	cols := c.resultGrid.VisibleColumns(allRows[0], c.columns)
+	cols := c.resultGrid.VisibleColumns(displayedRows[0], c.columns)
 	rows := make([]database.Row, 0, len(indices))
 	for _, r := range indices {
-		if rowData := c.resultGrid.RowData(r, allRows); rowData != nil {
+		if rowData := c.resultGrid.RowData(r, displayedRows); rowData != nil {
 			rows = append(rows, rowData)
 		}
 	}

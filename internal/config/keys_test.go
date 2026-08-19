@@ -266,8 +266,6 @@ func TestBuildSequencePrefixes_NormalMode(t *testing.T) {
 	assert.Empty(t, kb.sequencePrefixes, "normal mode should have no sequence prefixes")
 }
 
-// --- Match + WrapInputCapture tests ---
-
 func mkRune(r rune) *tcell.EventKey {
 	return tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone)
 }
