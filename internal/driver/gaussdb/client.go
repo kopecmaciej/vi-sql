@@ -16,7 +16,7 @@ import (
 type CompatMode string
 
 const (
-	CompatA     CompatMode = "A" // PostgreSQL-compatible
+	CompatOracle CompatMode = "A" // Oracle-compatible (A-Compatibility)
 	CompatMySQL CompatMode = "M" // MySQL-compatible (M-Compatibility)
 )
 
@@ -98,7 +98,7 @@ func (c *Client) detectCapabilities(ctx context.Context) {
 		log.Warn().Err(err).Msg("Failed to get GaussDB version")
 	}
 
-	mode := CompatA
+	mode := CompatOracle
 
 	// The database's compatibility mode is stored in pg_database.datcompatibility
 	// (M/MYSQL/B are MySQL-compatible; A/PG/ORA/C/TD use the PG-flavored catalogs).
@@ -132,7 +132,7 @@ func (c *Client) detectCapabilities(ctx context.Context) {
 	}
 
 	caps.CompatMode = mode
-	caps.SupportsReturning = mode == CompatA      // M-mode rejects RETURNING on INSERT (0A000)
+	caps.SupportsReturning = mode == CompatOracle // M-mode rejects RETURNING on INSERT (0A000)
 	caps.SupportsExplainJSON = true               // EXPLAIN (FORMAT JSON) is inherited
 	caps.SupportsExplainPerf = true               // EXPLAIN (ANALYZE, FORMAT JSON) is inherited
 	caps.SupportsChangeColumn = mode == CompatMySQL
