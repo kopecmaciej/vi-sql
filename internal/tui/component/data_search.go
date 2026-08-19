@@ -15,11 +15,13 @@ type searchState struct {
 	text     string
 	active   bool
 	debounce *time.Timer
+	version  uint64
+	fetching bool
 }
 
 func (s *searchState) init(c *Data) {
 	s.input = core.NewInputField()
-	s.input.SetLabel(" / ")
+	s.input.SetLabel(" Search loaded rows ")
 	s.input.SetBorder(true)
 	s.input.SetChangedFunc(func(text string) {
 		s.onChange(c, text)
@@ -36,6 +38,8 @@ func (s *searchState) init(c *Data) {
 func (s *searchState) enter(c *Data) {
 	s.active = true
 	s.text = ""
+	s.version++
+	s.fetching = false
 	s.input.SetText("")
 	c.Render()
 	c.App.SetFocusOnly(s.input)
@@ -44,6 +48,8 @@ func (s *searchState) enter(c *Data) {
 func (s *searchState) exit(c *Data) {
 	s.active = false
 	s.text = ""
+	s.version++
+	s.fetching = false
 	s.input.SetText("")
 	if s.debounce != nil {
 		s.debounce.Stop()
@@ -73,6 +79,7 @@ func (s *searchState) accept(c *Data) {
 
 func (s *searchState) onChange(c *Data, text string) {
 	s.text = text
+	s.version++
 	c.reRenderState()
 	c.resultGrid.SetSelectable(false, false)
 	if s.debounce != nil {
@@ -90,6 +97,8 @@ func (s *searchState) onChange(c *Data, text string) {
 func (s *searchState) clear() {
 	s.text = ""
 	s.active = false
+	s.version++
+	s.fetching = false
 	if s.debounce != nil {
 		s.debounce.Stop()
 		s.debounce = nil

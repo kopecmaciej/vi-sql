@@ -232,7 +232,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Data.CopyRowCSV = Key{Sequences: []string{"yrc"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Sequences: []string{"gd"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Sequences: []string{"gr"}, Description: "Find references"}
-		k.Data.SearchWithinResults = Key{Sequences: []string{"gs"}, Description: "Search in results"}
+		k.Data.SearchWithinResults = Key{Sequences: []string{"gs"}, Description: "Search loaded results"}
 	} else {
 		k.Data.CopyCell = Key{Runes: []string{"c"}, Description: "Copy cell"}
 		k.Data.CopyRow = Key{Runes: []string{"C"}, Description: "Copy row"}
@@ -240,7 +240,7 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Data.CopyRowCSV = Key{Keys: []string{"Alt+c"}, Description: "Copy row as CSV"}
 		k.Data.FollowForeignKey = Key{Keys: []string{"Ctrl+b"}, Description: "Follow FK"}
 		k.Data.FindReferences = Key{Keys: []string{"Alt+r"}, Description: "Find references"}
-		k.Data.SearchWithinResults = Key{Keys: []string{"Ctrl+f"}, Description: "Search in results"}
+		k.Data.SearchWithinResults = Key{Keys: []string{"Ctrl+f"}, Description: "Search loaded results"}
 	}
 
 	k.ExplainViewer = ExplainViewerKeys{

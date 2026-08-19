@@ -164,6 +164,7 @@ func TestVimProfileDefaults(t *testing.T) {
 	assert.Equal(t, []string{"G"}, kb.Navigation.GoBottom.Runes, "vim GoBottom should default to G rune")
 	assert.Equal(t, []string{"k"}, kb.Navigation.MoveUp.Runes, "vim MoveUp should include k rune")
 	assert.Contains(t, kb.Data.FollowForeignKey.Sequences, "gd", "vim FollowForeignKey should include gd sequence")
+	assert.Equal(t, "Search loaded results", kb.Data.SearchWithinResults.Description)
 }
 
 func TestNormalProfileDefaults(t *testing.T) {
@@ -172,6 +173,7 @@ func TestNormalProfileDefaults(t *testing.T) {
 	assert.Equal(t, []string{"Ctrl+End"}, kb.Navigation.GoBottom.Keys, "normal GoBottom should default to Ctrl+End")
 	assert.Empty(t, kb.Navigation.MoveUp.Runes, "normal MoveUp should have no runes")
 	assert.Empty(t, kb.Data.FollowForeignKey.Sequences, "normal FollowForeignKey should have no sequences")
+	assert.Equal(t, "Search loaded results", kb.Data.SearchWithinResults.Description)
 }
 
 func TestProfilesAreIndependent(t *testing.T) {

@@ -51,6 +51,22 @@ func (s *scrollFetcher) tryPrefetch(cursorRow, viewHeight int, onAppend func()) 
 		return
 	}
 
+	s.fetchNext(onAppend)
+}
+
+// fetchNext appends the next page of rows, regardless of cursor position.
+// It returns false when a fetch cannot be started because the buffer is
+// already complete or another query is in flight.
+func (s *scrollFetcher) fetchNext(onAppend func()) bool {
+	if s.pending || s.noMore || s.runner.IsQueryRunning() {
+		return false
+	}
+	bufLen := s.state.RowCount()
+	if s.state.AllRowsLoaded || (s.state.Count > 0 && int64(bufLen) >= s.state.Count) {
+		s.noMore = true
+		return false
+	}
+
 	s.pending = true
 	s.runner.Refresh(s.state, RunCallbacks{
 		OnSelect: func(rows []database.Row, _ []database.ColumnInfo, _ string, _ time.Duration) {
@@ -71,4 +87,5 @@ func (s *scrollFetcher) tryPrefetch(cursorRow, viewHeight int, onAppend func()) 
 		OnError:  func(_ error) { s.pending = false },
 		OnCancel: func() { s.pending = false },
 	})
+	return true
 }

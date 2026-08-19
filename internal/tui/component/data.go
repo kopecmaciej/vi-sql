@@ -892,45 +892,61 @@ func (c *Data) triggerRefresh(onDone func(), onErr func(error)) {
 	})
 }
 
-// searchJump moves the selection to the next or previous matching cell. No-op
-// when no search is active.
+// searchJump moves to the next or previous match. Forward navigation fetches
+// more result pages when the loaded matches are exhausted.
 func (c *Data) searchJump(forward bool) {
-	if c.search.text == "" {
+	if c.search.text == "" || c.search.fetching {
 		return
 	}
 	rows := c.search.filtered(c)
 	matches := c.resultGrid.FindMatches(c.search.text, rows, c.columns)
-	if len(matches) == 0 {
-		return
-	}
 	curRow, curCol := c.resultGrid.GetSelection()
 
 	if forward {
 		for _, m := range matches {
 			if m[0] > curRow || (m[0] == curRow && m[1] > curCol) {
 				c.resultGrid.Select(m[0], m[1])
-				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-				c.scroll.tryPrefetch(m[0], viewHeight, c.renderAfterAppend)
 				return
 			}
 		}
-		c.resultGrid.Select(matches[0][0], matches[0][1])
-		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-		c.scroll.tryPrefetch(matches[0][0], viewHeight, c.renderAfterAppend)
-	} else {
-		for i := len(matches) - 1; i >= 0; i-- {
-			m := matches[i]
-			if m[0] < curRow || (m[0] == curRow && m[1] < curCol) {
-				c.resultGrid.Select(m[0], m[1])
-				_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-				c.scroll.tryPrefetch(m[0], viewHeight, c.renderAfterAppend)
+
+		if !c.state.AllRowsLoaded {
+			c.search.fetching = true
+			version := c.search.version
+			started := c.scroll.fetchNext(func() {
+				if c.search.version != version {
+					c.search.fetching = false
+					return
+				}
+				c.search.fetching = false
+				c.renderAfterAppend()
+				c.searchJump(true)
+			})
+			if started {
+				return
+			}
+			c.search.fetching = false
+			if c.runner.IsQueryRunning() {
 				return
 			}
 		}
+
+		if len(matches) > 0 {
+			c.resultGrid.Select(matches[0][0], matches[0][1])
+		}
+		return
+	}
+
+	for i := len(matches) - 1; i >= 0; i-- {
+		m := matches[i]
+		if m[0] < curRow || (m[0] == curRow && m[1] < curCol) {
+			c.resultGrid.Select(m[0], m[1])
+			return
+		}
+	}
+	if len(matches) > 0 {
 		last := matches[len(matches)-1]
 		c.resultGrid.Select(last[0], last[1])
-		_, _, _, viewHeight := c.resultGrid.GetInnerRect()
-		c.scroll.tryPrefetch(last[0], viewHeight, c.renderAfterAppend)
 	}
 }
 
