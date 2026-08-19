@@ -24,6 +24,11 @@ type ResultGrid struct {
 	searchHighlightHex string
 }
 
+type SearchMatch struct {
+	Row int
+	Col int
+}
+
 func NewResultGrid() *ResultGrid {
 	return &ResultGrid{Table: core.NewTable()}
 }
@@ -106,11 +111,8 @@ func (g *ResultGrid) VisibleColumns(row database.Row, cols []database.ColumnInfo
 	return visible
 }
 
-// FindMatches returns grid (row, col) coordinates of cells containing the
-// search text within filteredRows. Coordinates are 1-indexed: row 0 is the
-// header row and col 0 is the fixed "#" column. Returns nil when text is
-// empty or no rows match.
-func (g *ResultGrid) FindMatches(searchText string, filteredRows []database.Row, cols []database.ColumnInfo) [][2]int {
+// FindMatches returns 1-indexed coordinates of cells matching searchText.
+func (g *ResultGrid) FindMatches(searchText string, filteredRows []database.Row, cols []database.ColumnInfo) []SearchMatch {
 	if searchText == "" || len(filteredRows) == 0 {
 		return nil
 	}
@@ -118,11 +120,11 @@ func (g *ResultGrid) FindMatches(searchText string, filteredRows []database.Row,
 	visibleCols := g.VisibleColumns(filteredRows[0], cols)
 	boolCols := buildBoolCols(cols)
 
-	var matches [][2]int
+	var matches []SearchMatch
 	for i, row := range filteredRows {
 		for j, colName := range visibleCols {
 			if strings.Contains(strings.ToLower(cellSearchText(row[colName], boolCols[colName])), lowerText) {
-				matches = append(matches, [2]int{i + 1, j + 1})
+				matches = append(matches, SearchMatch{Row: i + 1, Col: j + 1})
 			}
 		}
 	}

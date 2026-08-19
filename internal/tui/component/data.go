@@ -903,9 +903,9 @@ func (c *Data) searchJump(forward bool) {
 	curRow, curCol := c.resultGrid.GetSelection()
 
 	if forward {
-		for _, m := range matches {
-			if m[0] > curRow || (m[0] == curRow && m[1] > curCol) {
-				c.resultGrid.Select(m[0], m[1])
+		for _, match := range matches {
+			if match.Row > curRow || (match.Row == curRow && match.Col > curCol) {
+				c.resultGrid.Select(match.Row, match.Col)
 				return
 			}
 		}
@@ -932,21 +932,21 @@ func (c *Data) searchJump(forward bool) {
 		}
 
 		if len(matches) > 0 {
-			c.resultGrid.Select(matches[0][0], matches[0][1])
+			c.resultGrid.Select(matches[0].Row, matches[0].Col)
 		}
 		return
 	}
 
 	for i := len(matches) - 1; i >= 0; i-- {
-		m := matches[i]
-		if m[0] < curRow || (m[0] == curRow && m[1] < curCol) {
-			c.resultGrid.Select(m[0], m[1])
+		match := matches[i]
+		if match.Row < curRow || (match.Row == curRow && match.Col < curCol) {
+			c.resultGrid.Select(match.Row, match.Col)
 			return
 		}
 	}
 	if len(matches) > 0 {
 		last := matches[len(matches)-1]
-		c.resultGrid.Select(last[0], last[1])
+		c.resultGrid.Select(last.Row, last.Col)
 	}
 }
 

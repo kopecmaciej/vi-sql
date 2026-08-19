@@ -73,7 +73,7 @@ func (s *searchState) accept(c *Data) {
 	rows := s.filtered(c)
 	matches := c.resultGrid.FindMatches(s.text, rows, c.columns)
 	if len(matches) > 0 {
-		c.resultGrid.Select(matches[0][0], matches[0][1])
+		c.resultGrid.Select(matches[0].Row, matches[0].Col)
 	}
 }
 
