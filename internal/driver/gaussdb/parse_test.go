@@ -5,6 +5,38 @@ import (
 	"testing"
 )
 
+func TestNormalizeQueryResultTypeName(t *testing.T) {
+	tests := []struct {
+		name       string
+		pgName     string
+		compatMode CompatMode
+		want       string
+	}{
+		{"M mode numeric maps to decimal", "NUMERIC", CompatMySQL, "decimal"},
+		{"M mode int4 maps to int", "INT4", CompatMySQL, "int"},
+		{"M mode int8 maps to bigint", "INT8", CompatMySQL, "bigint"},
+		{"M mode int2 maps to smallint", "INT2", CompatMySQL, "smallint"},
+		{"M mode bool maps to boolean", "BOOL", CompatMySQL, "boolean"},
+		{"M mode float4 maps to float", "FLOAT4", CompatMySQL, "float"},
+		{"M mode float8 maps to double", "FLOAT8", CompatMySQL, "double"},
+		{"M mode bpchar maps to char", "BPCHAR", CompatMySQL, "char"},
+		{"M mode unaffected types are lowercased", "TEXT", CompatMySQL, "text"},
+		{"A mode keeps the PG canonical name", "NUMERIC", CompatOracle, "numeric"},
+		{"A mode int4 stays int4", "INT4", CompatOracle, "int4"},
+		{"A mode unknown name is lowercased", "VARCHAR", CompatOracle, "varchar"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeQueryResultTypeName(tt.pgName, tt.compatMode)
+			if got != tt.want {
+				t.Errorf("normalizeQueryResultTypeName(%q, %q) = %q, want %q",
+					tt.pgName, tt.compatMode, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseIndexColumns(t *testing.T) {
 	tests := []struct {
 		name       string

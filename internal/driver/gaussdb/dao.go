@@ -768,7 +768,7 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 
 	colInfos := make([]database.ColumnInfo, len(cols))
 	for i, ct := range cols {
-		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: ct.DatabaseTypeName(), Ordinal: i + 1}
+		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: queryResultColumnType(ct, d.client.Capabilities.CompatMode), Ordinal: i + 1}
 	}
 
 	result, err := scanRows(rows)
@@ -1317,7 +1317,7 @@ func (d *Dao) FetchQueryRows(ctx context.Context, rawSQL string, limit, offset i
 
 	colInfos := make([]database.ColumnInfo, len(cols))
 	for i, ct := range cols {
-		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: ct.DatabaseTypeName(), Ordinal: i + 1}
+		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: queryResultColumnType(ct, d.client.Capabilities.CompatMode), Ordinal: i + 1}
 	}
 
 	result, err := scanRows(rows)
@@ -1347,7 +1347,7 @@ func (d *Dao) ExecuteQuery(ctx context.Context, query string) ([]database.Row, [
 
 	colInfos := make([]database.ColumnInfo, len(cols))
 	for i, ct := range cols {
-		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: ct.DatabaseTypeName(), Ordinal: i + 1}
+		colInfos[i] = database.ColumnInfo{Name: ct.Name(), DataType: queryResultColumnType(ct, d.client.Capabilities.CompatMode), Ordinal: i + 1}
 	}
 
 	result, err := scanRows(rows)
@@ -1454,6 +1454,43 @@ func (d *Dao) scanQueryRowsAsText(ctx context.Context, query string, colInfos []
 	defer rows.Close()
 
 	return scanRows(rows)
+}
+
+// queryResultColumnType returns the display type name for a query-result
+// column. gaussdb-go's ColumnTypeDatabaseTypeName returns the PostgreSQL
+// canonical name uppercased (e.g. "NUMERIC" for a decimal column), which is
+// lowercased here to match the information_schema-derived table metadata. In
+// MySQL-compatible mode the PostgreSQL names are additionally mapped to the
+// MySQL dialect names so query results match what the MySQL-flavored
+// information_schema reports for the same column (and what the MySQL driver
+// shows).
+func queryResultColumnType(ct *sql.ColumnType, compatMode CompatMode) string {
+	return normalizeQueryResultTypeName(ct.DatabaseTypeName(), compatMode)
+}
+
+func normalizeQueryResultTypeName(name string, compatMode CompatMode) string {
+	name = strings.ToLower(name)
+	if compatMode == CompatMySQL {
+		switch name {
+		case "numeric":
+			return "decimal"
+		case "int2":
+			return "smallint"
+		case "int4":
+			return "int"
+		case "int8":
+			return "bigint"
+		case "bool":
+			return "boolean"
+		case "float4":
+			return "float"
+		case "float8":
+			return "double"
+		case "bpchar":
+			return "char"
+		}
+	}
+	return name
 }
 
 func scanRows(rows *sql.Rows) ([]database.Row, error) {
