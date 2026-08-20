@@ -140,14 +140,18 @@ func (d *Dao) GetActiveSessions(ctx context.Context) (int64, error) {
 
 func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Schema, error) {
 	// MySQL-compatible mode has no string_agg and exposes MySQL system schemas.
-	aggTables := "COALESCE(string_agg(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
-	aggViews := "COALESCE(string_agg(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
-	systemSchemas := "'information_schema', 'pg_toast'"
+	// System views/tables are kept: information_schema.tables reports them with
+	// table_type values like 'SYSTEM VIEW'/'SYSTEM TOAST TABLE' that a
+	// 'BASE TABLE'/'VIEW' filter would drop, so classification matches any
+	// *VIEW* type and everything else is a table.
+	aggTables := "COALESCE(string_agg(CASE WHEN t.table_type NOT LIKE '%VIEW%' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
+	aggViews := "COALESCE(string_agg(CASE WHEN t.table_type LIKE '%VIEW%' THEN t.table_name END, ',' ORDER BY t.table_name), '')"
+	systemSchemas := "'pg_toast'"
 	switch d.client.Capabilities.CompatMode {
 	case CompatMySQL:
-		aggTables = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'BASE TABLE' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
-		aggViews = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type = 'VIEW' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
-		systemSchemas = "'information_schema', 'mysql', 'performance_schema', 'pg_toast'"
+		aggTables = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type NOT LIKE '%VIEW%' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
+		aggViews = "COALESCE(GROUP_CONCAT(CASE WHEN t.table_type LIKE '%VIEW%' THEN t.table_name END ORDER BY t.table_name SEPARATOR ','), '')"
+		systemSchemas = "'mysql', 'performance_schema', 'pg_toast'"
 	}
 
 	query := fmt.Sprintf(`
@@ -156,7 +160,7 @@ func (d *Dao) ListSchemas(ctx context.Context, nameFilter string) ([]database.Sc
 		       %s
 		FROM information_schema.schemata s
 		LEFT JOIN information_schema.tables t
-			ON s.schema_name = t.table_schema AND t.table_type IN ('BASE TABLE', 'VIEW')
+			ON s.schema_name = t.table_schema
 		WHERE s.schema_name NOT IN (%s)
 			AND s.schema_name NOT LIKE 'pg\_temp\_%%'
 			AND s.schema_name NOT LIKE 'pg\_toast\_temp\_%%'
