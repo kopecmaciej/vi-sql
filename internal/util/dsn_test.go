@@ -133,6 +133,43 @@ func TestBuildGaussDBDSN_TargetSessionAttrs(t *testing.T) {
 	})
 }
 
+func TestBuildGaussDBDSN_MultiHost(t *testing.T) {
+	t.Run("comma-separated hosts get :port appended", func(t *testing.T) {
+		got := BuildGaussDBDSN("host1,host2", 8000, "mydb", "user", "pass", "disable", "primary")
+		assert.Equal(t, "gaussdb://user:pass@host1:8000,host2:8000/mydb?sslmode=disable&target_session_attrs=primary", got)
+	})
+
+	t.Run("entries with explicit ports are preserved", func(t *testing.T) {
+		got := BuildGaussDBDSN("host1:7000,host2", 8000, "mydb", "user", "pass", "disable", "primary")
+		assert.Equal(t, "gaussdb://user:pass@host1:7000,host2:8000/mydb?sslmode=disable&target_session_attrs=primary", got)
+	})
+
+	t.Run("spaces around commas are trimmed", func(t *testing.T) {
+		got := BuildGaussDBDSN("host1, host2", 8000, "mydb", "user", "pass", "disable", "primary")
+		assert.Equal(t, "gaussdb://user:pass@host1:8000,host2:8000/mydb?sslmode=disable&target_session_attrs=primary", got)
+	})
+}
+
+func TestFormatHostPort(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		port int
+		want string
+	}{
+		{name: "single host", host: "localhost", port: 8000, want: "localhost:8000"},
+		{name: "multi host", host: "h1,h2", port: 8000, want: "h1:8000,h2:8000"},
+		{name: "multi host with spaces", host: "h1, h2", port: 8000, want: "h1:8000,h2:8000"},
+		{name: "host already has port", host: "h1:7000,h2", port: 8000, want: "h1:7000,h2:8000"},
+		{name: "empty entry", host: "h1,,h2", port: 8000, want: "h1:8000,h2:8000"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, FormatHostPort(tt.host, tt.port))
+		})
+	}
+}
+
 func TestParseGaussDBDSN_TargetSessionAttrs(t *testing.T) {
 	parsed, err := ParseGaussDBDSN("gaussdb://user:pass@host:8000/mydb?sslmode=disable&target_session_attrs=any")
 	require.NoError(t, err)

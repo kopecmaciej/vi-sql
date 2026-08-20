@@ -107,6 +107,12 @@ func BuildSQLServerDSN(host string, port int, database, username, password, encr
 
 // BuildDSN constructs a connection URL from individual components.
 func BuildDSN(scheme, host string, port int, database, username, password string, params map[string]string) string {
+	return buildDSNWithAuthority(scheme, fmt.Sprintf("%s:%d", host, port), database, username, password, params)
+}
+
+// buildDSNWithAuthority constructs a connection URL from a pre-formatted
+// host[:port] authority, which may be a comma-separated multi-host list.
+func buildDSNWithAuthority(scheme, authority, database, username, password string, params map[string]string) string {
 	var userInfo string
 	if username != "" {
 		if password != "" {
@@ -116,7 +122,7 @@ func BuildDSN(scheme, host string, port int, database, username, password string
 		}
 	}
 
-	base := fmt.Sprintf("%s://%s%s:%d/%s", scheme, userInfo, host, port, database)
+	base := fmt.Sprintf("%s://%s%s/%s", scheme, userInfo, authority, database)
 	if len(params) == 0 {
 		return base
 	}
@@ -126,6 +132,30 @@ func BuildDSN(scheme, host string, port int, database, username, password string
 		q.Set(k, v)
 	}
 	return base + "?" + q.Encode()
+}
+
+// FormatHostPort builds the host[:port] authority for a DSN. When host is a
+// comma-separated multi-host list (e.g. GaussDB HA), :port is appended to
+// every entry so the result reads "host1:port,host2:port"; entries that
+// already carry a port (or are IPv6 literals) are kept as-is. Empty entries
+// are dropped.
+func FormatHostPort(host string, port int) string {
+	if !strings.Contains(host, ",") {
+		return fmt.Sprintf("%s:%d", host, port)
+	}
+	parts := strings.Split(host, ",")
+	formatted := make([]string, 0, len(parts))
+	for _, h := range parts {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		if !strings.Contains(h, ":") {
+			h = fmt.Sprintf("%s:%d", h, port)
+		}
+		formatted = append(formatted, h)
+	}
+	return strings.Join(formatted, ",")
 }
 
 // DatabaseNameFromDSN extracts a human-friendly default connection name from a
@@ -199,6 +229,8 @@ func BuildPostgresDSN(host string, port int, database, username, password, sslMo
 }
 
 // BuildGaussDBDSN constructs a GaussDB connection URL from individual components.
+// host may be a comma-separated multi-host list ("host1,host2"); every entry
+// gets :port appended so the DSN reads "host1:port,host2:port".
 // targetSessionAttrs (primary/standby/any) selects which cluster role to
 // connect to; it defaults to primary when empty.
 func BuildGaussDBDSN(host string, port int, database, username, password, sslMode, targetSessionAttrs string) string {
@@ -208,7 +240,7 @@ func BuildGaussDBDSN(host string, port int, database, username, password, sslMod
 	if targetSessionAttrs == "" {
 		targetSessionAttrs = "primary"
 	}
-	return BuildDSN("gaussdb", host, port, database, username, password, map[string]string{
+	return buildDSNWithAuthority("gaussdb", FormatHostPort(host, port), database, username, password, map[string]string{
 		"sslmode":              sslMode,
 		"target_session_attrs": targetSessionAttrs,
 	})

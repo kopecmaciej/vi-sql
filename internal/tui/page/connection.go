@@ -283,7 +283,7 @@ func (c *Connection) computeContentWidth() int {
 	for i, conn := range conns {
 		hostPort := "—"
 		if conn.Host != "" {
-			hostPort = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
+			hostPort = util.FormatHostPort(conn.Host, conn.Port)
 		}
 		if w := runes(hostPort); w > hostPortCap {
 			hostPort = hostPort[:hostPortCap]
@@ -360,7 +360,7 @@ func (c *Connection) renderTable() {
 	for i, conn := range sortedConnections(c.App.GetConfig().Connections) {
 		hostPort := "—"
 		if conn.Host != "" {
-			hostPort = fmt.Sprintf("%s:%d", conn.Host, conn.Port)
+			hostPort = util.FormatHostPort(conn.Host, conn.Port)
 		}
 		database := conn.Database
 		if database == "" {
