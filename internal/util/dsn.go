@@ -137,10 +137,9 @@ func buildDSNWithAuthority(scheme, authority, database, username, password strin
 }
 
 // FormatHostPort builds the host[:port] authority for a DSN. When host is a
-// comma-separated multi-host list (e.g. GaussDB HA), :port is appended to
-// every entry so the result reads "host1:port,host2:port". IPv6 literals are
-// bracketed so the authority stays parseable ("[2001:db8::1]:5432"); entries
-// that already carry a port are kept as-is. Empty entries are dropped.
+// comma-separated multi-host list, :port is appended to every entry; IPv6
+// literals are bracketed and entries that already carry a port are kept
+// as-is. Empty entries are dropped.
 func FormatHostPort(host string, port int) string {
 	if !strings.Contains(host, ",") {
 		return formatHostEntry(strings.TrimSpace(host), port)
@@ -157,10 +156,8 @@ func FormatHostPort(host string, port int) string {
 	return strings.Join(formatted, ",")
 }
 
-// formatHostEntry appends :port to a single authority entry. Bare IPv6
-// literals (more than one colon) are bracketed via net.JoinHostPort;
-// bracketed entries without a port get one appended; anything else that
-// already contains a colon is assumed to carry a port and passes through.
+// formatHostEntry appends :port to a single authority entry, bracketing
+// bare IPv6 literals and leaving entries that already carry a port as-is.
 func formatHostEntry(h string, port int) string {
 	if h == "" {
 		return ""
@@ -251,12 +248,9 @@ func BuildPostgresDSN(host string, port int, database, username, password, sslMo
 }
 
 // BuildGaussDBDSN constructs a GaussDB connection URL from individual components.
-// host may be a comma-separated multi-host list ("host1,host2"); every entry
-// gets :port appended so the DSN reads "host1:port,host2:port".
-// driverOptions carries extra connection parameters keyed by their DSN names:
-// "sslmode" defaults to disable and "target_session_attrs"
-// (primary/standby/any) selects which cluster role to connect to, defaulting
-// to primary when unset.
+// host may be a comma-separated multi-host list; driverOptions carries extra
+// parameters keyed by their DSN names ("sslmode", "target_session_attrs"),
+// with sensible defaults applied when unset.
 func BuildGaussDBDSN(host string, port int, database, username, password string, driverOptions map[string]string) string {
 	sslMode := driverOptions["sslmode"]
 	if sslMode == "" {

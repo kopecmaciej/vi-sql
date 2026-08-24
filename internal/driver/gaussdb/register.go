@@ -155,10 +155,8 @@ func buildGaussDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 	return cfg, nil
 }
 
-// applyGaussDBFormOptions packs the form's driver-specific settings into
-// DriverOptions, keyed by their DSN parameter names. SSLMode stays on the
-// shared field as well so generic UI (connection list, edit prefill) keeps
-// working.
+// applyGaussDBFormOptions packs form settings into DriverOptions keyed by
+// their DSN parameter names.
 func applyGaussDBFormOptions(cfg *config.SQLConfig, fields map[string]string) {
 	if v := fields["SSL Mode"]; v != "" {
 		cfg.SetDriverOption("sslmode", v)

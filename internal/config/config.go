@@ -40,9 +40,7 @@ type SQLConfig struct {
 	Name     string `yaml:"name"`
 	Timeout  int    `yaml:"timeout"`
 
-	// DriverOptions holds driver-specific settings as key/value pairs so
-	// single-driver knobs don't leak into shared fields. Keys use the
-	// driver's DSN parameter names, e.g. "target_session_attrs" for GaussDB.
+	// DriverOptions holds per-driver extras keyed by DSN parameter names.
 	DriverOptions map[string]string `yaml:"driverOptions,omitempty"`
 	Options       SQLOptions        `yaml:"options"`
 	LastUsed      time.Time         `yaml:"lastUsed,omitempty"`
@@ -450,12 +448,10 @@ func (m *SQLConfig) GetDriver() string {
 	return m.Driver
 }
 
-// GetDriverOption returns a driver-specific option value, "" when unset.
 func (m *SQLConfig) GetDriverOption(key string) string {
 	return m.DriverOptions[key]
 }
 
-// SetDriverOption stores a driver-specific option value.
 func (m *SQLConfig) SetDriverOption(key, value string) {
 	if m.DriverOptions == nil {
 		m.DriverOptions = make(map[string]string)
