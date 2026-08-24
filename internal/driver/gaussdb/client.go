@@ -17,7 +17,7 @@ type CompatMode string
 
 const (
 	CompatOracle CompatMode = "A" // Oracle-compatible (A-Compatibility)
-	CompatMySQL CompatMode = "M" // MySQL-compatible (M-Compatibility)
+	CompatMySQL  CompatMode = "M" // MySQL-compatible (M-Compatibility)
 )
 
 // ServerCapabilities describes what the connected GaussDB instance supports.
@@ -63,11 +63,7 @@ func (c *Client) Connect() error {
 			}
 			password = decrypted
 		}
-		sslMode := c.Config.SSLMode
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		dsn = util.BuildGaussDBDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode, c.Config.TargetSessionAttrs)
+		dsn = util.BuildGaussDBDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, c.Config.DriverOptions)
 	}
 
 	log.Info().Str("host", c.Config.Host).Int("port", c.Config.Port).Str("database", c.Config.Database).Msg("Connecting to GaussDB")

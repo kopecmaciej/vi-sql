@@ -29,9 +29,6 @@ func BuildInsertSQL(schema, table string, columns []database.ColumnInfo, quote u
 		case col.IsNullable:
 			valuePlaceholders = append(valuePlaceholders, "    NULL")
 		default:
-			// A bare "-- REQUIRED:" comment as the only line inside VALUES is a
-			// syntax error (unterminated paren at the end of input), so the
-			// placeholder is a literal the user edits, with the hint as a comment.
 			valuePlaceholders = append(valuePlaceholders, fmt.Sprintf("    '' -- REQUIRED: %s (%s)", col.Name, col.DataType))
 		}
 	}

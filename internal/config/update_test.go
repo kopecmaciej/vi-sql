@@ -17,15 +17,15 @@ func TestUpdateConnectionPreservesIDAndLastUsed(t *testing.T) {
 	cfg.Connections[0].LastUsed = time.Date(2026, 8, 18, 14, 50, 0, 0, time.UTC)
 
 	updated := &SQLConfig{
-		Driver:             "gaussdb",
-		Name:               "gaussdb",
-		Host:               "new-host",
-		Port:               8000,
-		Username:           "u",
-		Password:           "secret",
-		Database:           "d",
-		SSLMode:            "disable",
-		TargetSessionAttrs: "primary",
+		Driver:        "gaussdb",
+		Name:          "gaussdb",
+		Host:          "new-host",
+		Port:          8000,
+		Username:      "u",
+		Password:      "secret",
+		Database:      "d",
+		SSLMode:       "disable",
+		DriverOptions: map[string]string{"target_session_attrs": "primary"},
 	}
 
 	if err := cfg.UpdateConnection("gaussdb", updated); err != nil {

@@ -2,18 +2,20 @@ package util
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
 // ParsedDSN holds the components of a database connection URL.
 type ParsedDSN struct {
-	Host              string
-	Port              string
-	Database          string
-	Username          string
-	Password          string
-	SSLMode           string
+	Host               string
+	Port               string
+	Database           string
+	Username           string
+	Password           string
+	SSLMode            string
 	TargetSessionAttrs string
 }
 
@@ -136,12 +138,12 @@ func buildDSNWithAuthority(scheme, authority, database, username, password strin
 
 // FormatHostPort builds the host[:port] authority for a DSN. When host is a
 // comma-separated multi-host list (e.g. GaussDB HA), :port is appended to
-// every entry so the result reads "host1:port,host2:port"; entries that
-// already carry a port (or are IPv6 literals) are kept as-is. Empty entries
-// are dropped.
+// every entry so the result reads "host1:port,host2:port". IPv6 literals are
+// bracketed so the authority stays parseable ("[2001:db8::1]:5432"); entries
+// that already carry a port are kept as-is. Empty entries are dropped.
 func FormatHostPort(host string, port int) string {
 	if !strings.Contains(host, ",") {
-		return fmt.Sprintf("%s:%d", host, port)
+		return formatHostEntry(strings.TrimSpace(host), port)
 	}
 	parts := strings.Split(host, ",")
 	formatted := make([]string, 0, len(parts))
@@ -150,12 +152,32 @@ func FormatHostPort(host string, port int) string {
 		if h == "" {
 			continue
 		}
-		if !strings.Contains(h, ":") {
-			h = fmt.Sprintf("%s:%d", h, port)
-		}
-		formatted = append(formatted, h)
+		formatted = append(formatted, formatHostEntry(h, port))
 	}
 	return strings.Join(formatted, ",")
+}
+
+// formatHostEntry appends :port to a single authority entry. Bare IPv6
+// literals (more than one colon) are bracketed via net.JoinHostPort;
+// bracketed entries without a port get one appended; anything else that
+// already contains a colon is assumed to carry a port and passes through.
+func formatHostEntry(h string, port int) string {
+	if h == "" {
+		return ""
+	}
+	if !strings.Contains(h, ":") {
+		return fmt.Sprintf("%s:%d", h, port)
+	}
+	if strings.HasPrefix(h, "[") {
+		if strings.HasSuffix(h, "]") {
+			return fmt.Sprintf("%s:%d", h, port)
+		}
+		return h
+	}
+	if strings.Count(h, ":") > 1 {
+		return net.JoinHostPort(h, strconv.Itoa(port))
+	}
+	return h
 }
 
 // DatabaseNameFromDSN extracts a human-friendly default connection name from a
@@ -231,12 +253,16 @@ func BuildPostgresDSN(host string, port int, database, username, password, sslMo
 // BuildGaussDBDSN constructs a GaussDB connection URL from individual components.
 // host may be a comma-separated multi-host list ("host1,host2"); every entry
 // gets :port appended so the DSN reads "host1:port,host2:port".
-// targetSessionAttrs (primary/standby/any) selects which cluster role to
-// connect to; it defaults to primary when empty.
-func BuildGaussDBDSN(host string, port int, database, username, password, sslMode, targetSessionAttrs string) string {
+// driverOptions carries extra connection parameters keyed by their DSN names:
+// "sslmode" defaults to disable and "target_session_attrs"
+// (primary/standby/any) selects which cluster role to connect to, defaulting
+// to primary when unset.
+func BuildGaussDBDSN(host string, port int, database, username, password string, driverOptions map[string]string) string {
+	sslMode := driverOptions["sslmode"]
 	if sslMode == "" {
 		sslMode = "disable"
 	}
+	targetSessionAttrs := driverOptions["target_session_attrs"]
 	if targetSessionAttrs == "" {
 		targetSessionAttrs = "primary"
 	}

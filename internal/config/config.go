@@ -28,23 +28,24 @@ type SQLOptions struct {
 }
 
 type SQLConfig struct {
-	ID       string     `yaml:"id"`
-	Driver   string     `yaml:"driver"`
-	DSN      string     `yaml:"dsn"`
-	Host     string     `yaml:"host"`
-	Port     int        `yaml:"port"`
-	Database string     `yaml:"database"`
-	Username string     `yaml:"username"`
-	Password string     `yaml:"password"`
-	SSLMode  string     `yaml:"sslMode"`
-	Name     string     `yaml:"name"`
-	Timeout  int        `yaml:"timeout"`
+	ID       string `yaml:"id"`
+	Driver   string `yaml:"driver"`
+	DSN      string `yaml:"dsn"`
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Database string `yaml:"database"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	SSLMode  string `yaml:"sslMode"`
+	Name     string `yaml:"name"`
+	Timeout  int    `yaml:"timeout"`
 
-	// TargetSessionAttrs is GaussDB-only: which cluster role to connect to
-	// (primary/standby/any). Empty means the default (primary).
-	TargetSessionAttrs string `yaml:"targetSessionAttrs,omitempty"`
-	Options            SQLOptions `yaml:"options"`
-	LastUsed time.Time  `yaml:"lastUsed,omitempty"`
+	// DriverOptions holds driver-specific settings as key/value pairs so
+	// single-driver knobs don't leak into shared fields. Keys use the
+	// driver's DSN parameter names, e.g. "target_session_attrs" for GaussDB.
+	DriverOptions map[string]string `yaml:"driverOptions,omitempty"`
+	Options       SQLOptions        `yaml:"options"`
+	LastUsed      time.Time         `yaml:"lastUsed,omitempty"`
 }
 
 type LogConfig struct {
@@ -449,6 +450,19 @@ func (m *SQLConfig) GetDriver() string {
 	return m.Driver
 }
 
+// GetDriverOption returns a driver-specific option value, "" when unset.
+func (m *SQLConfig) GetDriverOption(key string) string {
+	return m.DriverOptions[key]
+}
+
+// SetDriverOption stores a driver-specific option value.
+func (m *SQLConfig) SetDriverOption(key, value string) {
+	if m.DriverOptions == nil {
+		m.DriverOptions = make(map[string]string)
+	}
+	m.DriverOptions[key] = value
+}
+
 func (m *SQLConfig) IsPasswordReadable() bool {
 	if !util.IsEncrypted(m.Password) {
 		return true
@@ -477,11 +491,7 @@ func (m *SQLConfig) buildDSNFromFields(password string) string {
 	case "oracle":
 		return util.BuildOracleDSN(m.Host, m.Port, m.Database, m.Username, password)
 	case "gaussdb":
-		sslMode := m.SSLMode
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		return util.BuildGaussDBDSN(m.Host, m.Port, m.Database, m.Username, password, sslMode, m.TargetSessionAttrs)
+		return util.BuildGaussDBDSN(m.Host, m.Port, m.Database, m.Username, password, m.DriverOptions)
 	default: // postgres
 		sslMode := m.SSLMode
 		if sslMode == "" {
