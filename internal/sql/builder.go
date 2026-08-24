@@ -14,7 +14,8 @@ import (
 // get a comment placeholder. quote controls identifier quoting for the target dialect.
 func BuildInsertSQL(schema, table string, columns []database.ColumnInfo, quote util.Quoter) string {
 	var colNames []string
-	var valuePlaceholders []string
+	var values []string
+	var comments []string
 	var skipped []string
 
 	for _, col := range columns {
@@ -25,11 +26,14 @@ func BuildInsertSQL(schema, table string, columns []database.ColumnInfo, quote u
 		colNames = append(colNames, "    "+quote.Ident(col.Name))
 		switch {
 		case col.Default != nil:
-			valuePlaceholders = append(valuePlaceholders, fmt.Sprintf("    %s", *col.Default))
+			values = append(values, *col.Default)
+			comments = append(comments, "")
 		case col.IsNullable:
-			valuePlaceholders = append(valuePlaceholders, "    NULL")
+			values = append(values, "NULL")
+			comments = append(comments, "")
 		default:
-			valuePlaceholders = append(valuePlaceholders, fmt.Sprintf("    '' -- REQUIRED: %s (%s)", col.Name, col.DataType))
+			values = append(values, "''")
+			comments = append(comments, fmt.Sprintf(" -- REQUIRED: %s (%s)", col.Name, col.DataType))
 		}
 	}
 
@@ -38,10 +42,20 @@ func BuildInsertSQL(schema, table string, columns []database.ColumnInfo, quote u
 		header = fmt.Sprintf("-- Auto-filled (omitted): %s\n", strings.Join(skipped, ", "))
 	}
 
+	var valueLines []string
+	for i, v := range values {
+		line := "    " + v
+		if i < len(values)-1 {
+			line += ","
+		}
+		line += comments[i]
+		valueLines = append(valueLines, line)
+	}
+
 	return fmt.Sprintf("%sINSERT INTO %s (\n%s\n) VALUES (\n%s\n);",
 		header, quote.Table(schema, table),
 		strings.Join(colNames, ",\n"),
-		strings.Join(valuePlaceholders, ",\n"))
+		strings.Join(valueLines, "\n"))
 }
 
 // BuildDuplicateInsertSQL generates an INSERT statement pre-filled with all
