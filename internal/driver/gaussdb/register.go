@@ -37,20 +37,14 @@ func init() {
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
 		},
 		PreFill: func(conn *config.SQLConfig) map[string]string {
-			// Both form dropdowns persist as DriverOptions keyed by their DSN
-			// parameter names — that map is what DSN rebuilding consumes, so
-			// read them back from there. sslmode falls back to the legacy
-			// struct field for configs saved before DriverOptions existed.
-			ssl := conn.GetDriverOption("sslmode")
-			if ssl == "" {
-				ssl = conn.SSLMode
-			}
 			m := map[string]string{
 				"DSN":            conn.DSN,
 				"Host":           conn.Host,
 				"Username":       conn.Username,
 				"Database":       conn.Database,
-				"SSL Mode":       ssl,
+				// Both dropdowns persist as DriverOptions keyed by their DSN
+				// parameter names — the same map DSN rebuilding consumes.
+				"SSL Mode":       conn.GetDriverOption("sslmode"),
 				"Target Session": conn.GetDriverOption("target_session_attrs"),
 			}
 			// A stored multi-host DSN round-trips through the individual
