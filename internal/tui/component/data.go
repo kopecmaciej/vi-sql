@@ -195,7 +195,7 @@ func (c *Data) init() error {
 		}
 		// For statements, show a confirm modal first; if shown the modal's
 		// OnConfirm calls runner.Execute itself so we return early here.
-		if !isSelectQuery(sql) && !isExplainQuery(sql) {
+		if !isSelectQuery(sql) && !isExplainQuery(sql) && !sqlpkg.IsResultCommand(sql) {
 			if c.confirmIfDestructive(sql, func() {
 				c.runner.Execute(sql, 0, c.statementCallbacks(sql))
 			}) {

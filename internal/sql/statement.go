@@ -75,6 +75,15 @@ func IsExplainQuery(sql string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(sql)), "EXPLAIN")
 }
 
+// IsResultCommand reports whether sql is a SHOW/DESC-style command that
+// returns a result set directly. Such commands cannot be wrapped into a
+// paginated subquery (SELECT * FROM (cmd) t), so they must run unwrapped.
+func IsResultCommand(sql string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(sql))
+	return strings.HasPrefix(upper, "SHOW") ||
+		strings.HasPrefix(upper, "DESC") // covers DESC and DESCRIBE
+}
+
 // IsReturningDML checks for INSERT/UPDATE/DELETE with a RETURNING clause.
 func IsReturningDML(sql string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(sql))

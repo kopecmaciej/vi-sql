@@ -84,7 +84,13 @@ func (s *scrollFetcher) fetchNext(onAppend func()) bool {
 			}
 			onAppend()
 		},
-		OnError:  func(_ error) { s.pending = false },
+		OnError: func(_ error) {
+			// Stop retrying until the next fresh fetch: a failing prefetch
+			// would otherwise re-run on every cursor move (e.g. raw SQL that
+			// cannot be wrapped for pagination, like SHOW/DESC commands).
+			s.pending = false
+			s.noMore = true
+		},
 		OnCancel: func() { s.pending = false },
 	})
 	return true

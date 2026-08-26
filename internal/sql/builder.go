@@ -24,7 +24,7 @@ func BuildInsertSQL(schema, table string, columns []database.ColumnInfo, quote u
 		}
 		colNames = append(colNames, "    "+quote.Ident(col.Name))
 		switch {
-		case col.Default != nil:
+		case col.Default != nil && isEmittableDefault(*col.Default):
 			valuePlaceholders = append(valuePlaceholders, fmt.Sprintf("    %s", *col.Default))
 		case col.IsNullable:
 			valuePlaceholders = append(valuePlaceholders, "    NULL")
@@ -116,4 +116,49 @@ func BuildUpdateSQL(
 		quote.Table(schema, table),
 		strings.Join(setClauses, ",\n"),
 		strings.Join(whereParts, " AND "))
+}
+
+// isEmittableDefault reports whether a column_default value can be emitted
+// verbatim into an INSERT template. Empty values, unterminated quotes,
+// unbalanced parentheses, statement separators and comment markers would
+// produce broken SQL, so those fall back to the NULL / required placeholders
+// instead. The pseudo-default "AUTO_INCREMENT" reported by MySQL-compatible
+// catalogs for identity columns is rejected as well.
+func isEmittableDefault(def string) bool {
+	s := strings.TrimSpace(def)
+	if s == "" || strings.EqualFold(s, "auto_increment") {
+		return false
+	}
+	depth := 0
+	inSingle, inDouble := false, false
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			}
+		case inDouble:
+			if c == '"' {
+				inDouble = false
+			}
+		case c == '\'':
+			inSingle = true
+		case c == '"':
+			inDouble = true
+		case c == '(':
+			depth++
+		case c == ')':
+			depth--
+			if depth < 0 {
+				return false
+			}
+		case c == ';':
+			return false
+		case c == '-' && i+1 < len(s) && s[i+1] == '-':
+			return false
+		case c == '/' && i+1 < len(s) && s[i+1] == '*':
+			return false
+		}
+	}
+	return !inSingle && !inDouble && depth == 0
 }

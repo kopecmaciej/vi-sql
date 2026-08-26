@@ -81,6 +81,8 @@ func (r *QueryRunner) Execute(sql string, batchSize int64, cbs RunCallbacks) {
 		switch {
 		case isExplainQuery(sql):
 			r.runExplain(ctx, sql, cbs)
+		case sqlpkg.IsResultCommand(sql):
+			r.runResultCommand(ctx, sql, cbs)
 		case isSelectQuery(sql):
 			r.runSelect(ctx, sql, batchSize, 0, cbs)
 		default:
@@ -159,7 +161,25 @@ func (r *QueryRunner) runSelect(ctx context.Context, sql string, batchSize, offs
 		r.dispatchError(ctx, err, cbs)
 		return
 	}
-	execTime := time.Since(start)
+	r.finishRows(sql, query, rows, cols, time.Since(start), cbs)
+}
+
+// runResultCommand executes SHOW/DESC-style commands that return a result set
+// but cannot be wrapped in a paginated subquery; rows are fetched unwrapped
+// via ExecuteQuery.
+func (r *QueryRunner) runResultCommand(ctx context.Context, sql string, cbs RunCallbacks) {
+	start := time.Now()
+	rows, cols, err := r.driver.ExecuteQuery(ctx, sql)
+	if err != nil {
+		r.dispatchError(ctx, err, cbs)
+		return
+	}
+	r.finishRows(sql, sql, rows, cols, time.Since(start), cbs)
+}
+
+// finishRows broadcasts and dispatches a fetched result set shared by the
+// paginated select path and the unwrapped result-command path.
+func (r *QueryRunner) finishRows(sql, query string, rows []database.Row, cols []database.ColumnInfo, execTime time.Duration, cbs RunCallbacks) {
 	r.onHistory(sql, execTime)
 
 	colNames := make([]string, len(cols))

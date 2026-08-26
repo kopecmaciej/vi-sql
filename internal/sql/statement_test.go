@@ -75,3 +75,26 @@ func TestDestructiveStatement(t *testing.T) {
 		})
 	}
 }
+
+func TestIsResultCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		sql  string
+		want bool
+	}{
+		{"show tables", "SHOW TABLES", true},
+		{"show variables like", "show variables like '%'", true},
+		{"leading whitespace", "  SHOW max_connections", true},
+		{"desc table", "DESC users", true},
+		{"describe table", "DESCRIBE users", true},
+		{"select is not a result command", "SELECT 1", false},
+		{"delete is not a result command", "DELETE FROM users", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsResultCommand(tt.sql); got != tt.want {
+				t.Errorf("IsResultCommand(%q) = %v, want %v", tt.sql, got, tt.want)
+			}
+		})
+	}
+}

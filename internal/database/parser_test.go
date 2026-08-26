@@ -85,3 +85,25 @@ func TestRebuildSelectSQL(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractLimitValue_MySQLCommaForm(t *testing.T) {
+	limit, ok := ExtractLimitValue("SELECT * FROM t LIMIT 20, 10")
+	assert.True(t, ok)
+	assert.Equal(t, int64(10), limit, "second number is the count, not the offset")
+}
+
+func TestExtractLimitValue_SimpleForm(t *testing.T) {
+	limit, ok := ExtractLimitValue("select * from t limit 5 offset 3")
+	assert.True(t, ok)
+	assert.Equal(t, int64(5), limit)
+}
+
+func TestExtractLimitValue_Absent(t *testing.T) {
+	_, ok := ExtractLimitValue("SELECT * FROM t")
+	assert.False(t, ok)
+}
+
+func TestRebuildSelectSQL_NormalizesMySQLLimitForm(t *testing.T) {
+	got := RebuildSelectSQL("SELECT * FROM users LIMIT 20, 10", "id > 1", "")
+	assert.Equal(t, "SELECT * FROM users WHERE id > 1 LIMIT 10 OFFSET 20", got)
+}

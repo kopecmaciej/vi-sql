@@ -6,33 +6,67 @@ import (
 	"strings"
 )
 
-// extractClauseInt finds " KEYWORD N" in sql (case-insensitive) and returns N.
-// N must be > 0 to be considered present.
-func extractClauseInt(sql, keyword string) (int64, bool) {
+// ExtractLimitValue returns the row-count integer of the LIMIT clause. Both
+// dialect forms are handled: "LIMIT n" and MySQL-style "LIMIT offset, n" —
+// in the comma form the second number is the count, not the first.
+func ExtractLimitValue(sql string) (int64, bool) {
+	limit, _, ok := extractLimitClause(sql)
+	return limit, ok
+}
+
+// extractLimitClause parses a LIMIT clause into (count, offset). It supports
+// "LIMIT n [OFFSET m]" as well as "LIMIT m, n". ok is false when no valid
+// clause is present.
+func extractLimitClause(sql string) (count, offset int64, ok bool) {
 	upper := strings.ToUpper(sql)
-	marker := " " + strings.ToUpper(keyword) + " "
-	idx := strings.Index(upper, marker)
+	idx := strings.Index(upper, " LIMIT ")
 	if idx < 0 {
-		return 0, false
+		return 0, 0, false
 	}
-	rest := strings.TrimSpace(sql[idx+len(marker):])
+	rest := strings.TrimSpace(sql[idx+len(" LIMIT "):])
+	// The clause ends at a statement terminator.
+	if end := strings.IndexAny(rest, ";)"); end >= 0 {
+		rest = strings.TrimSpace(rest[:end])
+	}
+	first, restAfterFirst := splitLeadingInt(rest)
+	if !first.ok {
+		return 0, 0, false
+	}
+	restAfterFirst = strings.TrimSpace(restAfterFirst)
+	if strings.HasPrefix(restAfterFirst, ",") {
+		// MySQL form: LIMIT offset, count
+		second, _ := splitLeadingInt(strings.TrimSpace(restAfterFirst[1:]))
+		return second.n, first.n, second.ok
+	}
+	if len(restAfterFirst) >= 7 && strings.EqualFold(restAfterFirst[:7], "OFFSET ") {
+		off, _ := splitLeadingInt(strings.TrimSpace(restAfterFirst[7:]))
+		if off.ok {
+			return first.n, off.n, true
+		}
+	}
+	return first.n, 0, true
+}
+
+// splitLeadingInt reads an optional sign-free integer at the start of s.
+type intPart struct {
+	n  int64
+	ok bool
+}
+
+func splitLeadingInt(s string) (intPart, string) {
+	s = strings.TrimSpace(s)
 	end := 0
-	for end < len(rest) && rest[end] >= '0' && rest[end] <= '9' {
+	for end < len(s) && s[end] >= '0' && s[end] <= '9' {
 		end++
 	}
 	if end == 0 {
-		return 0, false
+		return intPart{}, s
 	}
-	n, err := strconv.ParseInt(rest[:end], 10, 64)
+	n, err := strconv.ParseInt(s[:end], 10, 64)
 	if err != nil || n <= 0 {
-		return 0, false
+		return intPart{}, s[end:]
 	}
-	return n, true
-}
-
-// ExtractLimitValue returns the LIMIT N integer from a SQL string, if present.
-func ExtractLimitValue(sql string) (int64, bool) {
-	return extractClauseInt(sql, "LIMIT")
+	return intPart{n: n, ok: true}, s[end:]
 }
 
 // RebuildSelectSQL replaces the WHERE and ORDER BY clauses in a SELECT,
@@ -55,9 +89,9 @@ func RebuildSelectSQL(sql, newWhere, newOrderBy string) string {
 	if newOrderBy != "" {
 		result += " ORDER BY " + newOrderBy
 	}
-	if limit, ok := extractClauseInt(sql, "LIMIT"); ok {
+	if limit, offset, ok := extractLimitClause(sql); ok {
 		result += fmt.Sprintf(" LIMIT %d", limit)
-		if offset, ok := extractClauseInt(sql, "OFFSET"); ok {
+		if offset > 0 {
 			result += fmt.Sprintf(" OFFSET %d", offset)
 		}
 	}
