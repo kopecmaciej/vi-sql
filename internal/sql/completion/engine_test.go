@@ -7,6 +7,7 @@ import (
 
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	isql "github.com/kopecmaciej/vi-sql/internal/sql"
+	"github.com/stretchr/testify/assert"
 )
 
 var testSchemas = []database.Schema{
@@ -867,5 +868,40 @@ func TestBuildScope(t *testing.T) {
 				t.Errorf("CTENames = %v, want %v", scope.CTENames, tc.wantCTEs)
 			}
 		})
+	}
+}
+
+func TestSchemaIndex_IndexesViews(t *testing.T) {
+	schemas := []database.Schema{
+		{Schema: "public", Tables: []string{"users"}, Views: []string{"active_users"}},
+		{Schema: "information_schema", Views: []string{"tables", "columns"}},
+		{Schema: "m_schema", Views: []string{"gs_tables"}},
+	}
+
+	idx := BuildSchemaIndex(schemas)
+
+	var names []string
+	for _, it := range idx.all {
+		names = append(names, it.qualified)
+	}
+	assertContains := func(want string) {
+		t.Helper()
+		if !slices.Contains(names, want) {
+			t.Errorf("index missing %q; got %v", want, names)
+		}
+	}
+	assertContains("public.users")
+	assertContains("public.active_users")
+	assertContains("information_schema.tables")
+	assert.Contains(t, idx.bySchema, "information_schema")
+	assert.Contains(t, idx.bySchema, "m_schema")
+
+	// Tables take precedence over same-named views for bare-name resolution.
+	idx2 := BuildSchemaIndex([]database.Schema{
+		{Schema: "a", Tables: []string{"t"}},
+		{Schema: "b", Views: []string{"t"}},
+	})
+	if got := idx2.tableToSchema["t"]; got != "a" {
+		t.Errorf("tableToSchema[t] = %q, want %q", got, "a")
 	}
 }

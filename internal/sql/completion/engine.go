@@ -39,20 +39,32 @@ func BuildSchemaIndex(schemas []database.Schema) *SchemaIndex {
 		bySchema:      make(map[string][]indexedTable, len(schemas)),
 		tableToSchema: make(map[string]string),
 	}
+	// Views are indexed alongside tables: system schemas (pg_catalog,
+	// information_schema, ...) consist almost entirely of views, and
+	// referencing a view in SQL deserves the same completions as a table.
+	add := func(schema string, name string) {
+		lowerSchema := strings.ToLower(schema)
+		lowerT := strings.ToLower(name)
+		it := indexedTable{
+			schema:         schema,
+			table:          name,
+			qualified:      schema + "." + name,
+			lowerQualified: lowerSchema + "." + lowerT,
+			lowerTable:     lowerT,
+		}
+		idx.all = append(idx.all, it)
+		idx.bySchema[lowerSchema] = append(idx.bySchema[lowerSchema], it)
+		if _, exists := idx.tableToSchema[lowerT]; !exists {
+			// Tables win over same-named views for bare-name resolution.
+			idx.tableToSchema[lowerT] = schema
+		}
+	}
 	for _, s := range schemas {
-		lowerSchema := strings.ToLower(s.Schema)
 		for _, t := range s.Tables {
-			lowerT := strings.ToLower(t)
-			it := indexedTable{
-				schema:         s.Schema,
-				table:          t,
-				qualified:      s.Schema + "." + t,
-				lowerQualified: lowerSchema + "." + lowerT,
-				lowerTable:     lowerT,
-			}
-			idx.all = append(idx.all, it)
-			idx.bySchema[lowerSchema] = append(idx.bySchema[lowerSchema], it)
-			idx.tableToSchema[lowerT] = s.Schema
+			add(s.Schema, t)
+		}
+		for _, v := range s.Views {
+			add(s.Schema, v)
 		}
 	}
 	return idx
