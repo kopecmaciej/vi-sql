@@ -63,12 +63,17 @@ func (q Quoter) WhereEqMSSql(cols map[string]any, startIdx int) (parts []string,
 
 // WhereEqIndexed builds `<col> = $N` clauses for each entry in cols,
 // returning the clauses alongside matching args. Use for drivers with
-// 1-based indexed placeholders (Postgres).
+// 1-based indexed placeholders (Postgres). NULL values emit `IS NULL`
+// instead — `= NULL` never matches.
 func (q Quoter) WhereEqIndexed(cols map[string]any) ([]string, []any) {
 	parts := make([]string, 0, len(cols))
 	args := make([]any, 0, len(cols))
 	i := 1
 	for col, val := range cols {
+		if val == nil {
+			parts = append(parts, fmt.Sprintf("%s IS NULL", q.Ident(col)))
+			continue
+		}
 		parts = append(parts, fmt.Sprintf("%s = $%d", q.Ident(col), i))
 		args = append(args, val)
 		i++

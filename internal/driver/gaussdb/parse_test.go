@@ -104,3 +104,24 @@ func TestParseIndexColumns(t *testing.T) {
 		})
 	}
 }
+
+func TestOnUpdateClause(t *testing.T) {
+	tests := []struct {
+		name  string
+		extra string
+		want  string
+	}{
+		{"plain auto_increment only", "auto_increment", ""},
+		{"on update present", "on update CURRENT_TIMESTAMP", "on update CURRENT_TIMESTAMP"},
+		{"default + on update", "DEFAULT_GENERATED on update current_timestamp()", "on update current_timestamp()"},
+		{"bare marker without expression", "on update", ""},
+		{"generated column", "VIRTUAL GENERATED", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := onUpdateClause(tt.extra); got != tt.want {
+				t.Errorf("onUpdateClause(%q) = %q, want %q", tt.extra, got, tt.want)
+			}
+		})
+	}
+}

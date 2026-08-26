@@ -37,13 +37,45 @@ func init() {
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
 		},
 		PreFill: func(conn *config.SQLConfig) map[string]string {
+			// Both form dropdowns persist as DriverOptions keyed by their DSN
+			// parameter names — that map is what DSN rebuilding consumes, so
+			// read them back from there. sslmode falls back to the legacy
+			// struct field for configs saved before DriverOptions existed.
+			ssl := conn.GetDriverOption("sslmode")
+			if ssl == "" {
+				ssl = conn.SSLMode
+			}
 			m := map[string]string{
 				"DSN":            conn.DSN,
 				"Host":           conn.Host,
 				"Username":       conn.Username,
 				"Database":       conn.Database,
-				"SSL Mode":       conn.SSLMode,
+				"SSL Mode":       ssl,
 				"Target Session": conn.GetDriverOption("target_session_attrs"),
+			}
+			// A stored multi-host DSN round-trips through the individual
+			// fields instead: the DSN box is cleared so saving takes the
+			// field-based path and regenerates an equivalent DSN. Only done
+			// for a uniform port — differing per-host ports cannot be
+			// represented by the Host/Port pair and stay DSN-only.
+			if util.IsMultiHostDSN(conn.DSN) {
+				if parsed, err := util.ParseGaussDBDSN(conn.DSN); err == nil && parsed.Port != "" {
+					m["DSN"] = ""
+					m["Host"] = parsed.Host
+					if p, err := strconv.Atoi(parsed.Port); err == nil && p > 0 {
+						m["Port"] = parsed.Port
+					} else {
+						delete(m, "Port")
+					}
+					m["Username"] = parsed.Username
+					m["Database"] = parsed.Database
+					if parsed.SSLMode != "" {
+						m["SSL Mode"] = parsed.SSLMode
+					}
+					if parsed.TargetSessionAttrs != "" {
+						m["Target Session"] = parsed.TargetSessionAttrs
+					}
+				}
 			}
 			if conn.Port > 0 {
 				m["Port"] = fmt.Sprintf("%d", conn.Port)

@@ -304,3 +304,29 @@ func TestSplitDSNPasswordMasking(t *testing.T) {
 		})
 	}
 }
+
+func TestParseGaussDBDSN_MultiHost(t *testing.T) {
+	parsed, err := ParseGaussDBDSN("gaussdb://user:pass@host1:8000,host2:8000/mydb?sslmode=disable&target_session_attrs=primary")
+	require.NoError(t, err)
+	assert.Equal(t, "host1,host2", parsed.Host)
+	assert.Equal(t, "8000", parsed.Port)
+	assert.Equal(t, "mydb", parsed.Database)
+	assert.Equal(t, "user", parsed.Username)
+	assert.Equal(t, "pass", parsed.Password)
+	assert.Equal(t, "disable", parsed.SSLMode)
+	assert.Equal(t, "primary", parsed.TargetSessionAttrs)
+}
+
+func TestParseGaussDBDSN_MultiHostNoPorts(t *testing.T) {
+	parsed, err := ParseGaussDBDSN("gaussdb://user@host1,host2/db")
+	require.NoError(t, err)
+	assert.Equal(t, "host1,host2", parsed.Host)
+	assert.Empty(t, parsed.Port, "no default port is baked in for multi-host DSNs")
+}
+
+func TestParseGaussDBDSN_MultiHostDivergentPorts(t *testing.T) {
+	parsed, err := ParseGaussDBDSN("gaussdb://user@host1:7000,host2:8000/db")
+	require.NoError(t, err)
+	assert.Equal(t, "host1,host2", parsed.Host)
+	assert.Empty(t, parsed.Port, "diverging ports cannot be a single Port value")
+}

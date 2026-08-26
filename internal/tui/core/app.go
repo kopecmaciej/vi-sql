@@ -196,8 +196,15 @@ func (a *App) SetFormatter(formatter database.ValueFormatter) {
 }
 
 // GetQuoter returns the identifier quoter for the currently connected driver.
-// Falls back to ANSI quoting when no connection is active.
+// Drivers whose quoting depends on runtime capabilities (QuoterProvider, e.g.
+// GaussDB compatibility modes) are preferred; falls back to the connector's
+// static quoter, then to ANSI quoting when no connection is active.
 func (a *App) GetQuoter() util.Quoter {
+	if drv := a.GetDriver(); drv != nil {
+		if qp, ok := drv.(database.QuoterProvider); ok {
+			return qp.Quoter()
+		}
+	}
 	if a.config != nil {
 		if conn := a.config.GetCurrentConnection(); conn != nil {
 			if def, ok := database.GetConnector(conn.GetDriver()); ok {

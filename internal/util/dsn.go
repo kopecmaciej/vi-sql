@@ -19,6 +19,11 @@ type ParsedDSN struct {
 	TargetSessionAttrs string
 }
 
+// defaultGaussDBPort is the fallback when a single-host GaussDB DSN carries
+// no port. Multi-host DSNs keep an empty port instead — per-host ports are
+// preserved verbatim and never baked in here.
+const defaultGaussDBPort = "8000"
+
 func parseURLDSN(dsn, defaultPort, tlsParam string) (*ParsedDSN, error) {
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -51,8 +56,74 @@ func ParsePostgresDSN(dsn string) (*ParsedDSN, error) {
 }
 
 // ParseGaussDBDSN parses a GaussDB DSN (URL form) into its components.
+// Multi-host authorities ("host1:port1,host2:port2") are split apart first —
+// net/url cannot represent them — and Host is returned as the comma-joined
+// host list with Port set to the common port (empty when ports differ).
 func ParseGaussDBDSN(dsn string) (*ParsedDSN, error) {
-	return parseURLDSN(dsn, "8000", "sslmode")
+	if !IsMultiHostDSN(dsn) {
+		return parseURLDSN(dsn, defaultGaussDBPort, "sslmode")
+	}
+
+	scheme, rest, ok := strings.Cut(dsn, "://")
+	if !ok {
+		return nil, fmt.Errorf("failed to parse DSN: missing scheme")
+	}
+	authority := rest
+	if i := strings.IndexAny(authority, "/?"); i >= 0 {
+		tail := rest[i:]
+		authority = rest[:i]
+		rest = tail
+	} else {
+		rest = ""
+	}
+	userInfo := ""
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		userInfo = authority[:at+1]
+		authority = authority[at+1:]
+	}
+
+	var hosts []string
+	commonPort := ""
+	firstHostPort := ""
+	for _, hp := range strings.Split(authority, ",") {
+		hp = strings.TrimSpace(hp)
+		if hp == "" {
+			continue
+		}
+		if firstHostPort == "" {
+			firstHostPort = hp
+		}
+		host, port, hasPort := strings.Cut(hp, ":")
+		if !hasPort || port == "" {
+			port = commonPort
+		}
+		if commonPort == "" {
+			commonPort = port
+		} else if port != commonPort {
+			commonPort = "-"
+		}
+		hosts = append(hosts, host)
+	}
+	if len(hosts) == 0 {
+		return nil, fmt.Errorf("failed to parse DSN: no hosts in multi-host authority")
+	}
+
+	// Re-parse with a single synthetic authority so userinfo/path/query
+	// handling stays in one place. No default port is injected: when no host
+	// carries a port, parsed.Port is taken from the common-port scan below
+	// and stays empty.
+	rebuilt := scheme + "://" + userInfo + firstHostPort + rest
+	parsed, err := parseURLDSN(rebuilt, "", "sslmode")
+	if err != nil {
+		return nil, err
+	}
+	parsed.Host = strings.Join(hosts, ",")
+	if commonPort == "-" {
+		parsed.Port = ""
+	} else {
+		parsed.Port = commonPort
+	}
+	return parsed, nil
 }
 
 // ParseMySQLDSN parses a mysql:// URL into its components.

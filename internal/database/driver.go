@@ -1,6 +1,10 @@
 package database
 
-import "context"
+import (
+	"context"
+
+	"github.com/kopecmaciej/vi-sql/internal/util"
+)
 
 // Driver is the core abstraction for database backends.
 // Implement this interface to add support for a new SQL database.
@@ -49,4 +53,12 @@ type Driver interface {
 	ExplainAnalyze(ctx context.Context, sql string) (string, error)
 	// Autocomplete
 	GetTableColumnNames(ctx context.Context, schema, table string) ([]string, error)
+}
+
+// QuoterProvider is optionally implemented by drivers whose identifier
+// quoting depends on runtime server capabilities (e.g. GaussDB compatibility
+// mode). When the active driver implements it, App.GetQuoter prefers it over
+// the static ConnectorDef.Quoter.
+type QuoterProvider interface {
+	Quoter() util.Quoter
 }

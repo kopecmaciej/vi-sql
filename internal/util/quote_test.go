@@ -87,3 +87,11 @@ func TestWhereEqIndexed_EmptyMap(t *testing.T) {
 	assert.Empty(t, parts)
 	assert.Empty(t, args)
 }
+
+func TestWhereEqIndexed_NullBecomesIsNull(t *testing.T) {
+	parts, args := ANSIQuoter.WhereEqIndexed(map[string]any{"id": 42, "deleted_at": nil})
+
+	assert.Len(t, args, 1)
+	assert.Equal(t, 42, args[0])
+	assert.ElementsMatch(t, []string{`"id" = $1`, `"deleted_at" IS NULL`}, parts)
+}

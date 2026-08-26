@@ -21,6 +21,15 @@ func NewDao(client *Client) *Dao {
 	return &Dao{client: client}
 }
 
+// Quoter implements database.QuoterProvider: identifiers are backtick-quoted
+// in MySQL-compatible mode and double-quoted (ANSI) otherwise.
+func (d *Dao) Quoter() util.Quoter {
+	if d.client.Capabilities.CompatMode == CompatMySQL {
+		return util.BacktickQuoter
+	}
+	return util.ANSIQuoter
+}
+
 func (d *Dao) Connect(ctx context.Context) error {
 	return d.client.Connect()
 }
@@ -243,7 +252,7 @@ func (d *Dao) GetViewDDL(ctx context.Context, schema, view string) (string, erro
 		return "", fmt.Errorf("failed to get view DDL: %w", err)
 	}
 	return fmt.Sprintf("CREATE VIEW %s.%s AS\n%s",
-		util.BacktickQuoter.Ident(schema), util.BacktickQuoter.Ident(view),
+		d.Quoter().Ident(schema), d.Quoter().Ident(view),
 		strings.TrimSpace(def)), nil
 }
 
@@ -745,7 +754,7 @@ func (d *Dao) GetEstimatedRowCount(ctx context.Context, schema, table string) (i
 }
 
 func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, where, orderBy string) (string, []database.Row, error) {
-	fqTable := util.BacktickQuoter.Ident(state.Schema) + "." + util.BacktickQuoter.Ident(state.Table)
+	fqTable := d.Quoter().Ident(state.Schema) + "." + d.Quoter().Ident(state.Table)
 	query := fmt.Sprintf("SELECT * FROM %s", fqTable)
 
 	if where != "" {
@@ -791,14 +800,14 @@ func (d *Dao) FetchTableRows(ctx context.Context, state *database.TableState, wh
 
 func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.Row) (database.PrimaryKey, error) {
 	log.Info().Str("schema", schema).Str("table", table).Msg("Inserting row")
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 
 	cols := make([]string, 0, len(row))
 	placeholders := make([]string, 0, len(row))
 	args := make([]any, 0, len(row))
 	i := 1
 	for col, val := range row {
-		cols = append(cols, util.BacktickQuoter.Ident(col))
+		cols = append(cols, d.Quoter().Ident(col))
 		placeholders = append(placeholders, fmt.Sprintf("$%d", i))
 		args = append(args, val)
 		i++
@@ -806,8 +815,18 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 
 	pkCols, err := d.getPrimaryKeyColumns(ctx, schema, table)
 	if err != nil {
-		log.Warn().Err(err).Msg("Failed to get PK columns for RETURNING clause")
+		log.Warn().Err(err).Msg("Failed to get PK columns for generated-key lookup")
 	}
+	// PK values explicitly present in the inserted row identify the new row
+	// even without server-side generated-key support (composite PKs and
+	// non-auto single-column PKs in MySQL-compatible mode).
+	providedPK := database.PrimaryKey{Columns: make(map[string]any)}
+	for _, c := range pkCols {
+		if v, ok := row[c]; ok && v != nil {
+			providedPK.Columns[c] = v
+		}
+	}
+	completeProvided := len(pkCols) > 0 && len(providedPK.Columns) == len(pkCols)
 
 	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
 		fqTable, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
@@ -815,7 +834,7 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	if d.client.Capabilities.SupportsReturning && len(pkCols) > 0 {
 		quotedPK := make([]string, len(pkCols))
 		for j, c := range pkCols {
-			quotedPK[j] = util.BacktickQuoter.Ident(c)
+			quotedPK[j] = d.Quoter().Ident(c)
 		}
 		query += " RETURNING " + strings.Join(quotedPK, ", ")
 
@@ -836,7 +855,10 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 		return pk, nil
 	}
 
-	if d.client.Capabilities.SupportsLastInsertID && len(pkCols) == 1 {
+	// LAST_INSERT_ID only helps when the single PK column is auto-generated
+	// and not supplied by the caller; otherwise fall through and report the
+	// provided values below.
+	if d.client.Capabilities.SupportsLastInsertID && len(pkCols) == 1 && !completeProvided {
 		// gaussdb-go reports no last insert id, so in M-mode the generated
 		// id comes from LAST_INSERT_ID(). It is session-scoped, so Exec and
 		// the lookup must run on the same pinned connection.
@@ -869,6 +891,11 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 	if err != nil {
 		return database.PrimaryKey{}, fmt.Errorf("failed to insert row: %w", err)
 	}
+	if completeProvided {
+		// Composite PK or a caller-supplied single-column PK: the inserted
+		// values themselves identify the new row.
+		return providedPK, nil
+	}
 	return database.PrimaryKey{}, nil
 }
 
@@ -889,7 +916,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 		}
 		oldVal, exists := original[col]
 		if !exists || !reflect.DeepEqual(oldVal, newVal) {
-			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", util.BacktickQuoter.Ident(col), argIdx))
+			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", d.Quoter().Ident(col), argIdx))
 			args = append(args, newVal)
 			argIdx++
 		}
@@ -899,10 +926,15 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 		return nil
 	}
 
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 	whereParts := []string{}
 	for col, val := range pk.Columns {
-		whereParts = append(whereParts, fmt.Sprintf("%s = $%d", util.BacktickQuoter.Ident(col), argIdx))
+		if val == nil {
+			// `= NULL` never matches; IS NULL is the only correct predicate.
+			whereParts = append(whereParts, fmt.Sprintf("%s IS NULL", d.Quoter().Ident(col)))
+			continue
+		}
+		whereParts = append(whereParts, fmt.Sprintf("%s = $%d", d.Quoter().Ident(col), argIdx))
 		args = append(args, val)
 		argIdx++
 	}
@@ -929,10 +961,10 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 
 func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []database.PrimaryKey) error {
 	log.Info().Str("schema", schema).Str("table", table).Int("count", len(pks)).Msg("Deleting rows")
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 
 	for _, pk := range pks {
-		parts, args := util.BacktickQuoter.WhereEqIndexed(pk.Columns)
+		parts, args := d.Quoter().WhereEqIndexed(pk.Columns)
 		query := fmt.Sprintf("DELETE FROM %s WHERE %s", fqTable, strings.Join(parts, " AND "))
 
 		result, err := d.client.DB.ExecContext(ctx, query, args...)
@@ -952,6 +984,30 @@ func (d *Dao) DeleteRows(ctx context.Context, schema, table string, pks []databa
 }
 
 func (d *Dao) CommonDataTypes() []string {
+	if d.client.Capabilities.CompatMode == CompatMySQL {
+		return []string{
+			"TINYINT",
+			"SMALLINT",
+			"INT",
+			"BIGINT",
+			"DECIMAL(10,2)",
+			"FLOAT",
+			"DOUBLE",
+			"VARCHAR(255)",
+			"CHAR(36)",
+			"TEXT",
+			"DATE",
+			"TIME",
+			"DATETIME",
+			"TIMESTAMP",
+			"BLOB",
+			"JSON",
+		}
+	}
+	return commonDataTypesPG()
+}
+
+func commonDataTypesPG() []string {
 	return []string{
 		"INTEGER",
 		"BIGINT",
@@ -977,11 +1033,16 @@ func (d *Dao) CommonDataTypes() []string {
 	}
 }
 
-func (d *Dao) DefaultPKType() string { return "SERIAL" }
+func (d *Dao) DefaultPKType() string {
+	if d.client.Capabilities.CompatMode == CompatMySQL {
+		return "INT AUTO_INCREMENT"
+	}
+	return "SERIAL"
+}
 
 func (d *Dao) DefaultCreateTableDDL(schema, tableName string) string {
-	return fmt.Sprintf("CREATE TABLE %s (id serial PRIMARY KEY)",
-		util.BacktickQuoter.Ident(schema)+"."+util.BacktickQuoter.Ident(tableName))
+	return fmt.Sprintf("CREATE TABLE %s (id %s PRIMARY KEY)",
+		d.Quoter().Ident(schema)+"."+d.Quoter().Ident(tableName), d.DefaultPKType())
 }
 
 func (d *Dao) GetTableDDL(ctx context.Context, schema, table string) (string, error) {
@@ -1005,7 +1066,7 @@ func (d *Dao) CreateTable(ctx context.Context, schema, ddl string) error {
 }
 
 func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("DROP TABLE %s", fqTable))
 	if err != nil {
 		return fmt.Errorf("failed to drop table: %w", err)
@@ -1015,9 +1076,9 @@ func (d *Dao) DropTable(ctx context.Context, schema, table string) error {
 }
 
 func (d *Dao) RenameTable(ctx context.Context, schema, old, newName string) error {
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(old)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(old)
 	_, err := d.client.DB.ExecContext(ctx,
-		fmt.Sprintf("ALTER TABLE %s RENAME TO %s", fqTable, util.BacktickQuoter.Ident(newName)))
+		fmt.Sprintf("ALTER TABLE %s RENAME TO %s", fqTable, d.Quoter().Ident(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename table: %w", err)
 	}
@@ -1030,10 +1091,10 @@ func (d *Dao) RenameColumn(ctx context.Context, schema, table, old, newName stri
 		return d.renameColumnViaChange(ctx, schema, table, old, newName)
 	}
 
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 	_, err := d.client.DB.ExecContext(ctx,
 		fmt.Sprintf("ALTER TABLE %s RENAME COLUMN %s TO %s",
-			fqTable, util.BacktickQuoter.Ident(old), util.BacktickQuoter.Ident(newName)))
+			fqTable, d.Quoter().Ident(old), d.Quoter().Ident(newName)))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
@@ -1077,13 +1138,18 @@ func (d *Dao) renameColumnViaChange(ctx context.Context, schema, table, old, new
 	} else if colDefault != "" {
 		def += " DEFAULT " + colDefault
 	}
+	// "ON UPDATE CURRENT_TIMESTAMP" also lives in extra; without carrying it
+	// over the CHANGE COLUMN rewrite silently changes column behavior.
+	if onUpdate := onUpdateClause(extra); onUpdate != "" {
+		def += " " + onUpdate
+	}
 	if comment != "" {
 		def += " COMMENT '" + strings.ReplaceAll(comment, "'", "''") + "'"
 	}
 
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 	_, err = d.client.DB.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s CHANGE COLUMN %s %s %s",
-		fqTable, util.BacktickQuoter.Ident(old), util.BacktickQuoter.Ident(newName), def))
+		fqTable, d.Quoter().Ident(old), d.Quoter().Ident(newName), def))
 	if err != nil {
 		return fmt.Errorf("failed to rename column: %w", err)
 	}
@@ -1092,7 +1158,7 @@ func (d *Dao) renameColumnViaChange(ctx context.Context, schema, table, old, new
 }
 
 func (d *Dao) TruncateTable(ctx context.Context, schema, table string) error {
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE %s", fqTable))
 	if err != nil {
 		return fmt.Errorf("failed to truncate table: %w", err)
@@ -1171,7 +1237,59 @@ func (d *Dao) getIndexesM(ctx context.Context, schema, table string) ([]database
 		idx.Columns = strings.Split(colsRaw, ",")
 		indexes = append(indexes, idx)
 	}
-	return indexes, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	d.enrichIndexSizeAndDefinition(ctx, schema, table, indexes)
+	return indexes, nil
+}
+
+// enrichIndexSizeAndDefinition fills Size and Definition from the PG-flavored
+// catalogs (pg_index/pg_class), which exist under both compatibility modes;
+// information_schema.statistics carries neither. Best-effort: on failure the
+// base columns from information_schema stay untouched.
+func (d *Dao) enrichIndexSizeAndDefinition(ctx context.Context, schema, table string, indexes []database.IndexInfo) {
+	rows, err := d.client.DB.QueryContext(ctx, `
+		SELECT i.relname,
+		       COALESCE(pg_relation_size(i.oid), 0),
+		       pg_get_indexdef(ix.indexrelid)
+		FROM pg_index ix
+		JOIN pg_class i ON i.oid = ix.indexrelid
+		JOIN pg_class t ON t.oid = ix.indrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		WHERE n.nspname = $1 AND t.relname = $2`, schema, table)
+	if err != nil {
+		log.Warn().Err(err).Str("schema", schema).Str("table", table).
+			Msg("failed to read index size/definition")
+		return
+	}
+	defer rows.Close()
+
+	type indexMeta struct {
+		size int64
+		def  string
+	}
+	meta := make(map[string]indexMeta, len(indexes))
+	for rows.Next() {
+		var name, def string
+		var size int64
+		if err := rows.Scan(&name, &size, &def); err != nil {
+			log.Warn().Err(err).Msg("failed to scan index size/definition")
+			return
+		}
+		meta[name] = indexMeta{size: size, def: def}
+	}
+	if err := rows.Err(); err != nil {
+		log.Warn().Err(err).Msg("failed to read index size/definition")
+		return
+	}
+	for i := range indexes {
+		if m, ok := meta[indexes[i].Name]; ok {
+			indexes[i].Size = m.size
+			indexes[i].Definition = m.def
+		}
+	}
 }
 
 func parseIndexColumns(definition string) []string {
@@ -1260,14 +1378,14 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 	quotedCols := make([]string, len(def.Columns))
 	for i, c := range def.Columns {
 		parts := strings.Fields(c)
-		quotedCols[i] = util.BacktickQuoter.Ident(parts[0])
+		quotedCols[i] = d.Quoter().Ident(parts[0])
 		if len(parts) > 1 {
 			quotedCols[i] += " " + parts[1]
 		}
 	}
 
-	fqTable := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(table)
-	indexName := util.BacktickQuoter.Ident(def.Name)
+	fqTable := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(table)
+	indexName := d.Quoter().Ident(def.Name)
 
 	// MySQL-compatible mode rejects USING entirely (verified: both USING btree
 	// and USING hash fail with SQLSTATE 42601); GaussDB picks the access method
@@ -1289,7 +1407,7 @@ func (d *Dao) CreateIndex(ctx context.Context, schema, table string, def databas
 }
 
 func (d *Dao) DropIndex(ctx context.Context, schema, indexName string) error {
-	fqIndex := util.BacktickQuoter.Ident(schema) + "." + util.BacktickQuoter.Ident(indexName)
+	fqIndex := d.Quoter().Ident(schema) + "." + d.Quoter().Ident(indexName)
 	_, err := d.client.DB.ExecContext(ctx, fmt.Sprintf("DROP INDEX %s", fqIndex))
 	if err != nil {
 		return fmt.Errorf("failed to drop index: %w", err)
@@ -1447,7 +1565,7 @@ func (d *Dao) scanQueryRowsAsText(ctx context.Context, query string, colInfos []
 
 	casts := make([]string, len(names))
 	for i, n := range names {
-		casts[i] = "t." + util.BacktickQuoter.Ident(n) + "::text"
+		casts[i] = "t." + d.Quoter().Ident(n) + "::text"
 	}
 
 	textQuery := fmt.Sprintf("SELECT %s FROM (%s) AS t", strings.Join(casts, ", "), query)
@@ -1595,4 +1713,19 @@ func (d *Dao) getPrimaryKeyColumnsM(ctx context.Context, schema, table string) (
 	}
 
 	return cols, rows.Err()
+}
+
+// onUpdateClause extracts an "ON UPDATE <expr>" tail from a MySQL-style extra
+// column attribute so CHANGE COLUMN keeps the behavior instead of silently
+// dropping it.
+func onUpdateClause(extra string) string {
+	idx := strings.Index(strings.ToLower(extra), "on update")
+	if idx < 0 {
+		return ""
+	}
+	clause := strings.TrimSpace(extra[idx:])
+	if strings.EqualFold(clause, "on update") {
+		return ""
+	}
+	return clause
 }
