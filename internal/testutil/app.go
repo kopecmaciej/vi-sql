@@ -20,6 +20,7 @@ func NewTestApp(t *testing.T) (*core.App, tcell.SimulationScreen) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_DATA_HOME", tmpDir)
 	t.Setenv("XDG_CACHE_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", tmpDir)
 	// HOME fallback for systems that ignore XDG.
 	t.Setenv("HOME", tmpDir)
 

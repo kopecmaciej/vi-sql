@@ -142,6 +142,15 @@ func GetConfigDir() (string, error) {
 	return configPath, nil
 }
 
+func GetStatePath() (string, error) {
+	statePath, err := xdg.StateFile(filepath.Join(ConfigDir, "state.yaml"))
+	if err != nil {
+		log.Error().Err(err).Msg("Error while getting state file path")
+		return "", err
+	}
+	return statePath, nil
+}
+
 func ResolveConfigPath(configPath string) string {
 	if configPath == "" {
 		return configPath

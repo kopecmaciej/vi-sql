@@ -39,7 +39,6 @@ type SQLConfig struct {
 	SSLMode  string `yaml:"sslMode"`
 	Name     string `yaml:"name"`
 	Timeout  int    `yaml:"timeout"`
-
 	// DriverOptions holds per-driver extras keyed by DSN parameter names.
 	DriverOptions map[string]string `yaml:"driverOptions,omitempty"`
 	Options       SQLOptions        `yaml:"options"`
@@ -86,8 +85,8 @@ type Config struct {
 	Security           SecurityConfig `yaml:"security"`
 	ShowConnectionPage bool           `yaml:"showConnectionPage"`
 	ShowOptionsPage    bool           `yaml:"-"`
-	CurrentConnection  string         `yaml:"currentConnection"`
-	Connections        []SQLConfig    `yaml:"connections"`
+	CurrentConnection  string         `yaml:"-"`
+	Connections        []SQLConfig    `yaml:"-"`
 	Styles             StylesConfig   `yaml:"styles"`
 	JumpInto           string         `yaml:"-"`
 	ConfigPath         string         `yaml:"-"`
@@ -116,6 +115,23 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 	_, statErr := os.Stat(configPath)
 	firstLaunch := os.IsNotExist(statErr)
 
+	statePath, err := defaultConfig.statePath()
+	if err != nil {
+		return nil, err
+	}
+	_, statErr = os.Stat(statePath)
+	stateExists := statErr == nil
+
+	// Connection used to live in config.yaml, capture it before
+	// util.LoadConfigFile rewrites the file
+	// TODO: delete in future
+	var legacy connState
+	if !firstLaunch && !stateExists {
+		if b, readErr := os.ReadFile(configPath); readErr == nil {
+			_ = yaml.Unmarshal(b, &legacy)
+		}
+	}
+
 	cfg, err := util.LoadConfigFile(defaultConfig, configPath)
 	if err != nil {
 		return nil, err
@@ -123,6 +139,19 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 
 	cfg.ConfigPath = configPath
 	cfg.FirstLaunch = firstLaunch
+
+	switch {
+	case stateExists:
+		if err := cfg.loadState(); err != nil {
+			return nil, err
+		}
+	case len(legacy.Connections) > 0 || legacy.CurrentConnection != "":
+		cfg.Connections = legacy.Connections
+		cfg.CurrentConnection = legacy.CurrentConnection
+		if err := cfg.saveState(); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := cfg.ensureConnectionIDs(); err != nil {
 		return nil, err
@@ -140,7 +169,7 @@ func (c *Config) ensureConnectionIDs() error {
 		}
 	}
 	if needsSave {
-		return c.UpdateConfig()
+		return c.saveState()
 	}
 	return nil
 }
@@ -253,23 +282,7 @@ func (c *Config) SetCurrentConnection(name string) error {
 		}
 	}
 
-	updatedConfig, err := yaml.Marshal(c)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to marshal config")
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	configPath, err := c.GetCurrentConfigPath()
-	if err != nil {
-		return err
-	}
-
-	if err := os.WriteFile(configPath, updatedConfig, FileMode); err != nil {
-		log.Error().Err(err).Msg("Failed to write config file")
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
+	return c.saveState()
 }
 
 func (c *Config) GetCurrentConnection() *SQLConfig {
@@ -306,17 +319,7 @@ func (c *Config) AddConnection(sqlConfig *SQLConfig) error {
 
 	c.Connections = append(c.Connections, *sqlConfig)
 
-	updatedConfig, err := yaml.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	configPath, err := c.GetCurrentConfigPath()
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, updatedConfig, FileMode)
+	return c.saveState()
 }
 
 func (c *Config) AddConnectionFromDSN(sqlConfig *SQLConfig) error {
@@ -349,17 +352,7 @@ func (c *Config) DeleteConnection(name string) error {
 		}
 	}
 
-	updatedConfig, err := yaml.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	configPath, err := c.GetCurrentConfigPath()
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, updatedConfig, FileMode)
+	return c.saveState()
 }
 
 func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) error {
@@ -391,17 +384,7 @@ func (c *Config) UpdateConnection(originalName string, sqlConfig *SQLConfig) err
 		return fmt.Errorf("connection '%s' not found", originalName)
 	}
 
-	updatedConfig, err := yaml.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	configPath, err := c.GetCurrentConfigPath()
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(configPath, updatedConfig, FileMode)
+	return c.saveState()
 }
 
 func (c *Config) UpdateConnectionFromDSN(originalName string, sqlConfig *SQLConfig) error {

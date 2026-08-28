@@ -299,6 +299,9 @@ func printPaths() {
 	fmt.Printf("             %s/keybindings-normal.yaml\n", configDir)
 	fmt.Printf("Styles:      %s/styles/\n", configDir)
 	fmt.Printf("Icons:       %s/icons.yaml\n", configDir)
+	if statePath, err := util.GetStatePath(); err == nil {
+		fmt.Printf("State:       %s\n", statePath)
+	}
 	fmt.Printf("Log:         %s\n", config.LogPath)
 }
 
