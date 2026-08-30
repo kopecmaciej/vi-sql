@@ -114,6 +114,63 @@ connections:
 	}
 }
 
+func TestConnectionStateMigrationKeepsConfigOnFailure(t *testing.T) {
+	tests := []struct {
+		name       string
+		configYAML string
+		setup      func(t *testing.T, dir string)
+	}{
+		{
+			name: "malformed legacy connections abort migration",
+			configYAML: `version: test
+connections:
+  - id: conn-1
+    driver: postgres
+    port: not-a-number
+    name: prod
+`,
+		},
+		{
+			name:       "state write failure aborts migration",
+			configYAML: legacyConfigWithConnections,
+			setup: func(t *testing.T, dir string) {
+				if os.Geteuid() == 0 {
+					t.Skip("cannot simulate a write-permission failure as root")
+				}
+				if err := os.Chmod(dir, 0o555); err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = os.Chmod(dir, 0o755) })
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			configPath := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(configPath, []byte(tt.configYAML), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if tt.setup != nil {
+				tt.setup(t, dir)
+			}
+
+			if _, err := LoadConfigWithVersion("test", configPath); err == nil {
+				t.Fatal("expected migration to fail, got nil error")
+			}
+
+			raw, err := os.ReadFile(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(raw), "connections:") {
+				t.Errorf("config.yaml lost its connections after a failed migration:\n%s", raw)
+			}
+		})
+	}
+}
+
 func TestConnectionStateRoundTrip(t *testing.T) {
 	tmp := t.TempDir()
 	cfg := &Config{

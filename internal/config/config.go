@@ -122,13 +122,28 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 	_, statErr = os.Stat(statePath)
 	stateExists := statErr == nil
 
-	// Connection used to live in config.yaml, capture it before
-	// util.LoadConfigFile rewrites the file
+	// Connections lived in config.yaml, migration move them to state.yaml
+	// before LoadConfigFile will run. State is written first, so config.yaml is recoverable
 	// TODO: delete in future
-	var legacy connState
 	if !firstLaunch && !stateExists {
-		if b, readErr := os.ReadFile(configPath); readErr == nil {
-			_ = yaml.Unmarshal(b, &legacy)
+		b, readErr := os.ReadFile(configPath)
+		if readErr != nil {
+			return nil, fmt.Errorf("reading config for connection migration: %w", readErr)
+		}
+		var legacy connState
+		if err := yaml.Unmarshal(b, &legacy); err != nil {
+			return nil, fmt.Errorf("parsing legacy connections from %s: %w", configPath, err)
+		}
+		if len(legacy.Connections) > 0 || legacy.CurrentConnection != "" {
+			migrated := &Config{
+				ConfigPath:        configPath,
+				Connections:       legacy.Connections,
+				CurrentConnection: legacy.CurrentConnection,
+			}
+			if err := migrated.saveState(); err != nil {
+				return nil, err
+			}
+			stateExists = true
 		}
 	}
 
@@ -140,15 +155,8 @@ func LoadConfigWithVersion(version string, customPath string) (*Config, error) {
 	cfg.ConfigPath = configPath
 	cfg.FirstLaunch = firstLaunch
 
-	switch {
-	case stateExists:
+	if stateExists {
 		if err := cfg.loadState(); err != nil {
-			return nil, err
-		}
-	case len(legacy.Connections) > 0 || legacy.CurrentConnection != "":
-		cfg.Connections = legacy.Connections
-		cfg.CurrentConnection = legacy.CurrentConnection
-		if err := cfg.saveState(); err != nil {
 			return nil, err
 		}
 	}
