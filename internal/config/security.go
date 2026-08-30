@@ -156,5 +156,8 @@ func (c *Config) ApplyMasterReset() error {
 		}
 	}
 	EncryptionKey = ""
-	return c.UpdateConfig()
+	if err := c.UpdateConfig(); err != nil {
+		return err
+	}
+	return c.saveState()
 }
