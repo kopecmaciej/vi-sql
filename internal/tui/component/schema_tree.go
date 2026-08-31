@@ -332,12 +332,16 @@ func (s *SchemaTree) reloadTree(ctx context.Context) {
 		if err := s.ListSchemas(ctx); err != nil {
 			return
 		}
-		go s.App.Application.QueueUpdateDraw(func() {
-			s.renderWithActiveFilter()
-			s.restoreExpanded(expanded)
-			s.restoreSelection(sel)
+		s.App.Application.QueueUpdateDraw(func() {
+			s.restoreAfterReload(expanded, sel)
 		})
 	}()
+}
+
+func (s *SchemaTree) restoreAfterReload(expanded map[string]bool, sel treeSelection) {
+	s.renderWithActiveFilter()
+	s.restoreExpanded(expanded)
+	s.restoreSelection(sel)
 }
 
 func isDDLQuery(sql string) bool {
@@ -396,8 +400,10 @@ func (s *SchemaTree) renderTree(schemas []database.Schema, expand bool) {
 		s.tree.SetCurrentNode(children[0])
 	}
 	if expand {
+		openIcon := s.style.IconWithColor(s.style.OpenNode, s.App.GetStyles().Global.SecondaryTextColor)
 		for _, schemaNode := range rootNode.GetChildren() {
 			schemaNode.SetExpanded(true)
+			schemaNode.SetText(fmt.Sprintf("%s%s", openIcon, extractName(schemaNode.GetText())))
 		}
 	}
 }

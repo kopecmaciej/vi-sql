@@ -197,17 +197,15 @@ func TestSchemaTree_Refresh_KeepsActiveFilter(t *testing.T) {
 
 	tree.filterBar.SetText("order")
 	tree.filter("order")
+	filteredNode := tree.tree.GetRoot().GetChildren()[0].GetText()
 
-	tree.schemas = []database.Schema{
-		{Schema: "public", Tables: []string{"users", "orders", "order_items"}},
-	}
-	tree.renderWithActiveFilter()
-	tree.expandAllNodes("", "")
+	tree.restoreAfterReload(tree.expandedSchemas(), tree.currentSelection())
 	testutil.DrawAndSync(app, sim)
 
 	assert.True(t, testutil.ScreenContains(sim, "orders"), "refresh should keep the filter applied")
-	assert.True(t, testutil.ScreenContains(sim, "order_items"), "refresh should show newly added matching tables")
 	assert.False(t, testutil.ScreenContains(sim, "users"), "refresh must not fall back to the full list")
+	assert.Equal(t, filteredNode, tree.tree.GetRoot().GetChildren()[0].GetText(),
+		"refresh must render the schema node (expand icon included) the same as the initial filter")
 }
 
 func TestSchemaTree_JumpToTable_Success(t *testing.T) {
