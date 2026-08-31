@@ -1,4 +1,13 @@
 entries:
+  - version: 0.4.0
+    breaking: true
+    title: Connections moved to an XDG state file
+    changes:
+      - "Breaking: Connections now live in an XDG state file (location is platform-dependent; run vi-sql --paths to see it), not config.yaml. Existing connections migrate automatically on first run, but if you sync config.yaml via git or dotfiles you must now sync the state file as well"
+      - "Fix: GaussDB M-mode compatibility"
+      - "Fix: Comma is placed before the REQUIRED comment in generated INSERT templates"
+      - "Fix: Ctrl+R refresh re-applies the active schema filter immediately"
+      - "Fix: Schema nodes keep their expand icon after a Ctrl+R refresh"
   - version: 0.3.0
     breaking: false
     title: GaussDB support, result search, and boolean display fixes
