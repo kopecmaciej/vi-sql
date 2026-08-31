@@ -333,7 +333,7 @@ func (s *SchemaTree) reloadTree(ctx context.Context) {
 			return
 		}
 		go s.App.Application.QueueUpdateDraw(func() {
-			s.renderTree(s.schemas, false)
+			s.renderWithActiveFilter()
 			s.restoreExpanded(expanded)
 			s.restoreSelection(sel)
 		})
@@ -400,6 +400,11 @@ func (s *SchemaTree) renderTree(schemas []database.Schema, expand bool) {
 			schemaNode.SetExpanded(true)
 		}
 	}
+}
+
+func (s *SchemaTree) renderWithActiveFilter() {
+	filtered, expand := s.filteredSchemas(s.filterBar.GetText())
+	s.renderTree(filtered, expand)
 }
 
 func (s *SchemaTree) renderLayout() {
@@ -687,44 +692,48 @@ func (s *SchemaTree) clearFilter() {
 }
 
 func (s *SchemaTree) filter(text string) {
-	expand := false
-	filtered := []database.Schema{}
-	if text == "" {
-		filtered = s.schemas
-	} else {
-		re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(text))
-		for _, st := range s.schemas {
-			matchedSchema := re.MatchString(st.Schema)
-			matchedTables := []string{}
-			for _, t := range st.Tables {
-				if re.MatchString(t) {
-					matchedTables = append(matchedTables, t)
-				}
-			}
-			matchedViews := []string{}
-			for _, v := range st.Views {
-				if re.MatchString(v) {
-					matchedViews = append(matchedViews, v)
-				}
-			}
-
-			if matchedSchema || len(matchedTables) > 0 || len(matchedViews) > 0 {
-				filteredST := database.Schema{
-					Schema: st.Schema,
-					Tables: matchedTables,
-					Views:  matchedViews,
-				}
-				if matchedSchema {
-					filteredST.Tables = st.Tables
-					filteredST.Views = st.Views
-				}
-				filtered = append(filtered, filteredST)
-				expand = expand || len(matchedTables) > 0 || len(matchedViews) > 0
-			}
-		}
-	}
+	filtered, expand := s.filteredSchemas(text)
 	s.renderTree(filtered, expand)
 	s.renderLayout()
+}
+
+func (s *SchemaTree) filteredSchemas(text string) ([]database.Schema, bool) {
+	if text == "" {
+		return s.schemas, false
+	}
+	expand := false
+	filtered := []database.Schema{}
+	re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(text))
+	for _, st := range s.schemas {
+		matchedSchema := re.MatchString(st.Schema)
+		matchedTables := []string{}
+		for _, t := range st.Tables {
+			if re.MatchString(t) {
+				matchedTables = append(matchedTables, t)
+			}
+		}
+		matchedViews := []string{}
+		for _, v := range st.Views {
+			if re.MatchString(v) {
+				matchedViews = append(matchedViews, v)
+			}
+		}
+
+		if matchedSchema || len(matchedTables) > 0 || len(matchedViews) > 0 {
+			filteredST := database.Schema{
+				Schema: st.Schema,
+				Tables: matchedTables,
+				Views:  matchedViews,
+			}
+			if matchedSchema {
+				filteredST.Tables = st.Tables
+				filteredST.Views = st.Views
+			}
+			filtered = append(filtered, filteredST)
+			expand = expand || len(matchedTables) > 0 || len(matchedViews) > 0
+		}
+	}
+	return filtered, expand
 }
 
 func (s *SchemaTree) getParentNode() *tview.TreeNode {

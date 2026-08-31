@@ -55,8 +55,6 @@ func TestSchemaTree_Render_ShowsTableNodes(t *testing.T) {
 		"screen should show table name after expand\nscreen:\n%v", testutil.ScreenFull(sim))
 }
 
-// TestSchemaTree_Render_EmptySchema is a regression test for the bug where
-// an empty schema (no tables) didn't highlight correctly on focus.
 func TestSchemaTree_Render_EmptySchema(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -104,8 +102,6 @@ func TestSchemaTree_SetSelectFunc_IsRegistered(t *testing.T) {
 	assert.True(t, called, "nodeSelectFunc should be callable")
 }
 
-// TestSchemaTree_Filter_MatchesTableName verifies that filtering by a table name
-// narrows the displayed tables to only those containing the search text.
 func TestSchemaTree_Filter_MatchesTableName(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -117,7 +113,6 @@ func TestSchemaTree_Filter_MatchesTableName(t *testing.T) {
 	app.SetRoot(tree, true)
 	tree.Render()
 
-	// Apply filter — only tables containing "user" should remain.
 	tree.filter("user")
 	tree.expandAllNodes("", "")
 	testutil.DrawAndSync(app, sim)
@@ -127,8 +122,6 @@ func TestSchemaTree_Filter_MatchesTableName(t *testing.T) {
 	assert.False(t, testutil.ScreenContains(sim, "orders"), "filtered tree should hide 'orders'")
 }
 
-// TestSchemaTree_Filter_SchemaNameMatch verifies that matching the schema name
-// returns all tables under that schema.
 func TestSchemaTree_Filter_SchemaNameMatch(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -151,8 +144,6 @@ func TestSchemaTree_Filter_SchemaNameMatch(t *testing.T) {
 	assert.False(t, testutil.ScreenContains(sim, "gamma"), "non-matching schema should be hidden")
 }
 
-// TestSchemaTree_Filter_NoMatch verifies that a filter with no matches shows
-// nothing (no tables rendered).
 func TestSchemaTree_Filter_NoMatch(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -172,8 +163,6 @@ func TestSchemaTree_Filter_NoMatch(t *testing.T) {
 	assert.False(t, testutil.ScreenContains(sim, "orders"))
 }
 
-// TestSchemaTree_Filter_ClearRestoresAll verifies that clearFilter() brings
-// back all tables after a narrowing filter.
 func TestSchemaTree_Filter_ClearRestoresAll(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -194,8 +183,33 @@ func TestSchemaTree_Filter_ClearRestoresAll(t *testing.T) {
 	assert.True(t, testutil.ScreenContains(sim, "orders"))
 }
 
-// TestSchemaTree_JumpToTable_Success verifies that JumpToTable navigates to the
-// correct node and fires the select callback.
+// Regression for github.com/kopecmaciej/vi-sql discussion #77
+func TestSchemaTree_Refresh_KeepsActiveFilter(t *testing.T) {
+	app, sim := testutil.NewTestApp(t)
+	app.SetDriver(newSchemaTreeMock([]database.Schema{
+		{Schema: "public", Tables: []string{"users", "orders"}},
+	}))
+
+	tree := NewSchemaTree()
+	require.NoError(t, tree.Init(app))
+	app.SetRoot(tree, true)
+	tree.Render()
+
+	tree.filterBar.SetText("order")
+	tree.filter("order")
+
+	tree.schemas = []database.Schema{
+		{Schema: "public", Tables: []string{"users", "orders", "order_items"}},
+	}
+	tree.renderWithActiveFilter()
+	tree.expandAllNodes("", "")
+	testutil.DrawAndSync(app, sim)
+
+	assert.True(t, testutil.ScreenContains(sim, "orders"), "refresh should keep the filter applied")
+	assert.True(t, testutil.ScreenContains(sim, "order_items"), "refresh should show newly added matching tables")
+	assert.False(t, testutil.ScreenContains(sim, "users"), "refresh must not fall back to the full list")
+}
+
 func TestSchemaTree_JumpToTable_Success(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -220,8 +234,6 @@ func TestSchemaTree_JumpToTable_Success(t *testing.T) {
 	assert.Equal(t, "orders", gotTable)
 }
 
-// TestSchemaTree_JumpToTable_SchemaNotFound verifies an error when the schema
-// does not exist.
 func TestSchemaTree_JumpToTable_SchemaNotFound(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
@@ -238,8 +250,6 @@ func TestSchemaTree_JumpToTable_SchemaNotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "nonexistent")
 }
 
-// TestSchemaTree_JumpToTable_TableNotFound verifies an error when the schema
-// exists but the table does not.
 func TestSchemaTree_JumpToTable_TableNotFound(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	app.SetDriver(newSchemaTreeMock([]database.Schema{
