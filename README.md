@@ -23,7 +23,7 @@ A terminal UI for SQL databases built with passion. Browse schemas, run queries,
 ## Features
 
 - **Multi-tab SQL editor** — syntax highlighting, autocomplete, query history, and `$EDITOR` integration
-- **Table data view** — filter, sort, inline edit, add/delete rows, copy rows as JSON/CSV, follow foreign keys, find references
+- **Table data view** — filter, sort, inline and batch edit, add/delete rows, copy rows as JSON/CSV, follow foreign keys, find references
 - **Vim mode** — `hjkl` navigation and multi-key sequences (`gg`, `dd`, `yy`, `yrj`, `yrc`, `gd`, `gr`) across the entire UI
 - **Schema browser** — tables, structure, indexes, DDL; create, rename, and drop objects via keybindings
 - **EXPLAIN / EXPLAIN ANALYZE** — query plan viewer with cost and timing breakdown
@@ -33,6 +33,14 @@ A terminal UI for SQL databases built with passion. Browse schemas, run queries,
 - **Auto-update** — update to the latest release from inside the app via the actions palette
 - **Encrypted connections** — AES-256-GCM encryption; supports OS keyring, master password, or env var
 - **Themes** — multiple built-in themes, fully customizable via YAML
+
+In a table data view, press `v` to select a rectangular range of cells. Use
+`h/j/k/l` (or arrow keys) to extend the range and `gg` / `G` to extend it to the
+first / last currently loaded row. Press `c` to enter a value for all selected
+cells, then `Ctrl+s` or **Save** to apply it. `Esc` or **Cancel** discards the edit
+and exits selection mode. Batch edits require a primary key and cannot change
+primary key columns; a failed update rolls back the batch on transactional tables.
+`V` continues to select whole rows for copying or deleting.
 
 ## Install
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/kopecmaciej/vi-sql/internal/database"
 	sqlpkg "github.com/kopecmaciej/vi-sql/internal/sql"
@@ -481,6 +482,30 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 }
 
 func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.PrimaryKey, original, updated database.Row) error {
+	return d.updateRow(ctx, schema, table, pk, original, updated, d.client.Pool.Exec)
+}
+
+func (d *Dao) UpdateRows(ctx context.Context, schema, table string, updates []database.RowUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	tx, err := d.client.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	for i, update := range updates {
+		if len(update.PrimaryKey.Columns) == 0 {
+			return fmt.Errorf("row %d has no primary key", i+1)
+		}
+		if err := d.updateRow(ctx, schema, table, update.PrimaryKey, update.Original, update.Updated, tx.Exec); err != nil {
+			return fmt.Errorf("row %d: %w", i+1, err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (d *Dao) updateRow(ctx context.Context, schema, table string, pk database.PrimaryKey, original, updated database.Row, exec func(context.Context, string, ...any) (pgconn.CommandTag, error)) error {
 	log.Info().Str("schema", schema).Str("table", table).Interface("pk", pk.Columns).Msg("Updating row")
 	setClauses := []string{}
 	args := []any{}
@@ -518,7 +543,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		fqTable, strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
 
-	result, err := d.client.Pool.Exec(ctx, query, args...)
+	result, err := exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update row: %w", err)
 	}

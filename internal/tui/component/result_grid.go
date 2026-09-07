@@ -22,6 +22,10 @@ type ResultGrid struct {
 	app                *core.App
 	hiddenCols         []string
 	searchHighlightHex string
+	cellSelection      bool
+	selectionAnchor    SearchMatch
+	selectionStyle     tcell.Style
+	onSelectionCleared func()
 }
 
 type SearchMatch struct {
@@ -58,7 +62,89 @@ func (g *ResultGrid) SetStyle(styles *config.Styles, dataStyle *config.DataStyle
 	g.SetMultiSelectedStyle(tcell.StyleDefault.
 		Background(dataStyle.MultiSelectedRowColor.Color()).
 		Foreground(tcell.ColorWhite))
+	g.selectionStyle = tcell.StyleDefault.Background(dataStyle.MultiSelectedRowColor.Color()).Foreground(tcell.ColorWhite)
 	g.searchHighlightHex = dataStyle.SearchHighlightColor.String()
+}
+
+// ToggleCellSelection anchors a rectangular selection at the current cell.
+func (g *ResultGrid) ToggleCellSelection() {
+	if g.cellSelection {
+		g.ClearSelection()
+		return
+	}
+	row, col := g.GetSelection()
+	if row < 1 || row >= g.GetRowCount() || col < 1 || col >= g.GetColumnCount() {
+		return
+	}
+	g.ClearSelection()
+	g.cellSelection = true
+	g.selectionAnchor = SearchMatch{Row: row, Col: col}
+}
+
+func (g *ResultGrid) ClearSelection() {
+	g.cellSelection = false
+	g.Table.ClearSelection()
+	if g.onSelectionCleared != nil {
+		g.onSelectionCleared()
+	}
+}
+
+// CancelCellSelection lets Escape exit selection even during a pending key sequence.
+func (g *ResultGrid) CancelCellSelection() bool {
+	if !g.cellSelection {
+		return false
+	}
+	g.ClearSelection()
+	if g.app != nil {
+		g.app.GetKeys().Reset()
+	}
+	return true
+}
+
+func (g *ResultGrid) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {
+	input := g.Table.InputHandler()
+	return func(event *tcell.EventKey, setFocus func(tview.Primitive)) {
+		if event.Key() == tcell.KeyEsc && g.CancelCellSelection() {
+			return
+		}
+		input(event, setFocus)
+	}
+}
+
+// SelectedCells excludes the header and row-number column.
+func (g *ResultGrid) SelectedCells() []SearchMatch {
+	if !g.cellSelection {
+		return nil
+	}
+	row, col := g.GetSelection()
+	var cells []SearchMatch
+	for r := max(1, min(row, g.selectionAnchor.Row)); r <= min(g.GetRowCount()-1, max(row, g.selectionAnchor.Row)); r++ {
+		for c := max(1, min(col, g.selectionAnchor.Col)); c <= min(g.GetColumnCount()-1, max(col, g.selectionAnchor.Col)); c++ {
+			cells = append(cells, SearchMatch{Row: r, Col: c})
+		}
+	}
+	return cells
+}
+
+// Draw highlights the range without changing the underlying cells' styles.
+func (g *ResultGrid) Draw(screen tcell.Screen) {
+	type savedCell struct {
+		cell        *tview.TableCell
+		style       tcell.Style
+		transparent bool
+	}
+	var saved []savedCell
+	for _, pos := range g.SelectedCells() {
+		cell := g.GetCell(pos.Row, pos.Col)
+		saved = append(saved, savedCell{cell, cell.Style, cell.Transparent})
+		cell.SetStyle(g.selectionStyle)
+		cell.SetTransparency(false)
+	}
+	g.Table.Draw(screen)
+	for _, old := range saved {
+		old.cell.SetStyle(old.style)
+		old.cell.SetTransparency(old.transparent)
+	}
 }
 
 // ColumnName returns the column name stored in the header-cell reference for col.

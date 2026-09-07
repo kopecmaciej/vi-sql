@@ -188,6 +188,8 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Runes:       []string{"V"},
 			Description: "Start select",
 		},
+		SelectCells:     Key{Runes: []string{"v"}, Description: "Select cells"},
+		ChangeSelection: Key{Runes: []string{"c"}, Description: "Change selected cells"},
 		ClearSelection: Key{
 			Keys:        []string{"Esc"},
 			Description: "Clear selection",

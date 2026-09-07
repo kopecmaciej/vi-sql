@@ -337,6 +337,16 @@ func (d *Dao) InsertRow(ctx context.Context, schema, table string, row database.
 }
 
 func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.PrimaryKey, original, updated database.Row) error {
+	return d.updateRow(ctx, schema, table, pk, original, updated, d.client.DB.ExecContext)
+}
+
+func (d *Dao) UpdateRows(ctx context.Context, schema, table string, updates []database.RowUpdate) error {
+	return database.UpdateRowsTx(ctx, d.client.DB, updates, func(exec database.SQLExec, update database.RowUpdate) error {
+		return d.updateRow(ctx, schema, table, update.PrimaryKey, update.Original, update.Updated, exec)
+	})
+}
+
+func (d *Dao) updateRow(ctx context.Context, schema, table string, pk database.PrimaryKey, original, updated database.Row, exec database.SQLExec) error {
 	log.Info().Str("table", table).Interface("pk", pk.Columns).Msg("Updating row")
 	setClauses := []string{}
 	args := []any{}
@@ -370,7 +380,7 @@ func (d *Dao) UpdateRow(ctx context.Context, schema, table string, pk database.P
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s",
 		quote.Ident(table), strings.Join(setClauses, ", "), strings.Join(whereParts, " AND "))
 
-	result, err := d.client.DB.ExecContext(ctx, query, args...)
+	result, err := exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update row: %w", err)
 	}

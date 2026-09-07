@@ -202,3 +202,8 @@ func (m *MockDriver) GetTableColumnNames(ctx context.Context, schema, table stri
 	}
 	return args.Get(0).([]string), args.Error(1)
 }
+
+func (m *MockDriver) UpdateRows(ctx context.Context, schema, table string, updates []database.RowUpdate) error {
+	args := m.Called(ctx, schema, table, updates)
+	return args.Error(0)
+}

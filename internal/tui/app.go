@@ -132,7 +132,7 @@ func (a *App) startWatchdog() {
 func (a *App) setKeybindings() {
 	k := a.GetKeys()
 	k.SequencesDisabled = a.isTextInputFocused
-	a.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+	input := k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyRune && a.isTextInputFocused() {
 			return event
 		}
@@ -161,7 +161,16 @@ func (a *App) setKeybindings() {
 			return nil
 		}
 		return event
-	}))
+	})
+	a.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// Cancel the grid range before the sequence handler consumes Escape.
+		if event.Key() == tcell.KeyEsc {
+			if grid, ok := a.GetFocus().(*component.ResultGrid); ok && grid.CancelCellSelection() {
+				return nil
+			}
+		}
+		return input(event)
+	})
 }
 
 func (a *App) handleEvents() {

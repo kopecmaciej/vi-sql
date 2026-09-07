@@ -1,10 +1,12 @@
 package modal
 
 import (
+	"fmt"
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
+	"strings"
 )
 
 const InlineEditModalId = "InlineEditModal"
@@ -74,10 +76,18 @@ func (iem *InlineEditModal) setKeybindings() {
 	})
 	iem.Form.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch {
+		case k.Match(k.Common.Close, event):
+			if iem.cancelCallback != nil {
+				iem.cancelCallback()
+			}
+			return nil
 		case k.Match(k.Common.Confirm, event):
 			iem.handleApply()
 			return nil
 		case event.Key() == tcell.KeyEnter:
+			if _, button := iem.Form.GetFocusedItemIndex(); button >= 0 {
+				return event
+			}
 			// Enter confirms on single-line InputField; TextArea needs Confirm key.
 			if item := iem.Form.GetFormItem(0); item != nil {
 				if _, ok := item.(*tview.InputField); ok {
@@ -136,13 +146,14 @@ func (iem *InlineEditModal) handleApply() {
 // then shows the modal. Short values use an InputField; longer ones a TextArea.
 func (iem *InlineEditModal) Render(fieldName, currentValue string) {
 	iem.Form.Clear(true)
+	iem.Form.SetTitle(" Inline Edit ")
 	iem.fieldName = fieldName
 
 	styles := iem.App.GetStyles()
 	fieldBg := styles.Global.ContrastBackgroundColor.Color()
 	fieldFg := styles.Global.TextColor.Color()
 
-	if len(currentValue) > 100 {
+	if len(currentValue) > 100 || strings.Contains(currentValue, "\n") {
 		ta := tview.NewTextArea().
 			SetText(currentValue, true).
 			SetWrap(true).
@@ -161,6 +172,24 @@ func (iem *InlineEditModal) Render(fieldName, currentValue string) {
 
 	iem.Form.ApplyClipboard()
 	iem.Show()
+}
+
+// RenderBatch uses the same value editor with explicit save/cancel controls.
+func (iem *InlineEditModal) RenderBatch(cellCount int, currentValue string) {
+	iem.Render("", currentValue)
+	iem.Form.SetTitle(fmt.Sprintf(" Change %d cells — Ctrl+s: save · Esc: cancel ", cellCount))
+	switch item := iem.Form.GetFormItem(0).(type) {
+	case *tview.InputField:
+		item.SetLabel("New value (all selected cells)")
+	case *tview.TextArea:
+		item.SetLabel("New value (all selected cells)")
+	}
+	iem.Form.AddButton("Save", iem.handleApply)
+	iem.Form.AddButton("Cancel", func() {
+		if iem.cancelCallback != nil {
+			iem.cancelCallback()
+		}
+	})
 }
 
 func (iem *InlineEditModal) Show() {

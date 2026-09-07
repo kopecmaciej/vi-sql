@@ -60,30 +60,31 @@ type Data struct {
 	*core.BaseElement
 	*core.Flex
 
-	mode           TabMode
-	tableFlex      *core.Flex
-	resultsBar     *widget.ResultsBar
-	resultGrid     *ResultGrid
-	style          *config.DataStyle
-	filterBar      *InputBar
-	orderBar       *InputBar
-	termEditor     *TermEditor
-	sqlQueryEditor *SQLQueryEditor
-	editorSize     int
-	inlineEdit     *modal.InlineEditModal
-	confirmModal   *modal.Confirm
-	exportModal    *modal.ExportModal
-	sqlEditModal   *SQLEditModal
-	peeker         *Peeker
-	explainViewer  *ExplainViewer
-	columns        []database.ColumnInfo
-	foreignKeys    []database.ForeignKeyInfo
-	state          *database.TableState
-	stateMap       *database.StateMap
-	lastExecTime   time.Duration
-	runner         *QueryRunner
-	scroll         *scrollFetcher
-	search         searchState
+	mode                TabMode
+	tableFlex           *core.Flex
+	resultsBar          *widget.ResultsBar
+	resultGrid          *ResultGrid
+	style               *config.DataStyle
+	filterBar           *InputBar
+	orderBar            *InputBar
+	termEditor          *TermEditor
+	sqlQueryEditor      *SQLQueryEditor
+	editorSize          int
+	inlineEdit          *modal.InlineEditModal
+	confirmModal        *modal.Confirm
+	exportModal         *modal.ExportModal
+	sqlEditModal        *SQLEditModal
+	peeker              *Peeker
+	explainViewer       *ExplainViewer
+	columns             []database.ColumnInfo
+	foreignKeys         []database.ForeignKeyInfo
+	state               *database.TableState
+	stateMap            *database.StateMap
+	lastExecTime        time.Duration
+	runner              *QueryRunner
+	scroll              *scrollFetcher
+	search              searchState
+	selectionPendingTop bool
 }
 
 func newData(mode TabMode) *Data {
@@ -112,6 +113,10 @@ func newData(mode TabMode) *Data {
 	}
 
 	c.SetIdentifier(id)
+	c.resultGrid.onSelectionCleared = func() {
+		c.selectionPendingTop = false
+		c.updateSelectionTitle()
+	}
 	if mode == QueryMode {
 		c.resultGrid.SetIdentifier(id + ResultsSuffix)
 	} else {
@@ -327,6 +332,16 @@ func (c *Data) setKeybindings(ctx context.Context) {
 
 	c.resultGrid.SetInputCapture(k.WrapInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		row, col := c.resultGrid.GetSelection()
+		if c.mode == TableMode {
+			if k.Match(k.Data.SelectCells, event) {
+				c.resultGrid.ToggleCellSelection()
+				c.updateSelectionTitle()
+				return nil
+			}
+			if c.resultGrid.cellSelection {
+				return c.handleCellSelection(ctx, event)
+			}
+		}
 		switch {
 		case k.Match(k.Navigation.GoTop, event):
 			if c.resultGrid.GetRowCount() > 1 {
@@ -376,6 +391,10 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			c.resultGrid.ToggleVisualMode()
 			return nil
 		case k.Match(k.Data.ClearSelection, event):
+			if c.resultGrid.IsVisualMode() {
+				c.resultGrid.ClearSelection()
+				return nil
+			}
 			if c.runner.IsQueryRunning() {
 				c.runner.CancelQuery()
 				return nil

@@ -103,25 +103,27 @@ type (
 	}
 
 	DataKeys struct {
-		PeekRow            Key `yaml:"peekRow"`
-		FullPagePeek       Key `yaml:"fullPagePeek"`
-		EditRow            Key `yaml:"editRow"`
-		DuplicateRow       Key `yaml:"duplicateRow"`
-		CopyCell           Key `yaml:"copyCell"`
-		CopyRow            Key `yaml:"copyRow"`
-		CopyRowJSON        Key `yaml:"copyRowJSON"`
-		CopyRowCSV         Key `yaml:"copyRowCSV"`
-		ToggleOrderBar     Key `yaml:"toggleOrderBar"`
-		OrderByColumn      Key `yaml:"orderByColumn"`
-		HideColumn         Key `yaml:"hideColumn"`
-		ResetHiddenColumns Key `yaml:"resetHiddenColumns"`
-		MultipleSelect     Key `yaml:"multipleSelect"`
-		ClearSelection     Key `yaml:"clearSelection"`
-		ExplainQuery       Key `yaml:"explainQuery"`
-		ExportData         Key `yaml:"exportData"`
-		FollowForeignKey     Key `yaml:"followForeignKey"`
-		FindReferences       Key `yaml:"findReferences"`
-		SearchWithinResults  Key `yaml:"searchWithinResults"`
+		PeekRow             Key `yaml:"peekRow"`
+		FullPagePeek        Key `yaml:"fullPagePeek"`
+		EditRow             Key `yaml:"editRow"`
+		DuplicateRow        Key `yaml:"duplicateRow"`
+		CopyCell            Key `yaml:"copyCell"`
+		CopyRow             Key `yaml:"copyRow"`
+		CopyRowJSON         Key `yaml:"copyRowJSON"`
+		CopyRowCSV          Key `yaml:"copyRowCSV"`
+		ToggleOrderBar      Key `yaml:"toggleOrderBar"`
+		OrderByColumn       Key `yaml:"orderByColumn"`
+		HideColumn          Key `yaml:"hideColumn"`
+		ResetHiddenColumns  Key `yaml:"resetHiddenColumns"`
+		MultipleSelect      Key `yaml:"multipleSelect"`
+		SelectCells         Key `yaml:"selectCells"`
+		ChangeSelection     Key `yaml:"changeSelection"`
+		ClearSelection      Key `yaml:"clearSelection"`
+		ExplainQuery        Key `yaml:"explainQuery"`
+		ExportData          Key `yaml:"exportData"`
+		FollowForeignKey    Key `yaml:"followForeignKey"`
+		FindReferences      Key `yaml:"findReferences"`
+		SearchWithinResults Key `yaml:"searchWithinResults"`
 		SearchNextMatch     Key `yaml:"searchNextMatch"`
 		SearchPrevMatch     Key `yaml:"searchPrevMatch"`
 	}
@@ -165,7 +167,7 @@ type (
 func (kb *KeyBindings) DataKeysSplit() (queryMode, tableOnly []Key) {
 	d := kb.Data
 	queryMode = []Key{d.PeekRow, d.FullPagePeek, d.CopyCell, d.CopyRow, d.CopyRowJSON, d.CopyRowCSV, d.MultipleSelect, d.ClearSelection, d.ExplainQuery, d.ExportData, d.SearchWithinResults, d.SearchNextMatch, d.SearchPrevMatch}
-	tableOnly = []Key{d.EditRow, d.DuplicateRow, d.ToggleOrderBar, d.OrderByColumn, d.HideColumn, d.ResetHiddenColumns, d.FollowForeignKey, d.FindReferences}
+	tableOnly = []Key{d.EditRow, d.DuplicateRow, d.SelectCells, d.ChangeSelection, d.ToggleOrderBar, d.OrderByColumn, d.HideColumn, d.ResetHiddenColumns, d.FollowForeignKey, d.FindReferences}
 	return
 }
 

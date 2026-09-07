@@ -78,6 +78,9 @@ var appHints = []func(k *config.KeyBindings) string{
 		return fmt.Sprintf("Use [::b]%s[-:-:-] to select multiple rows, then delete them in bulk.", k.Data.MultipleSelect.String())
 	},
 	func(k *config.KeyBindings) string {
+		return fmt.Sprintf("Use [::b]%s[-:-:-] to select cells, move with h/j/k/l, then [::b]%s[-:-:-] to batch edit. Esc cancels.", k.Data.SelectCells.String(), k.Data.ChangeSelection.String())
+	},
+	func(k *config.KeyBindings) string {
 		return fmt.Sprintf("[::b]%s[-:-:-] exports the current result set to CSV, JSON, or SQL INSERT statements.", k.Data.ExportData.String())
 	},
 	func(k *config.KeyBindings) string {

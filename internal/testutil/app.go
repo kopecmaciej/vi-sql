@@ -3,6 +3,7 @@ package testutil
 import (
 	"testing"
 
+	"github.com/adrg/xdg"
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/tui/core"
@@ -15,6 +16,7 @@ import (
 func NewTestApp(t *testing.T) (*core.App, tcell.SimulationScreen) {
 	t.Helper()
 	tmpDir := t.TempDir()
+	t.Cleanup(xdg.Reload)
 
 	// Redirect XDG BEFORE calling core.NewApp, which calls config.LoadKeybindings().
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
@@ -23,6 +25,7 @@ func NewTestApp(t *testing.T) (*core.App, tcell.SimulationScreen) {
 	t.Setenv("XDG_STATE_HOME", tmpDir)
 	// HOME fallback for systems that ignore XDG.
 	t.Setenv("HOME", tmpDir)
+	xdg.Reload()
 
 	cfg := &config.Config{
 		ConfigPath: tmpDir + "/config.yaml",
