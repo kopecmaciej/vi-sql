@@ -113,9 +113,18 @@ func newData(mode TabMode) *Data {
 	}
 
 	c.SetIdentifier(id)
-	c.resultGrid.onSelectionCleared = func() {
+	c.resultGrid.onSelectionChanged = func(active bool) {
 		c.selectionPendingTop = false
 		c.updateSelectionTitle()
+		var keys []config.Key
+		if active {
+			if c.resultGrid.cellSelection {
+				keys = c.App.GetKeys().DataKeysForCellSelection()
+			} else {
+				keys = c.App.GetKeys().DataKeysForRowSelection()
+			}
+		}
+		c.setFooterKeyOverride(active, keys)
 	}
 	if mode == QueryMode {
 		c.resultGrid.SetIdentifier(id + ResultsSuffix)

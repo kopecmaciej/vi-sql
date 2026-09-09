@@ -66,3 +66,51 @@ func TestResultGrid_Render_BracketValuesVisible(t *testing.T) {
 		})
 	}
 }
+
+func TestResultGrid_ToggleCellSelection_ClearSelectionFiresOnlyWhileActive(t *testing.T) {
+	app, _ := testutil.NewTestApp(t)
+	g := NewResultGrid()
+	g.SetApp(app)
+	g.SetRect(0, 0, 120, 40)
+
+	rows := []database.Row{{"id": "1"}}
+	cols := []database.ColumnInfo{{Name: "id", DataType: "int"}}
+	g.Render(rows, cols, app.GetStyles(), "")
+
+	var states []bool
+	g.onSelectionChanged = func(active bool) { states = append(states, active) }
+
+	g.ClearSelection()
+	assert.Empty(t, states, "ClearSelection while already inactive must not fire the callback")
+
+	g.ToggleCellSelection()
+	assert.Equal(t, []bool{true}, states)
+	assert.True(t, g.cellSelection)
+
+	g.ClearSelection()
+	assert.Equal(t, []bool{true, false}, states)
+	assert.False(t, g.cellSelection)
+}
+
+func TestResultGrid_ToggleVisualMode_DirectClearSelectionAlsoFiresOnSelectionChanged(t *testing.T) {
+	app, _ := testutil.NewTestApp(t)
+	g := NewResultGrid()
+	g.SetApp(app)
+	g.SetRect(0, 0, 120, 40)
+
+	rows := []database.Row{{"id": "1"}}
+	cols := []database.ColumnInfo{{Name: "id", DataType: "int"}}
+	g.Render(rows, cols, app.GetStyles(), "")
+
+	var states []bool
+	g.onSelectionChanged = func(active bool) { states = append(states, active) }
+
+	g.ToggleVisualMode()
+	assert.Equal(t, []bool{true}, states)
+	assert.True(t, g.IsVisualMode())
+
+	g.ClearSelection()
+	assert.Equal(t, []bool{true, false}, states,
+		"a plain ClearSelection (e.g. a refresh mid-selection), not just ToggleVisualMode, must also fire the callback")
+	assert.False(t, g.IsVisualMode())
+}

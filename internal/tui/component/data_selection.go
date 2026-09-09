@@ -7,7 +7,9 @@ import (
 	"slices"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/kopecmaciej/vi-sql/internal/config"
 	"github.com/kopecmaciej/vi-sql/internal/database"
+	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/tui/modal"
 )
 
@@ -17,6 +19,15 @@ func (c *Data) updateSelectionTitle() {
 	} else if c.mode == TableMode {
 		c.tableFlex.SetTitle(" Table ")
 	}
+}
+
+// setFooterKeyOverride narrows the footer to keys, or restores the normal
+// focus-based keyset when active is false.
+func (c *Data) setFooterKeyOverride(active bool, keys []config.Key) {
+	if !active {
+		keys = nil
+	}
+	c.App.GetManager().Broadcast(manager.NewFooterKeyOverrideMsg(active, keys))
 }
 
 func (c *Data) handleCellSelection(ctx context.Context, event *tcell.EventKey) *tcell.EventKey {

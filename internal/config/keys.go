@@ -187,6 +187,16 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	}
 }
 
+func (kb *KeyBindings) DataKeysForCellSelection() []Key {
+	d := kb.Data
+	return []Key{d.ChangeSelection, d.ClearSelection}
+}
+
+func (kb *KeyBindings) DataKeysForRowSelection() []Key {
+	d := kb.Data
+	return []Key{d.CopyRow, d.CopyRowJSON, d.CopyRowCSV, d.ExportData, kb.Common.Delete, d.ClearSelection}
+}
+
 func (kb *KeyBindings) ReloadKeybidings(newKeys *KeyBindings) {
 	onPendingChanged := kb.OnPendingChanged
 	sequencesDisabled := kb.SequencesDisabled

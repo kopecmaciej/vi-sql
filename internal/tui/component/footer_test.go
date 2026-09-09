@@ -10,49 +10,41 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// footerSubscribeDelay covers Footer.handleEvents subscribing on its own
+// goroutine: without waiting, a broadcast sent before Subscribe registers has
+// nowhere to land and is silently dropped.
+const footerSubscribeDelay = 10 * time.Millisecond
+
 func TestFooter_Toggle_CollapsedAndExpanded(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 
 	footer := NewFooter()
 	require.NoError(t, footer.Init(app))
-
-	// Set a focus so keys are available.
 	footer.currentFocus = SchemaTreeId
 
-	// Toggle to expanded.
 	footer.Toggle()
 	assert.True(t, footer.expanded, "should be expanded after first toggle")
 
-	// Toggle back to collapsed → returns 2.
 	h := footer.Toggle()
 	assert.Equal(t, 2, h)
 	assert.False(t, footer.expanded)
 }
 
-// TestFooter_Render_ShowsSchemaKeys validates that after setting currentFocus to
-// SchemaTreeId, Render() populates the table with schema keybinding descriptions.
-// We call Render() directly (synchronous, no goroutine) to avoid the
-// event-goroutine / ForceDraw data race.
 func TestFooter_Render_ShowsSchemaKeys(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 
 	footer := NewFooter()
 	require.NoError(t, footer.Init(app))
-
-	// Set focus directly to avoid going through the event goroutine.
 	footer.currentFocus = SchemaTreeId
 	footer.Render()
 
 	app.SetRoot(footer, true)
 	testutil.DrawAndSync(app, sim)
 
-	// Default schema keybindings include "Expand all".
 	assert.True(t, testutil.ScreenContains(sim, "Expand all"),
 		"screen should show schema keybindings\nscreen:\n%v", testutil.ScreenFull(sim))
 }
 
-// TestFooter_Render_EmptyFocus validates that without a focus set, Render is a no-op
-// and the screen shows no keybinding text.
 func TestFooter_Render_EmptyFocus(t *testing.T) {
 	app, sim := testutil.NewTestApp(t)
 
@@ -63,13 +55,10 @@ func TestFooter_Render_EmptyFocus(t *testing.T) {
 	app.SetRoot(footer, true)
 	testutil.DrawAndSync(app, sim)
 
-	// No keys should appear when focus is empty.
 	assert.False(t, testutil.ScreenContains(sim, "Filter bar"))
 }
 
-// TestFooter_UpdateKeys_ResultsSuffix verifies that a focus ID ending in "-results"
-// returns the read-only query-mode keys rather than the full Data keyset.
-func TestFooter_UpdateKeys_ResultsSuffix(t *testing.T) {
+func TestFooter_UpdateKeys_ResultsSuffixIsSubsetOfFullDataKeys(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
 	require.NoError(t, footer.Init(app))
@@ -79,7 +68,6 @@ func TestFooter_UpdateKeys_ResultsSuffix(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, keys, "should return keys for -results focus")
 
-	// The same call with full Data focus should return a different (superset) keyset.
 	footer.currentFocus = DataId
 	fullKeys, err := footer.UpdateKeys()
 	require.NoError(t, err)
@@ -88,8 +76,6 @@ func TestFooter_UpdateKeys_ResultsSuffix(t *testing.T) {
 		"query-mode keys should be a subset of full Data keys")
 }
 
-// TestFooter_UpdateKeys_FilterSuffix verifies that dynamic filter/sort IDs
-// (e.g. "QueryTab-1-filter") are remapped to InputBar keys.
 func TestFooter_UpdateKeys_FilterSuffix(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
@@ -106,9 +92,7 @@ func TestFooter_UpdateKeys_FilterSuffix(t *testing.T) {
 	assert.NotNil(t, keys, "should return InputBar keys for -sort focus")
 }
 
-// TestFooter_UpdateKeys_QueryTabPrefix verifies that a "QueryTab-N" focus is
-// remapped to full Data keys.
-func TestFooter_UpdateKeys_QueryTabPrefix(t *testing.T) {
+func TestFooter_UpdateKeys_QueryTabPrefixMatchesDataFocus(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
 	require.NoError(t, footer.Init(app))
@@ -118,7 +102,6 @@ func TestFooter_UpdateKeys_QueryTabPrefix(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, keys)
 
-	// Should return the same keys as a direct Data focus.
 	footer.currentFocus = DataId
 	dataKeys, err := footer.UpdateKeys()
 	require.NoError(t, err)
@@ -127,7 +110,43 @@ func TestFooter_UpdateKeys_QueryTabPrefix(t *testing.T) {
 		"QueryTab- prefix should resolve to the same keys as Data")
 }
 
-// TestFooter_UpdateKeys_EmptyFocus verifies that an empty focus returns nil keys.
+func TestFooter_UpdateKeys_KeyOverrideTakesPriorityOverFocus(t *testing.T) {
+	app, _ := testutil.NewTestApp(t)
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = DataId
+
+	fullKeys, err := footer.UpdateKeys()
+	require.NoError(t, err)
+
+	overrideKeys := app.GetKeys().DataKeysForCellSelection()
+	footer.keyOverrideActive = true
+	footer.keyOverrideKeys = overrideKeys
+	keys, err := footer.UpdateKeys()
+	require.NoError(t, err)
+
+	assert.Equal(t, overrideKeys, keys)
+	assert.Less(t, len(keys), len(fullKeys),
+		"override keys should be a strict subset of full Data keys in this case")
+}
+
+func TestFooter_FooterKeyOverride_TogglesKeyset(t *testing.T) {
+	app, _ := testutil.NewTestApp(t)
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = DataId
+	time.Sleep(footerSubscribeDelay)
+
+	overrideKeys := app.GetKeys().DataKeysForCellSelection()
+	app.GetManager().Broadcast(manager.NewFooterKeyOverrideMsg(true, overrideKeys))
+	require.Eventually(t, func() bool { return footer.keyOverrideActive },
+		200*time.Millisecond, 5*time.Millisecond)
+
+	app.GetManager().Broadcast(manager.NewFooterKeyOverrideMsg(false, nil))
+	require.Eventually(t, func() bool { return !footer.keyOverrideActive },
+		200*time.Millisecond, 5*time.Millisecond)
+}
+
 func TestFooter_UpdateKeys_EmptyFocus(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
@@ -139,8 +158,6 @@ func TestFooter_UpdateKeys_EmptyFocus(t *testing.T) {
 	assert.Nil(t, keys)
 }
 
-// TestFooter_SetOnHeightChange_CalledOnToggle verifies the onHeightChange callback
-// fires when Toggle is called.
 func TestFooter_SetOnHeightChange_CalledOnToggle(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
@@ -152,15 +169,13 @@ func TestFooter_SetOnHeightChange_CalledOnToggle(t *testing.T) {
 
 	footer.Toggle()
 	footer.Toggle()
-	// onHeightChange is not called by Toggle directly — it is called by the
-	// FocusChanged handler when the footer is already expanded. Verify it is
-	// wired and callable without panicking.
+	// Toggle itself never calls onHeightChange; only the FocusChanged handler
+	// does, when the footer is already expanded. Call it directly to verify
+	// it's wired and doesn't panic.
 	footer.onHeightChange()
 	assert.Equal(t, 1, called)
 }
 
-// TestFooter_StyleChanged_DoesNotPanic validates the StyleChanged event handler runs
-// without panicking.
 func TestFooter_StyleChanged_DoesNotPanic(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/kopecmaciej/tview"
+	"github.com/kopecmaciej/vi-sql/internal/config"
 )
 
 // Message type constants. No direct use when broadcasting, instead use below constructors
@@ -19,6 +20,7 @@ const (
 	OpenTableTab           MessageType = "open_table_tab"
 	QueryExecuted          MessageType = "query_executed"
 	SequencePendingChanged MessageType = "sequence_pending_changed"
+	FooterKeyOverride      MessageType = "footer_key_override"
 )
 
 // OpenQueryTabRequest is broadcast by the MCP open_query_in_tab tool.
@@ -51,6 +53,14 @@ type QueryResult struct {
 	RowCount   int              `json:"row_count"`
 	Affected   int64            `json:"affected_rows,omitempty"`
 	ExecutedAt *time.Time       `json:"executed_at,omitempty"`
+}
+
+// FooterKeysOverride asks footer to show given keyset instead of deriving it
+// from focus. Used by transient sub-modes (e.g. cell selection) Active false
+// clears the override, restoring the normal focus-based keyset.
+type FooterKeysOverride struct {
+	Active bool
+	Keys   []config.Key
 }
 
 func NewFocusChangedMsg(id tview.Identifier) EventMsg {
@@ -96,4 +106,8 @@ func NewQueryExecutedMsg(result QueryResult) EventMsg {
 // NewSequencePendingChangedMsg broadcasts the current sequence prefix ("" = cleared).
 func NewSequencePendingChangedMsg(s string) EventMsg {
 	return EventMsg{Message: Message{Type: SequencePendingChanged, Data: s}}
+}
+
+func NewFooterKeyOverrideMsg(active bool, keys []config.Key) EventMsg {
+	return EventMsg{Message: Message{Type: FooterKeyOverride, Data: FooterKeysOverride{Active: active, Keys: keys}}}
 }

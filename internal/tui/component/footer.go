@@ -26,13 +26,15 @@ type (
 		*core.BaseElement
 		*core.Table
 
-		keys            []config.Key
-		currentFocus    tview.Identifier
-		expanded        bool
-		centered        bool
-		pinnedKeys      []config.Key
-		sequencePending string
-		onHeightChange  func()
+		keys              []config.Key
+		currentFocus      tview.Identifier
+		expanded          bool
+		centered          bool
+		pinnedKeys        []config.Key
+		sequencePending   string
+		keyOverrideActive bool
+		keyOverrideKeys   []config.Key
+		onHeightChange    func()
 	}
 )
 
@@ -245,6 +247,11 @@ func (f *Footer) handleEvents() {
 		case manager.SequencePendingChanged:
 			f.sequencePending = event.Message.Data.(string)
 			go f.App.QueueUpdateDraw(f.Render)
+		case manager.FooterKeyOverride:
+			override := event.Message.Data.(manager.FooterKeysOverride)
+			f.keyOverrideActive = override.Active
+			f.keyOverrideKeys = override.Keys
+			go f.App.QueueUpdateDraw(f.Render)
 		case manager.ConfigChanged:
 			go f.App.QueueUpdateDraw(f.Render)
 		}
@@ -309,6 +316,12 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 			return f.keys, nil
 		}
 		return nil, nil
+	}
+
+	// keyOverride action takes priority over focus-based keyset
+	if f.keyOverrideActive {
+		f.keys = f.keyOverrideKeys
+		return f.keyOverrideKeys, nil
 	}
 
 	focus := string(f.currentFocus)

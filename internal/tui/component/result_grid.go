@@ -25,7 +25,7 @@ type ResultGrid struct {
 	cellSelection      bool
 	selectionAnchor    SearchMatch
 	selectionStyle     tcell.Style
-	onSelectionCleared func()
+	onSelectionChanged func(active bool)
 }
 
 type SearchMatch struct {
@@ -79,13 +79,26 @@ func (g *ResultGrid) ToggleCellSelection() {
 	g.ClearSelection()
 	g.cellSelection = true
 	g.selectionAnchor = SearchMatch{Row: row, Col: col}
+	if g.onSelectionChanged != nil {
+		g.onSelectionChanged(true)
+	}
 }
 
 func (g *ResultGrid) ClearSelection() {
+	wasActive := g.cellSelection || g.Table.IsVisualMode()
 	g.cellSelection = false
 	g.Table.ClearSelection()
-	if g.onSelectionCleared != nil {
-		g.onSelectionCleared()
+	if wasActive && g.onSelectionChanged != nil {
+		g.onSelectionChanged(false)
+	}
+}
+
+// ToggleVisualMode shadows tview's row-visual selection so entering/exiting
+// it notifies onSelectionChanged
+func (g *ResultGrid) ToggleVisualMode() {
+	g.Table.ToggleVisualMode()
+	if g.onSelectionChanged != nil {
+		g.onSelectionChanged(g.Table.IsVisualMode())
 	}
 }
 
