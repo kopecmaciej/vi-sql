@@ -160,11 +160,15 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 		k.Main.OpenActions = Key{Runes: []string{":"}, Description: "Actions"}
 		k.Main.GoToTable = Key{Sequences: []string{"gt"}, Description: "Go to table"}
 		k.Main.GoToView = Key{Sequences: []string{"gv"}, Description: "Go to view"}
+		k.Main.OpenStructure = Key{Sequences: []string{"gS"}, Description: "Open structure"}
+		k.Main.OpenIndexes = Key{Sequences: []string{"gI"}, Description: "Open indexes"}
 	} else {
 		k.Main.FocusSchemaTree = Key{Keys: []string{"Ctrl+/"}, Description: "Focus schemas"}
 		k.Main.OpenActions = Key{Keys: []string{"Ctrl+Space"}, Description: "Actions"}
 		k.Main.GoToTable = Key{Keys: []string{"Ctrl+g"}, Description: "Go to table"}
 		k.Main.GoToView = Key{Keys: []string{"Alt+v"}, Description: "Go to view"}
+		k.Main.OpenStructure = Key{Keys: []string{"Alt+S"}, Description: "Open structure"}
+		k.Main.OpenIndexes = Key{Keys: []string{"Alt+I"}, Description: "Open indexes"}
 	}
 	k.Data = DataKeys{
 		PeekRow: Key{
@@ -302,6 +306,11 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Runes:       []string{"p"},
 			Description: "Toggle DDL",
 		},
+	}
+	if vimMode {
+		k.Structure.CopyColumnName = Key{Sequences: []string{"yc"}, Description: "Copy column name"}
+	} else {
+		k.Structure.CopyColumnName = Key{Runes: []string{"C"}, Description: "Copy column name"}
 	}
 
 	k.SQLQueryEditor = SQLQueryEditorKeys{

@@ -91,6 +91,8 @@ type (
 		ImportData      Key `yaml:"importData"`
 		GoToTable       Key `yaml:"goToTable"`
 		GoToView        Key `yaml:"goToView"`
+		OpenStructure   Key `yaml:"openStructure"`
+		OpenIndexes     Key `yaml:"openIndexes"`
 	}
 
 	SchemaKeys struct {
@@ -150,8 +152,9 @@ type (
 	}
 
 	StructureKeys struct {
-		RenameColumn  Key `yaml:"renameColumn"`
-		ToggleDDLPane Key `yaml:"toggleDDLPane"`
+		RenameColumn   Key `yaml:"renameColumn"`
+		ToggleDDLPane  Key `yaml:"toggleDDLPane"`
+		CopyColumnName Key `yaml:"copyColumnName"`
 	}
 
 	SQLQueryEditorKeys struct {
