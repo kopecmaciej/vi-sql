@@ -190,6 +190,11 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 	}
 }
 
+// SQLQueryEditorKeysForReadOnly returns the keys available in a read-only SQL editor
+func (kb *KeyBindings) SQLQueryEditorKeysForReadOnly() []Key {
+	return []Key{kb.Common.Copy, kb.Structure.ToggleDDLPane}
+}
+
 func (kb *KeyBindings) DataKeysForCellSelection() []Key {
 	d := kb.Data
 	return []Key{d.ChangeSelection, d.ClearSelection}

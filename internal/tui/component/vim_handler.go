@@ -21,9 +21,6 @@ const (
 
 	vimOperators = "dcy"
 	vimPrefixes  = "gfFtTr"
-
-	vimNormalEditKeys = "dcrxXpPiIaAoOsSDCJu"
-	vimVisualEditKeys = "dxcpP"
 )
 
 // pending accumulates next key sequences, it's form is: [operatorCount][operator][motionCount]motion
@@ -57,19 +54,6 @@ func newVimHandler(e *SQLQueryEditor) *vimHandler {
 		mode = vimNormal
 	}
 	return &vimHandler{mode: mode, editor: e}
-}
-
-// blocksReadOnlyEdit reports whether ch would start a text mutation in a
-// read-only editor. A rune that completes a pending prefix (e.g. the target
-// of `fx`) is a motion, not an edit.
-func (v *vimHandler) blocksReadOnlyEdit(ch rune, editKeys string) bool {
-	if !v.editor.readOnly {
-		return false
-	}
-	if v.pending.prefix == 'r' || v.pending.operator == 'd' || v.pending.operator == 'c' {
-		return true
-	}
-	return v.pending.prefix == 0 && strings.ContainsRune(editKeys, ch)
 }
 
 func (v *vimHandler) notifyPending(s string) {
@@ -288,11 +272,6 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 		}
 	}
 
-	if v.blocksReadOnlyEdit(ch, vimNormalEditKeys) {
-		v.resetPending()
-		return true
-	}
-
 	// Complete a pending multi-key prefix (g-motion, f/F/t/T target, r replacement).
 	if v.pending.prefix != 0 {
 		return v.resolvePrefix(ch, setFocus)
@@ -413,6 +392,9 @@ func operatorMotion(op, ch rune, m motion, text string, pos int) motion {
 // applyOperator turns motion m's destination into a [start,end) range and runs
 // the operator over it. Adding an operator is one more case here.
 func (v *vimHandler) applyOperator(op rune, m motion, count int) {
+	if v.editor.readOnly && op != 'y' { // yank is possible in read-only
+		return
+	}
 	ta := v.editor.TextArea
 	text := ta.GetText()
 	pos := ta.GetCursorByteOffset()
@@ -507,6 +489,9 @@ func (v *vimHandler) resolvePrefix(ch rune, setFocus func(tview.Primitive)) bool
 
 	switch prefix {
 	case 'r':
+		if v.editor.readOnly {
+			break
+		}
 		after := ta.GetTextAfterCursor()
 		if len(after) > 0 && after[0] != '\n' {
 			_, oldSize := utf8.DecodeRuneInString(after)
@@ -541,6 +526,15 @@ func (v *vimHandler) resolvePrefix(ch rune, setFocus func(tview.Primitive)) bool
 // line ops). count is already defaulted to >= 1.
 func (v *vimHandler) handleCommand(ch rune, count int, setFocus func(tview.Primitive)) bool {
 	ta := v.editor.TextArea
+
+	// Read-only editors may navigate, select, and yank, but not edit.
+	if v.editor.readOnly {
+		switch ch {
+		case '{', '}', 'v', 'V', 'Y':
+		default:
+			return true
+		}
+	}
 
 	switch ch {
 	case '{':
@@ -615,9 +609,6 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		return false
 	}
 	ch := ev.Rune()
-	if v.blocksReadOnlyEdit(ch, vimVisualEditKeys) {
-		return true
-	}
 
 	// applyMotion extends the selection's active end via a table motion.
 	applyMotion := func(m motion) {
@@ -685,10 +676,16 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		v.notifyPending(v.pendingLabel())
 		return true
 	case 'd', 'x':
+		if v.editor.readOnly {
+			break
+		}
 		_, start, end := ta.GetSelection()
 		ta.Replace(start, end, "")
 		v.enterNormal()
 	case 'c':
+		if v.editor.readOnly {
+			break
+		}
 		_, start, end := ta.GetSelection()
 		ta.Replace(start, end, "")
 		v.enterInsert()
@@ -699,6 +696,9 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		v.enterNormal()
 		v.editor.BeginYankHighlight(hlStart, hlEnd)
 	case 'p', 'P':
+		if v.editor.readOnly {
+			break
+		}
 		if text := util.Paste(); text != "" {
 			_, start, end := ta.GetSelection()
 			ta.Replace(start, end, text)
@@ -718,9 +718,6 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		return false
 	}
 	ch := ev.Rune()
-	if v.blocksReadOnlyEdit(ch, vimVisualEditKeys) {
-		return true
-	}
 
 	moveAndUpdate := func(move func()) {
 		move()
@@ -767,10 +764,16 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		v.notifyPending(v.pendingLabel())
 		return true
 	case 'd', 'x':
+		if v.editor.readOnly {
+			break
+		}
 		_, start, end := ta.GetSelection()
 		ta.Replace(start, end, "")
 		v.enterNormal()
 	case 'c':
+		if v.editor.readOnly {
+			break
+		}
 		_, start, end := ta.GetSelection()
 		ta.Replace(start, end, "")
 		v.enterInsert()
@@ -781,6 +784,9 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		v.enterNormal()
 		v.editor.BeginYankHighlight(hlStart, hlEnd)
 	case 'p', 'P':
+		if v.editor.readOnly {
+			break
+		}
 		if text := util.Paste(); text != "" {
 			_, start, end := ta.GetSelection()
 			ta.Replace(start, end, text)
