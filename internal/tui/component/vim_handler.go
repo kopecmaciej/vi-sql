@@ -21,6 +21,9 @@ const (
 
 	vimOperators = "dcy"
 	vimPrefixes  = "gfFtTr"
+
+	vimNormalEditKeys = "dcrxXpPiIaAoOsSDCJu"
+	vimVisualEditKeys = "dxcpP"
 )
 
 // pending accumulates next key sequences, it's form is: [operatorCount][operator][motionCount]motion
@@ -49,7 +52,24 @@ type vimHandler struct {
 }
 
 func newVimHandler(e *SQLQueryEditor) *vimHandler {
-	return &vimHandler{mode: vimInsert, editor: e}
+	mode := vimInsert
+	if e.readOnly {
+		mode = vimNormal
+	}
+	return &vimHandler{mode: mode, editor: e}
+}
+
+// blocksReadOnlyEdit reports whether ch would start a text mutation in a
+// read-only editor. A rune that completes a pending prefix (e.g. the target
+// of `fx`) is a motion, not an edit.
+func (v *vimHandler) blocksReadOnlyEdit(ch rune, editKeys string) bool {
+	if !v.editor.readOnly {
+		return false
+	}
+	if v.pending.prefix == 'r' || v.pending.operator == 'd' || v.pending.operator == 'c' {
+		return true
+	}
+	return v.pending.prefix == 0 && strings.ContainsRune(editKeys, ch)
 }
 
 func (v *vimHandler) notifyPending(s string) {
@@ -224,6 +244,9 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 	ta := v.editor.TextArea
 
 	if ev.Key() != tcell.KeyRune {
+		if v.editor.readOnly && (ev.Key() == tcell.KeyCtrlR || ev.Key() == tcell.KeyDelete) {
+			return true
+		}
 		switch ev.Key() {
 		case tcell.KeyCtrlR:
 			ta.InputHandler()(synth(tcell.KeyCtrlY), setFocus)
@@ -263,6 +286,11 @@ func (v *vimHandler) handleNormal(ev *tcell.EventKey, setFocus func(tview.Primit
 				}
 			}
 		}
+	}
+
+	if v.blocksReadOnlyEdit(ch, vimNormalEditKeys) {
+		v.resetPending()
+		return true
 	}
 
 	// Complete a pending multi-key prefix (g-motion, f/F/t/T target, r replacement).
@@ -587,6 +615,9 @@ func (v *vimHandler) handleVisual(ev *tcell.EventKey, setFocus func(tview.Primit
 		return false
 	}
 	ch := ev.Rune()
+	if v.blocksReadOnlyEdit(ch, vimVisualEditKeys) {
+		return true
+	}
 
 	// applyMotion extends the selection's active end via a table motion.
 	applyMotion := func(m motion) {
@@ -687,6 +718,9 @@ func (v *vimHandler) handleVisualLine(ev *tcell.EventKey, _ func(tview.Primitive
 		return false
 	}
 	ch := ev.Rune()
+	if v.blocksReadOnlyEdit(ch, vimVisualEditKeys) {
+		return true
+	}
 
 	moveAndUpdate := func(move func()) {
 		move()

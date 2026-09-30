@@ -349,3 +349,35 @@ func TestLinewisePaste(t *testing.T) {
 		})
 	}
 }
+
+func TestBlocksReadOnlyEdit(t *testing.T) {
+	tests := []struct {
+		name     string
+		readOnly bool
+		pending  pending
+		ch       rune
+		editKeys string
+		want     bool
+	}{
+		{"editable editor never blocks", false, pending{}, 'x', vimNormalEditKeys, false},
+		{"x deletes in normal", true, pending{}, 'x', vimNormalEditKeys, true},
+		{"i enters insert", true, pending{}, 'i', vimNormalEditKeys, true},
+		{"p pastes", true, pending{}, 'p', vimNormalEditKeys, true},
+		{"motion allowed", true, pending{}, 'w', vimNormalEditKeys, false},
+		{"yank allowed", true, pending{}, 'y', vimNormalEditKeys, false},
+		{"visual allowed", true, pending{}, 'v', vimNormalEditKeys, false},
+		{"f target is a motion", true, pending{prefix: 'f'}, 'x', vimNormalEditKeys, false},
+		{"r replacement blocked", true, pending{prefix: 'r'}, 'a', vimNormalEditKeys, true},
+		{"absorbed d operator blocked", true, pending{operator: 'd'}, 'w', vimNormalEditKeys, true},
+		{"d deletes selection in visual", true, pending{}, 'd', vimVisualEditKeys, true},
+		{"y yanks selection in visual", true, pending{}, 'y', vimVisualEditKeys, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &vimHandler{editor: &SQLQueryEditor{readOnly: tt.readOnly}, pending: tt.pending}
+			if got := v.blocksReadOnlyEdit(tt.ch, tt.editKeys); got != tt.want {
+				t.Errorf("blocksReadOnlyEdit(%q) = %v, want %v", tt.ch, got, tt.want)
+			}
+		})
+	}
+}

@@ -548,6 +548,20 @@ func (m *Main) setKeybindings() {
 		case k.Match(k.Main.GoToView, event):
 			m.openGoToViewModal()
 			return nil
+		case k.Match(k.Main.OpenStructure, event):
+			if schema, name, isView := m.currentTableTarget(); name != "" {
+				if isView {
+					m.openViewStructureTab(context.Background(), schema, name)
+				} else {
+					m.openStructureTab(context.Background(), schema, name)
+				}
+			}
+			return nil
+		case k.Match(k.Main.OpenIndexes, event):
+			if schema, name, isView := m.currentTableTarget(); name != "" && !isView {
+				m.openIndexesTab(context.Background(), schema, name)
+			}
+			return nil
 		}
 		return event
 	}))
@@ -680,33 +694,23 @@ func (m *Main) openActionsModal() {
 		},
 	}...)
 
-	// Resolve the schema/table (or view) for Structure/Indexes/View DDL actions:
-	// prefer the active data tab; fall back to the schema tree selection.
-	structSchema, structTable := "", ""
-	isViewAction := false
-	if data, ok := m.topBar.GetActiveComponent().(*component.Data); ok {
-		structSchema, structTable = data.SelectedTable()
-		isViewAction = data.IsViewTab()
-	}
-	if structTable == "" {
-		structSchema, structTable = m.schemas.SelectedTable()
-		isViewAction = m.schemas.IsViewSelected()
-	}
-	if structTable != "" {
-		schema, name := structSchema, structTable
-		if isViewAction {
+	if schema, name, isView := m.currentTableTarget(); name != "" {
+		if isView {
 			entries = append(entries, modal.ActionEntry{
 				Label:   "View DDL",
+				KeyHint: k.Main.OpenStructure.String(),
 				Handler: func() { m.openViewStructureTab(ctx, schema, name) },
 			})
 		} else {
 			entries = append(entries,
 				modal.ActionEntry{
 					Label:   "Structure",
+					KeyHint: k.Main.OpenStructure.String(),
 					Handler: func() { m.openStructureTab(ctx, schema, name) },
 				},
 				modal.ActionEntry{
 					Label:   "Indexes",
+					KeyHint: k.Main.OpenIndexes.String(),
 					Handler: func() { m.openIndexesTab(ctx, schema, name) },
 				},
 			)
@@ -770,6 +774,20 @@ func (m *Main) openActionsModal() {
 	}
 
 	m.actionsModal.Open(entries)
+}
+
+// currentTableTarget resolves the table (or view) for Structure/Indexes actions:
+// prefer the active data tab; fall back to the schema tree selection.
+func (m *Main) currentTableTarget() (schema, name string, isView bool) {
+	if data, ok := m.topBar.GetActiveComponent().(*component.Data); ok {
+		schema, name = data.SelectedTable()
+		isView = data.IsViewTab()
+	}
+	if name == "" {
+		schema, name = m.schemas.SelectedTable()
+		isView = m.schemas.IsViewSelected()
+	}
+	return schema, name, isView
 }
 
 func (m *Main) openStructureTab(ctx context.Context, schema, table string) {
