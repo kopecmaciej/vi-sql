@@ -352,8 +352,7 @@ func TestLinewisePaste(t *testing.T) {
 
 func TestReadOnlyCommandGate(t *testing.T) {
 	// Every edit command in a read-only editor must be consumed (return true)
-	// without ever touching the TextArea. A nil TextArea would panic if the
-	// read-only gate in handleCommand didn't fire first.
+	// without ever touching the TextArea.
 	v := &vimHandler{editor: &SQLQueryEditor{readOnly: true}}
 	for _, ch := range []rune("iIaAoOsSDCxpPJu") {
 		if got := v.handleCommand(ch, 1, nil); !got {

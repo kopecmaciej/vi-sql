@@ -2,6 +2,7 @@ package component
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/tview"
@@ -32,8 +33,8 @@ type (
 		centered          bool
 		pinnedKeys        []config.Key
 		sequencePending   string
-		keyOverrideActive bool
-		keyOverrideKeys   []config.Key
+		keyOverrideActive atomic.Bool
+		keyOverrideKeys   atomic.Pointer[[]config.Key]
 		onHeightChange    func()
 	}
 )
@@ -249,8 +250,10 @@ func (f *Footer) handleEvents() {
 			go f.App.QueueUpdateDraw(f.Render)
 		case manager.FooterKeyOverride:
 			override := event.Message.Data.(manager.FooterKeysOverride)
-			f.keyOverrideActive = override.Active
-			f.keyOverrideKeys = override.Keys
+			// Store keys before active: the active store's release pairs with the
+			// load in UpdateKeys, so a reader seeing active also sees these keys.
+			f.keyOverrideKeys.Store(&override.Keys)
+			f.keyOverrideActive.Store(override.Active)
 			go f.App.QueueUpdateDraw(f.Render)
 		case manager.ConfigChanged:
 			go f.App.QueueUpdateDraw(f.Render)
@@ -319,9 +322,11 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 	}
 
 	// keyOverride action takes priority over focus-based keyset
-	if f.keyOverrideActive {
-		f.keys = f.keyOverrideKeys
-		return f.keyOverrideKeys, nil
+	if f.keyOverrideActive.Load() {
+		if keys := f.keyOverrideKeys.Load(); keys != nil {
+			f.keys = *keys
+			return *keys, nil
+		}
 	}
 
 	focus := string(f.currentFocus)

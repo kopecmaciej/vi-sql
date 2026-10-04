@@ -144,8 +144,8 @@ func TestFooter_UpdateKeys_KeyOverrideTakesPriorityOverFocus(t *testing.T) {
 	require.NoError(t, err)
 
 	overrideKeys := app.GetKeys().DataKeysForCellSelection()
-	footer.keyOverrideActive = true
-	footer.keyOverrideKeys = overrideKeys
+	footer.keyOverrideActive.Store(true)
+	footer.keyOverrideKeys.Store(&overrideKeys)
 	keys, err := footer.UpdateKeys()
 	require.NoError(t, err)
 
@@ -163,11 +163,11 @@ func TestFooter_FooterKeyOverride_TogglesKeyset(t *testing.T) {
 
 	overrideKeys := app.GetKeys().DataKeysForCellSelection()
 	app.GetManager().Broadcast(manager.NewFooterKeyOverrideMsg(true, overrideKeys))
-	require.Eventually(t, func() bool { return footer.keyOverrideActive },
+	require.Eventually(t, func() bool { return footer.keyOverrideActive.Load() },
 		200*time.Millisecond, 5*time.Millisecond)
 
 	app.GetManager().Broadcast(manager.NewFooterKeyOverrideMsg(false, nil))
-	require.Eventually(t, func() bool { return !footer.keyOverrideActive },
+	require.Eventually(t, func() bool { return !footer.keyOverrideActive.Load() },
 		200*time.Millisecond, 5*time.Millisecond)
 }
 
