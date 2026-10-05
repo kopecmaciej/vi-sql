@@ -91,6 +91,8 @@ type (
 		ImportData      Key `yaml:"importData"`
 		GoToTable       Key `yaml:"goToTable"`
 		GoToView        Key `yaml:"goToView"`
+		OpenStructure   Key `yaml:"openStructure"`
+		OpenIndexes     Key `yaml:"openIndexes"`
 	}
 
 	SchemaKeys struct {
@@ -150,8 +152,9 @@ type (
 	}
 
 	StructureKeys struct {
-		RenameColumn  Key `yaml:"renameColumn"`
-		ToggleDDLPane Key `yaml:"toggleDDLPane"`
+		RenameColumn   Key `yaml:"renameColumn"`
+		ToggleDDLPane  Key `yaml:"toggleDDLPane"`
+		CopyColumnName Key `yaml:"copyColumnName"`
 	}
 
 	SQLQueryEditorKeys struct {
@@ -185,6 +188,11 @@ func (kb *KeyBindings) DataKeysForQueryMode() []Key {
 		d.SearchWithinResults,
 		d.SearchNextMatch, d.SearchPrevMatch,
 	}
+}
+
+// SQLQueryEditorKeysForReadOnly returns the keys available in a read-only SQL editor
+func (kb *KeyBindings) SQLQueryEditorKeysForReadOnly() []Key {
+	return []Key{kb.Common.Copy, kb.Structure.ToggleDDLPane}
 }
 
 func (kb *KeyBindings) DataKeysForCellSelection() []Key {

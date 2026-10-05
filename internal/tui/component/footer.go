@@ -333,6 +333,13 @@ func (f *Footer) UpdateKeys() ([]config.Key, error) {
 		return keys, nil
 	}
 
+	// Read-only SQL editor (DDL pane)
+	if focus == StructureId+EditorSuffix {
+		keys := f.App.GetKeys().SQLQueryEditorKeysForReadOnly()
+		f.keys = keys
+		return keys, nil
+	}
+
 	switch {
 	case strings.HasSuffix(focus, FilterBarSuffix) || strings.HasSuffix(focus, OrderBarSuffix):
 		focus = "InputBar"

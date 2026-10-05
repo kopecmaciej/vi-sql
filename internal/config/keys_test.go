@@ -165,6 +165,9 @@ func TestVimProfileDefaults(t *testing.T) {
 	assert.Equal(t, []string{"k"}, kb.Navigation.MoveUp.Runes, "vim MoveUp should include k rune")
 	assert.Contains(t, kb.Data.FollowForeignKey.Sequences, "gd", "vim FollowForeignKey should include gd sequence")
 	assert.Equal(t, "Search loaded results", kb.Data.SearchWithinResults.Description)
+	assert.Equal(t, []string{"gS"}, kb.Main.OpenStructure.Sequences)
+	assert.Equal(t, []string{"gI"}, kb.Main.OpenIndexes.Sequences)
+	assert.Equal(t, []string{"yc"}, kb.Structure.CopyColumnName.Sequences)
 }
 
 func TestNormalProfileDefaults(t *testing.T) {

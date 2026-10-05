@@ -27,6 +27,8 @@ type SQLQueryEditor struct {
 	*core.TextArea
 
 	vim              *vimHandler
+	readOnly         bool
+	title            string
 	style            *config.SQLEditorStyle
 	schemas          []database.Schema
 	schemaIndex      *completion.SchemaIndex
@@ -57,6 +59,7 @@ func NewSQLQueryEditor(ownerID string) *SQLQueryEditor {
 		TextArea:         core.NewTextArea(),
 		columnCache:      make(map[string][]completion.Column),
 		completionEngine: completion.NewDefaultEngine(),
+		title:            "SQL Editor",
 	}
 	e.SetIdentifier(tview.Identifier(ownerID + EditorSuffix))
 	e.SetAfterInitFunc(e.init)
@@ -69,9 +72,11 @@ func (e *SQLQueryEditor) init() error {
 		e.vim = newVimHandler(e)
 	}
 	e.setStyle()
-	e.setAutocomplete()
 	e.setHighlighting()
-	e.initHistory()
+	if !e.readOnly {
+		e.setAutocomplete()
+		e.initHistory()
+	}
 	e.handleEvents()
 	return nil
 }
@@ -91,12 +96,18 @@ func (e *SQLQueryEditor) initHistory() {
 	})
 }
 
+// SetReadOnly turns the editor into a viewer. Must be called before Init.
+func (e *SQLQueryEditor) SetReadOnly(title string) {
+	e.readOnly = true
+	e.title = title
+}
+
 // refreshTitle updates the editor border title to reflect the current vim mode.
 // Called from setStyle() and vimHandler on every mode transition.
 // Note: tview treats [word] as a style tag, so brackets are escaped with [[] .
 func (e *SQLQueryEditor) refreshTitle() {
 	if e.vim == nil {
-		e.TextArea.SetTitle(" SQL Editor ")
+		e.TextArea.SetTitle(" " + e.title + " ")
 		if e.onModeChange != nil {
 			e.onModeChange("")
 		}
@@ -105,22 +116,22 @@ func (e *SQLQueryEditor) refreshTitle() {
 	s := e.style
 	switch e.vim.mode {
 	case vimNormal:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Normal[-] ", s.KeywordColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" %s [%s]Normal[-] ", e.title, s.KeywordColor))
 		if e.onModeChange != nil {
 			e.onModeChange(fmt.Sprintf("[%s]Normal[-]", s.KeywordColor))
 		}
 	case vimVisual:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Visual[-] ", s.NumberColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" %s [%s]Visual[-] ", e.title, s.NumberColor))
 		if e.onModeChange != nil {
 			e.onModeChange(fmt.Sprintf("[%s]Visual[-]", s.NumberColor))
 		}
 	case vimVisualLine:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]V-Line[-] ", s.NumberColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" %s [%s]V-Line[-] ", e.title, s.NumberColor))
 		if e.onModeChange != nil {
 			e.onModeChange(fmt.Sprintf("[%s]V-Line[-]", s.NumberColor))
 		}
 	default:
-		e.TextArea.SetTitle(fmt.Sprintf(" SQL Editor [%s]Insert[-] ", s.OperatorColor))
+		e.TextArea.SetTitle(fmt.Sprintf(" %s [%s]Insert[-] ", e.title, s.OperatorColor))
 		if e.onModeChange != nil {
 			e.onModeChange(fmt.Sprintf("[%s]Insert[-]", s.OperatorColor))
 		}
@@ -134,7 +145,7 @@ func (e *SQLQueryEditor) SetOnModeChange(f func(indicator string)) {
 }
 
 func (e *SQLQueryEditor) IsInsertMode() bool {
-	return e.vim == nil || e.vim.mode == vimInsert
+	return !e.readOnly && (e.vim == nil || e.vim.mode == vimInsert)
 }
 
 func (e *SQLQueryEditor) IsVisualMode() bool {
@@ -336,6 +347,10 @@ func (e *SQLQueryEditor) SetOnCancel(fn func()) {
 // else to the underlying TextArea.
 func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return e.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+		if e.readOnly {
+			e.handleReadOnlyInput(event, setFocus)
+			return
+		}
 		k := e.App.GetKeys()
 
 		switch {
@@ -413,6 +428,17 @@ func (e *SQLQueryEditor) InputHandler() func(event *tcell.EventKey, setFocus fun
 		}
 		e.TextArea.InputHandler()(event, setFocus)
 	})
+}
+
+func (e *SQLQueryEditor) handleReadOnlyInput(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
+	if e.vim != nil && e.vim.Handle(event, setFocus) {
+		return
+	}
+	switch event.Key() {
+	case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
+		tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgUp, tcell.KeyPgDn, tcell.KeyCtrlL:
+		e.TextArea.InputHandler()(event, setFocus)
+	}
 }
 
 func (e *SQLQueryEditor) SaveQueryToHistory(sql string, d time.Duration) {

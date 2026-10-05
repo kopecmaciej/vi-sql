@@ -25,7 +25,7 @@ type Structure struct {
 
 	innerFlex  *core.Flex
 	table      *core.Table
-	ddlView    *core.TextView
+	ddlView    *SQLQueryEditor
 	inlineEdit *modal.InlineEditModal
 
 	schema  string
@@ -44,13 +44,14 @@ func NewStructure() *Structure {
 		Flex:        core.NewFlex(),
 		innerFlex:   core.NewFlex(),
 		table:       core.NewTable(),
-		ddlView:     core.NewTextView(),
+		ddlView:     NewSQLQueryEditor(StructureId),
 		inlineEdit:  modal.NewInlineEditModal(),
 		showDDL:     true,
 	}
 
 	s.SetIdentifier(StructureId)
 	s.table.SetIdentifier(StructureId)
+	s.ddlView.SetReadOnly("DDL")
 	s.SetAfterInitFunc(s.init)
 
 	return s
@@ -61,6 +62,9 @@ func (s *Structure) init() error {
 	s.setLayout()
 	s.setKeybindings()
 	s.handleEvents()
+	if err := s.ddlView.Init(s.App); err != nil {
+		return err
+	}
 	return s.inlineEdit.Init(s.App)
 }
 
@@ -69,7 +73,6 @@ func (s *Structure) setStyle() {
 	s.Flex.SetStyle(styles)
 	s.innerFlex.SetStyle(styles)
 	s.table.SetStyle(styles)
-	s.ddlView.SetStyle(styles)
 	s.innerFlex.SetBorderColor(styles.Others.SeparatorColor.Color())
 	s.table.SetBordersColor(styles.Others.SeparatorColor.Color())
 	s.ddlView.SetBorderColor(styles.Others.SeparatorColor.Color())
@@ -84,12 +87,6 @@ func (s *Structure) setLayout() {
 	s.innerFlex.SetBorderPadding(0, 0, 1, 1)
 	s.innerFlex.SetDirection(tview.FlexRow)
 
-	s.ddlView.SetBorder(true)
-	s.ddlView.SetTitle(" DDL ")
-	s.ddlView.SetTitleAlign(tview.AlignCenter)
-	s.ddlView.SetBorderPadding(0, 0, 1, 1)
-	s.ddlView.SetDynamicColors(true)
-	s.ddlView.SetScrollable(true)
 	s.ddlView.SetWrap(true)
 }
 
@@ -107,6 +104,11 @@ func (s *Structure) setKeybindings() {
 			s.showDDL = !s.showDDL
 			s.Render()
 			return nil
+		case k.Match(k.Structure.CopyColumnName, event):
+			if row, _ := s.table.GetSelection(); row >= 1 && row-1 < len(s.columns) {
+				util.Copy(s.columns[row-1].Name)
+			}
+			return nil
 		case k.Match(k.Common.Copy, event):
 			s.handleCopyColumn()
 			return nil
@@ -123,7 +125,11 @@ func (s *Structure) setKeybindings() {
 			s.App.SetFocusOnly(s.table)
 			return nil
 		case k.Match(k.Common.Copy, event):
-			util.Copy(s.ddl)
+			if selected, _, _ := s.ddlView.GetSelection(); selected != "" {
+				util.Copy(selected)
+			} else {
+				util.Copy(s.ddl)
+			}
 			return nil
 		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
@@ -310,9 +316,7 @@ func (s *Structure) renderDDL() {
 	if s.ddl == "" {
 		return
 	}
-	styles := s.App.GetStyles()
-	s.ddlView.SetText(core.ColorizeSQLText(s.ddl, &styles.SQLEditor))
-	s.ddlView.ScrollToBeginning()
+	s.ddlView.SetText(s.ddl, false)
 }
 
 func (s *Structure) renderColumns(columns []database.ColumnInfo, pkCols map[string]bool, fkCols map[string]string) {

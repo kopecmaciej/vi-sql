@@ -76,6 +76,30 @@ func TestFooter_UpdateKeys_ResultsSuffixIsSubsetOfFullDataKeys(t *testing.T) {
 		"query-mode keys should be a subset of full Data keys")
 }
 
+func TestFooter_UpdateKeys_ReadOnlyEditor(t *testing.T) {
+	app, _ := testutil.NewTestApp(t)
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+
+	footer.currentFocus = StructureId + EditorSuffix
+	keys, err := footer.UpdateKeys()
+	require.NoError(t, err)
+
+	descriptions := make(map[string]bool)
+	for _, k := range keys {
+		descriptions[k.Description] = true
+	}
+
+	// Functional DDL-pane keys are shown.
+	assert.True(t, descriptions["Copy"], "should show Copy")
+	assert.True(t, descriptions["Toggle DDL"], "should show Toggle DDL")
+
+	// Edit-oriented editor keys are hidden in the read-only DDL pane.
+	for _, desc := range []string{"Format SQL", "History", "Toggle", "Open in $EDITOR", "Confirm", "Clear", "Paste"} {
+		assert.False(t, descriptions[desc], "should not show %q", desc)
+	}
+}
+
 func TestFooter_UpdateKeys_FilterSuffix(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
 	footer := NewFooter()
