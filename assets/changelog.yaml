@@ -1,4 +1,15 @@
 entries:
+  - version: 0.6.0
+    breaking: false
+    title: Read-only connections, DDL pane improvements, and footer sequence hints
+    changes:
+      - "New: Per-connection read-only mode — a Read-only checkbox in the connection form rejects every mutating operation (insert, update, delete, DDL, renames) while browsing and queries keep working"
+      - "New: The DDL pane is now a read-only SQL editor, so table and view definitions can be scrolled, searched, and copied; the footer shows its keybindings"
+      - "New: Quick keys to open a table's structure (`gS` / `Alt+S`) and indexes (`gI` / `Alt+I`)"
+      - "New: Copy the selected column's name with `yc` / `C` or its full details with `yy` / `c` from the structure view"
+      - "New: The footer shows the possible continuations after pressing a vim sequence prefix like `y` or `d`, scoped to the focused component"
+      - "Improvement: Toggling the DDL pane with `p` moves focus to the pane when it opens and back to the structure table when it closes"
+      - "Fix: Data race on the footer key override state"
   - version: 0.5.0
     breaking: false
     title: Batch cell editing in the table data view
