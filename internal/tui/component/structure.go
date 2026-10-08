@@ -103,6 +103,9 @@ func (s *Structure) setKeybindings() {
 		case k.Match(k.Structure.ToggleDDLPane, event):
 			s.showDDL = !s.showDDL
 			s.Render()
+			if s.showDDL {
+				s.App.SetFocusOnly(s.ddlView)
+			}
 			return nil
 		case k.Match(k.Structure.CopyColumnName, event):
 			if row, _ := s.table.GetSelection(); row >= 1 && row-1 < len(s.columns) {
