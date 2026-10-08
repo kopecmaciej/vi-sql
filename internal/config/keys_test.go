@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -267,6 +269,68 @@ func TestBuildSequencePrefixes_NormalMode(t *testing.T) {
 	kb.buildSequencePrefixes()
 
 	assert.Empty(t, kb.sequencePrefixes, "normal mode should have no sequence prefixes")
+}
+
+func TestKeysForSequencePrefix(t *testing.T) {
+	labels := func(keys []Key, prefix string) []string {
+		var out []string
+		for _, k := range KeysForSequencePrefix(keys, prefix) {
+			out = append(out, strings.Join(k.Sequences, ", "))
+		}
+		return out
+	}
+
+	keys := []Key{
+		{Sequences: []string{"gg"}, Description: "Go top"},
+		{Sequences: []string{"yc"}, Description: "Copy cell"},
+		{Sequences: []string{"yrj", "yrc"}, Description: "Copy row"},
+		{Runes: []string{"k"}, Description: "Move up"},
+	}
+
+	t.Run("filters sequences by prefix", func(t *testing.T) {
+		assert.Equal(t, []string{"yc", "yrj, yrc"}, labels(keys, "y"))
+		assert.Equal(t, []string{"gg"}, labels(keys, "g"))
+		assert.Empty(t, labels(keys, "x"))
+		assert.Empty(t, labels(keys, ""))
+	})
+
+	t.Run("duplicate chords yield a single hint", func(t *testing.T) {
+		hints := KeysForSequencePrefix([]Key{
+			{Sequences: []string{"yy"}, Description: "Copy"},
+			{Sequences: []string{"yy"}, Description: "Copy row"},
+		}, "y")
+		require.Len(t, hints, 1)
+		assert.Equal(t, "Copy", hints[0].Description, "first occurrence wins")
+	})
+
+	t.Run("mixed chords keep only matching sequences", func(t *testing.T) {
+		hints := KeysForSequencePrefix([]Key{
+			{Sequences: []string{"dd", "yy"}, Description: "Copy or delete"},
+		}, "y")
+		require.Len(t, hints, 1)
+		assert.Equal(t, []string{"yy"}, hints[0].Sequences)
+	})
+}
+
+func TestMainContextKeys(t *testing.T) {
+	kb := vimKB()
+	keys := kb.MainContextKeys()
+
+	descs := make(map[string]bool)
+	for _, k := range keys {
+		descs[k.Description] = true
+	}
+
+	assert.True(t, descs["Go top"], "navigation keys are always active (gg)")
+	assert.True(t, descs["Move up"], "navigation keys are always active (k)")
+	assert.True(t, descs["Focus schemas"], "main action keys are always active (ge)")
+	assert.True(t, descs["Go to table"], "main action keys are always active (gt)")
+	assert.False(t, descs["Copy row"], "element keys must not leak into the main context")
+
+	expected := append(
+		extractKeysFromStruct(reflect.ValueOf(kb.Navigation)),
+		extractKeysFromStruct(reflect.ValueOf(kb.Main))...)
+	assert.Equal(t, expected, keys, "all Navigation and Main fields are included")
 }
 
 func mkRune(r rune) *tcell.EventKey {

@@ -335,6 +335,48 @@ func (kb KeyBindings) GetAvailableKeys() []OrderedKeys {
 	return keys
 }
 
+// KeysForSequencePrefix filters keys to those having at least one sequence
+// starting with prefix ("y" → yy, yrj). Duplicates sharing a chord collapse
+// to a single hint, keeping the first.
+func KeysForSequencePrefix(keys []Key, prefix string) []Key {
+	if prefix == "" {
+		return nil
+	}
+	var hints []Key
+	seen := make(map[string]struct{})
+	for _, k := range keys {
+		var matching []string
+		for _, seq := range k.Sequences {
+			if strings.HasPrefix(seq, prefix) {
+				matching = append(matching, seq)
+			}
+		}
+		if len(matching) == 0 {
+			continue
+		}
+		labelParts := append([]string{}, k.Keys...)
+		labelParts = append(labelParts, k.Runes...)
+		labelParts = append(labelParts, matching...)
+		label := strings.Join(labelParts, ", ")
+		if _, ok := seen[label]; ok {
+			continue
+		}
+		seen[label] = struct{}{}
+		hint := k
+		hint.Sequences = matching
+		hints = append(hints, hint)
+	}
+	return hints
+}
+
+// MainContextKeys returns the navigation and main action keys that stay
+// active regardless of which component is focused (e.g. gg, ge, gt).
+func (kb KeyBindings) MainContextKeys() []Key {
+	nav := extractKeysFromStruct(reflect.ValueOf(kb.Navigation))
+	mainKeys := extractKeysFromStruct(reflect.ValueOf(kb.Main))
+	return append(nav, mainKeys...)
+}
+
 func (kb KeyBindings) GetKeysForElement(elementId string) ([]OrderedKeys, error) {
 	if elementId == "" {
 		return nil, fmt.Errorf("element is empty")

@@ -96,6 +96,9 @@ func (f *Footer) Toggle() int {
 
 func (f *Footer) collectPairs() []info {
 	keys, _ := f.UpdateKeys()
+	if hints := f.sequenceHints(f.App.GetConfig().UI.VimMode, keys); len(hints) > 0 {
+		keys = hints
+	}
 	pairs := make([]info, 0, len(keys))
 	for _, key := range keys {
 		if label := formatKeyString(key); label != "" {
@@ -193,6 +196,12 @@ func (f *Footer) Render() {
 		return
 	}
 
+	vimMode := f.App.GetConfig().UI.VimMode
+	hints := f.sequenceHints(vimMode, k)
+	if len(hints) > 0 {
+		k = hints
+	}
+
 	if f.centered {
 		f.Table.SetCell(0, 0, tview.NewTableCell("").SetExpansion(1))
 		col := 1
@@ -208,15 +217,19 @@ func (f *Footer) Render() {
 	}
 
 	col := 0
-	if f.App.GetConfig().UI.VimMode {
+	if vimMode {
 		f.Table.SetCell(0, col, f.sequencePendingCell(f.sequencePending))
 		col++
 	}
 
-	for _, key := range f.pinnedKeys {
-		f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
-		f.Table.SetCell(0, col+1, f.valueCell(key.Description))
-		col += 2
+	// While a sequence prefix is pending only its matching hints are shown;
+	// pinned and focus keys stay hidden.
+	if len(hints) == 0 {
+		for _, key := range f.pinnedKeys {
+			f.Table.SetCell(0, col, f.keyCell(formatKeyString(key)))
+			f.Table.SetCell(0, col+1, f.valueCell(key.Description))
+			col += 2
+		}
 	}
 
 	for _, key := range k {
@@ -273,6 +286,23 @@ func (f *Footer) valueCell(text string) *tview.TableCell {
 	return tview.NewTableCell(text + " ").SetStyle(tcell.StyleDefault.
 		Foreground(styles.Global.TitleColor.Color()).
 		Background(styles.Global.BackgroundColor.Color()))
+}
+
+// sequenceHints returns the focused element's keys whose sequences extend the
+// currently pending vim prefix ("y" → yy, yc), return nil when nothing matching
+func (f *Footer) sequenceHints(vimMode bool, focused []config.Key) []config.Key {
+	if !vimMode || f.sequencePending == "" {
+		return nil
+	}
+	prefix := strings.TrimLeftFunc(f.sequencePending, func(r rune) bool {
+		return r >= '0' && r <= '9' // ignore leading digits e.g. "2d"
+	})
+	if prefix == "" {
+		return nil
+	}
+	keys := append(append([]config.Key{}, focused...), f.pinnedKeys...)
+	keys = append(keys, f.App.GetKeys().MainContextKeys()...) // always show nav/main keys
+	return config.KeysForSequencePrefix(keys, prefix)
 }
 
 // sequencePendingCell renders the pending sequence prefix (e.g. "yr")

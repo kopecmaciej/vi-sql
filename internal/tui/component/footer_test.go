@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/kopecmaciej/vi-sql/internal/manager"
 	"github.com/kopecmaciej/vi-sql/internal/testutil"
+	"github.com/kopecmaciej/vi-sql/internal/tui/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,6 +16,15 @@ import (
 // goroutine: without waiting, a broadcast sent before Subscribe registers has
 // nowhere to land and is silently dropped.
 const footerSubscribeDelay = 10 * time.Millisecond
+
+// newVimFooterApp returns a test app with vim mode (and vim keybindings)
+// enabled, so footer sequence hints can be exercised.
+func newVimFooterApp(t *testing.T) (*core.App, tcell.SimulationScreen) {
+	app, sim := testutil.NewTestApp(t)
+	app.GetConfig().UI.VimMode = true
+	require.NoError(t, app.ReloadKeybindings())
+	return app, sim
+}
 
 func TestFooter_Toggle_CollapsedAndExpanded(t *testing.T) {
 	app, _ := testutil.NewTestApp(t)
@@ -213,4 +224,87 @@ func TestFooter_StyleChanged_DoesNotPanic(t *testing.T) {
 		})
 		time.Sleep(20 * time.Millisecond)
 	})
+}
+
+func TestFooter_Render_SequencePendingShowsOnlyMatchingHints(t *testing.T) {
+	app, sim := newVimFooterApp(t)
+
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = SchemaTreeId
+	footer.sequencePending = "g"
+	footer.Render()
+
+	app.SetRoot(footer, true)
+	sim.SetSize(200, 40) // all g-hints should fit
+	testutil.DrawAndSync(app, sim)
+
+	// Always-active navigation (gg) and main (ge, gt) keys show.
+	for _, want := range []string{"gg", "ge", "gt"} {
+		assert.True(t, testutil.ScreenContains(sim, want),
+			"screen should show %q hint\nscreen:\n%v", want, testutil.ScreenFull(sim))
+	}
+	// Keys of other elements (Data's gd, editor's gf) and unrelated keys stay hidden.
+	for _, unwanted := range []string{"gd", "Format SQL", "Expand all"} {
+		assert.False(t, testutil.ScreenContains(sim, unwanted),
+			"screen should not show %q\nscreen:\n%v", unwanted, testutil.ScreenFull(sim))
+	}
+}
+
+func TestFooter_Render_SequencePendingScopedToFocusedElement(t *testing.T) {
+	app, sim := newVimFooterApp(t)
+
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = StructureId
+	footer.sequencePending = "y"
+	footer.Render()
+
+	app.SetRoot(footer, true)
+	testutil.DrawAndSync(app, sim)
+
+	// Structure context: its own yc + the shared yy copy.
+	assert.True(t, testutil.ScreenContains(sim, "Copy column name"),
+		"screen should show Structure's yc hint\nscreen:\n%v", testutil.ScreenFull(sim))
+	assert.True(t, testutil.ScreenContains(sim, "yy"),
+		"screen should show the shared yy hint\nscreen:\n%v", testutil.ScreenFull(sim))
+	// Data-table y-sequences must not leak into Structure context.
+	for _, unwanted := range []string{"Copy row as JSON", "Copy row as CSV", "Copy cell"} {
+		assert.False(t, testutil.ScreenContains(sim, unwanted),
+			"screen should not show %q in Structure context\nscreen:\n%v", unwanted, testutil.ScreenFull(sim))
+	}
+}
+
+func TestFooter_Render_SequencePendingNoMatchFallsBackToFocusKeys(t *testing.T) {
+	app, sim := newVimFooterApp(t)
+
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = SchemaTreeId
+	footer.sequencePending = "f" // f is no configured sequence prefix
+	footer.Render()
+
+	app.SetRoot(footer, true)
+	testutil.DrawAndSync(app, sim)
+
+	assert.True(t, testutil.ScreenContains(sim, "Expand all"),
+		"focus keys must still render when the pending label matches no sequence\nscreen:\n%v", testutil.ScreenFull(sim))
+}
+
+func TestFooter_Render_SequencePendingStripsCountDigits(t *testing.T) {
+	app, sim := newVimFooterApp(t)
+
+	footer := NewFooter()
+	require.NoError(t, footer.Init(app))
+	footer.currentFocus = StructureId
+	footer.sequencePending = "2y" // vim count + operator
+	footer.Render()
+
+	app.SetRoot(footer, true)
+	testutil.DrawAndSync(app, sim)
+
+	assert.True(t, testutil.ScreenContains(sim, "Copy column name"),
+		"count-prefixed pending label must filter like the bare prefix\nscreen:\n%v", testutil.ScreenFull(sim))
+	assert.False(t, testutil.ScreenContains(sim, "Rename column"),
+		"count-prefixed pending label must also hide unrelated keys\nscreen:\n%v", testutil.ScreenFull(sim))
 }
