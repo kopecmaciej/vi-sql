@@ -29,6 +29,7 @@ func init() {
 			{Kind: database.FieldInput, Label: "Port", Default: "3306"},
 			{Kind: database.FieldInput, Label: "Username"},
 			{Kind: database.FieldPassword, Label: "Password"},
+			{Kind: database.FieldInput, Label: "Password command"},
 			{Kind: database.FieldInput, Label: "Database"},
 			// TLS values map to go-sql-driver/mysql tls config tokens.
 			{Kind: database.FieldDropDown, Label: "TLS", Default: "false", Options: []string{"false", "skip-verify", "preferred", "true"}},
@@ -47,7 +48,9 @@ func init() {
 			if conn.Timeout > 0 {
 				m["Timeout"] = fmt.Sprintf("%d", conn.Timeout)
 			}
-			if !util.IsEncrypted(conn.Password) {
+			if conn.PasswordCommand != "" {
+				m["Password command"] = conn.PasswordCommand
+			} else if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
 			if conn.SSLMode != "" {
@@ -67,6 +70,7 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 		return nil, err
 	}
 
+	passwordCommand := fields["Password command"]
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
@@ -78,7 +82,7 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 			if name == "" {
 				name = trimmedDSN
 			}
-			return &config.SQLConfig{Driver: "mysql", Name: name, DSN: trimmedDSN, Timeout: timeout}, nil
+			return &config.SQLConfig{Driver: "mysql", Name: name, DSN: trimmedDSN, Timeout: timeout, PasswordCommand: passwordCommand}, nil
 		}
 		if strings.HasPrefix(trimmedDSN, "mysql://") {
 			parsed, err := util.ParseMySQLDSN(trimmedDSN)
@@ -104,7 +108,11 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 	} else {
 		host, portStr = fields["Host"], fields["Port"]
 		username, dbName, sslMode = fields["Username"], fields["Database"], fields["TLS"]
-		password = database.PreserveEncryptedPassword(fields["Password"], editConn)
+		var resolveErr error
+		password, passwordCommand, resolveErr = database.ResolvePasswordFields(fields["Password"], passwordCommand, editConn)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
 		if name == "" {
 			name = host + ":" + portStr
 		}
@@ -115,15 +123,16 @@ func buildMySQLConfig(fields map[string]string, editConn *config.SQLConfig) (*co
 		return nil, err
 	}
 	cfg := &config.SQLConfig{
-		Driver:   "mysql",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: username,
-		Password: password,
-		Database: dbName,
-		SSLMode:  sslMode,
-		Timeout:  timeout,
+		Driver:          "mysql",
+		Name:            name,
+		Host:            host,
+		Port:            port,
+		Username:        username,
+		Password:        password,
+		PasswordCommand: passwordCommand,
+		Database:        dbName,
+		SSLMode:         sslMode,
+		Timeout:         timeout,
 	}
 	if fromURL {
 		// Store safe DSN so the edit form can pre-fill the URL field, matching Postgres behaviour.

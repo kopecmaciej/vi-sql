@@ -21,28 +21,28 @@ func NewClient(cfg *config.SQLConfig) *Client {
 	}
 }
 
+func (c *Client) buildDSN() (string, error) {
+	password, err := c.Config.ResolvePassword()
+	if err != nil {
+		return "", err
+	}
+	if c.Config.Host == "" {
+		return util.InjectDSNPassword(c.Config.GetDSN(), password), nil
+	}
+	sslMode := c.Config.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
+	return util.BuildPostgresDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode), nil
+}
+
 func (c *Client) Connect() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(c.Config.Timeout)*time.Second)
 	defer cancel()
 
-	dsn := c.Config.GetDecryptedDSN()
-	if c.Config.Password != "" && c.Config.Host != "" {
-		password := c.Config.Password
-		if util.IsEncrypted(password) {
-			if config.EncryptionKey == "" {
-				return fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
-			}
-			decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
-			if err != nil {
-				return err
-			}
-			password = decrypted
-		}
-		sslMode := c.Config.SSLMode
-		if sslMode == "" {
-			sslMode = "disable"
-		}
-		dsn = util.BuildPostgresDSN(c.Config.Host, c.Config.Port, c.Config.Database, c.Config.Username, password, sslMode)
+	dsn, err := c.buildDSN()
+	if err != nil {
+		return err
 	}
 
 	poolConfig, err := pgxpool.ParseConfig(dsn)

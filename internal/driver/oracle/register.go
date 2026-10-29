@@ -28,6 +28,7 @@ func init() {
 			{Kind: database.FieldInput, Label: "Port", Default: "1521"},
 			{Kind: database.FieldInput, Label: "Username"},
 			{Kind: database.FieldPassword, Label: "Password"},
+			{Kind: database.FieldInput, Label: "Password command"},
 			{Kind: database.FieldInput, Label: "Service Name"},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
 		},
@@ -44,7 +45,9 @@ func init() {
 			if conn.Timeout > 0 {
 				m["Timeout"] = fmt.Sprintf("%d", conn.Timeout)
 			}
-			if !util.IsEncrypted(conn.Password) {
+			if conn.PasswordCommand != "" {
+				m["Password command"] = conn.PasswordCommand
+			} else if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
 			return m
@@ -61,6 +64,7 @@ func buildOracleConfig(fields map[string]string, editConn *config.SQLConfig) (*c
 		return nil, err
 	}
 
+	passwordCommand := fields["Password command"]
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
@@ -69,7 +73,7 @@ func buildOracleConfig(fields map[string]string, editConn *config.SQLConfig) (*c
 			if name == "" {
 				name = trimmedDSN
 			}
-			return &config.SQLConfig{Driver: "oracle", Name: name, DSN: trimmedDSN, Timeout: timeout}, nil
+			return &config.SQLConfig{Driver: "oracle", Name: name, DSN: trimmedDSN, Timeout: timeout, PasswordCommand: passwordCommand}, nil
 		}
 		if !strings.HasPrefix(trimmedDSN, "oracle://") {
 			return nil, fmt.Errorf("DSN must start with oracle:// or $ENV_VAR")
@@ -86,14 +90,15 @@ func buildOracleConfig(fields map[string]string, editConn *config.SQLConfig) (*c
 			name = parsed.Host + ":" + parsed.Port
 		}
 		cfg := &config.SQLConfig{
-			Driver:   "oracle",
-			Name:     name,
-			Host:     parsed.Host,
-			Port:     port,
-			Username: parsed.Username,
-			Password: parsed.Password,
-			Database: parsed.Database,
-			Timeout:  timeout,
+			Driver:          "oracle",
+			Name:            name,
+			Host:            parsed.Host,
+			Port:            port,
+			Username:        parsed.Username,
+			Password:        parsed.Password,
+			PasswordCommand: passwordCommand,
+			Database:        parsed.Database,
+			Timeout:         timeout,
 		}
 		cfg.DSN = cfg.GetSafeDSN()
 		return cfg, nil
@@ -109,18 +114,22 @@ func buildOracleConfig(fields map[string]string, editConn *config.SQLConfig) (*c
 			return nil, err
 		}
 	}
-	password := database.PreserveEncryptedPassword(fields["Password"], editConn)
+	password, passwordCommand, err := database.ResolvePasswordFields(fields["Password"], passwordCommand, editConn)
+	if err != nil {
+		return nil, err
+	}
 	if name == "" {
 		name = host + ":" + portStr
 	}
 	return &config.SQLConfig{
-		Driver:   "oracle",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: fields["Username"],
-		Password: password,
-		Database: fields["Service Name"],
-		Timeout:  timeout,
+		Driver:          "oracle",
+		Name:            name,
+		Host:            host,
+		Port:            port,
+		Username:        fields["Username"],
+		Password:        password,
+		PasswordCommand: passwordCommand,
+		Database:        fields["Service Name"],
+		Timeout:         timeout,
 	}, nil
 }

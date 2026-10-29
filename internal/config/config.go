@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +19,7 @@ import (
 
 const (
 	ConfigFile = "config.yaml"
-	FileMode   = 0600
+	FileMode   = 0o600
 )
 
 var LogPath = filepath.Join(os.TempDir(), "vi-sql.log")
@@ -29,17 +31,18 @@ type SQLOptions struct {
 }
 
 type SQLConfig struct {
-	ID       string `yaml:"id"`
-	Driver   string `yaml:"driver"`
-	DSN      string `yaml:"dsn"`
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Database string `yaml:"database"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	SSLMode  string `yaml:"sslMode"`
-	Name     string `yaml:"name"`
-	Timeout  int    `yaml:"timeout"`
+	ID              string `yaml:"id"`
+	Driver          string `yaml:"driver"`
+	DSN             string `yaml:"dsn"`
+	Host            string `yaml:"host"`
+	Port            int    `yaml:"port"`
+	Database        string `yaml:"database"`
+	Username        string `yaml:"username"`
+	Password        string `yaml:"password"`
+	PasswordCommand string `yaml:"passwordCommand,omitempty"`
+	SSLMode         string `yaml:"sslMode"`
+	Name            string `yaml:"name"`
+	Timeout         int    `yaml:"timeout"`
 	// DriverOptions holds per-driver extras keyed by DSN parameter names.
 	DriverOptions map[string]string `yaml:"driverOptions,omitempty"`
 	Options       SQLOptions        `yaml:"options"`
@@ -452,6 +455,9 @@ func (m *SQLConfig) SetDriverOption(key, value string) {
 }
 
 func (m *SQLConfig) IsPasswordReadable() bool {
+	if m.PasswordCommand != "" {
+		return true
+	}
 	if !util.IsEncrypted(m.Password) {
 		return true
 	}
@@ -460,6 +466,61 @@ func (m *SQLConfig) IsPasswordReadable() bool {
 	}
 	_, _, err := util.DecryptPasswordWithMethod(m.Password, EncryptionKey)
 	return err == nil
+}
+
+// ResolvePassword returns the plaintext password, preferring PasswordCommand,
+// then decrypting an encrypted Password, otherwise returning it as-is.
+func (m *SQLConfig) ResolvePassword() (string, error) {
+	if m.PasswordCommand != "" {
+		return m.runPasswordCommand()
+	}
+	if util.IsEncrypted(m.Password) {
+		if EncryptionKey == "" {
+			return "", fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
+		}
+		decrypted, _, err := util.DecryptPasswordWithMethod(m.Password, EncryptionKey)
+		if err != nil {
+			return "", err
+		}
+		return decrypted, nil
+	}
+	return m.Password, nil
+}
+
+func (m *SQLConfig) runPasswordCommand() (string, error) {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/c", m.PasswordCommand)
+	} else {
+		cmd = exec.Command("sh", "-c", m.PasswordCommand)
+	}
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", fmt.Errorf("password command %q failed: %w: %s", m.PasswordCommand, err, msg)
+		}
+		return "", fmt.Errorf("password command %q failed: %w", m.PasswordCommand, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// ValidatePasswordCommand rejects a password command that can't be used: one set
+// together with a plain password or one paired with a raw DSN. A password
+// command only applies to field-based connections, because there isn't a
+// consistent injection point for passwords across drivers.
+func (m *SQLConfig) ValidatePasswordCommand() error {
+	if m.PasswordCommand == "" {
+		return nil
+	}
+	if m.Password != "" {
+		return fmt.Errorf("password and password command are mutually exclusive — set only one")
+	}
+	if m.Host == "" && m.DSN != "" {
+		return fmt.Errorf("password command is not supported with a raw DSN — use connection fields instead")
+	}
+	return nil
 }
 
 func (m *SQLConfig) buildDSNFromFields(password string) string {
@@ -499,31 +560,6 @@ func (m *SQLConfig) GetDSN() string {
 		return m.DSN
 	}
 	return m.buildDSNFromFields(m.Password)
-}
-
-// GetDecryptedDSN returns the DSN with decrypted password.
-func (m *SQLConfig) GetDecryptedDSN() string {
-	dsn := m.GetDSN()
-	if util.IsMultiHostDSN(dsn) && m.Password != "" {
-		pw := m.Password
-		if util.IsEncrypted(pw) && EncryptionKey != "" {
-			if dec, _, err := util.DecryptPasswordWithMethod(pw, EncryptionKey); err == nil {
-				pw = dec
-			}
-		}
-		return util.InjectDSNPassword(dsn, pw)
-	}
-	if m.DSN != "" || m.Username == "" || !util.IsEncrypted(m.Password) || EncryptionKey == "" {
-		return dsn
-	}
-
-	decryptedPass, _, err := util.DecryptPasswordWithMethod(m.Password, EncryptionKey)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to decrypt password")
-		return dsn
-	}
-
-	return m.buildDSNFromFields(decryptedPass)
 }
 
 // GetSafeDSN returns the DSN with password replaced by asterisks.

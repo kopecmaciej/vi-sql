@@ -29,6 +29,7 @@ func init() {
 			{Kind: database.FieldInput, Label: "Port", Default: "3306"},
 			{Kind: database.FieldInput, Label: "Username"},
 			{Kind: database.FieldPassword, Label: "Password"},
+			{Kind: database.FieldInput, Label: "Password command"},
 			{Kind: database.FieldInput, Label: "Database"},
 			{Kind: database.FieldDropDown, Label: "TLS", Default: "false", Options: []string{"false", "skip-verify", "preferred", "true"}},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
@@ -46,7 +47,9 @@ func init() {
 			if conn.Timeout > 0 {
 				m["Timeout"] = fmt.Sprintf("%d", conn.Timeout)
 			}
-			if !util.IsEncrypted(conn.Password) {
+			if conn.PasswordCommand != "" {
+				m["Password command"] = conn.PasswordCommand
+			} else if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
 			if conn.SSLMode != "" {
@@ -66,6 +69,7 @@ func buildMariaDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 		return nil, err
 	}
 
+	passwordCommand := fields["Password command"]
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
@@ -77,7 +81,7 @@ func buildMariaDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 			if name == "" {
 				name = trimmedDSN
 			}
-			return &config.SQLConfig{Driver: "mariadb", Name: name, DSN: trimmedDSN, Timeout: timeout}, nil
+			return &config.SQLConfig{Driver: "mariadb", Name: name, DSN: trimmedDSN, Timeout: timeout, PasswordCommand: passwordCommand}, nil
 		}
 		if strings.HasPrefix(trimmedDSN, "mariadb://") {
 			parsed, err := util.ParseMySQLDSN(trimmedDSN)
@@ -103,7 +107,11 @@ func buildMariaDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 	} else {
 		host, portStr = fields["Host"], fields["Port"]
 		username, dbName, sslMode = fields["Username"], fields["Database"], fields["TLS"]
-		password = database.PreserveEncryptedPassword(fields["Password"], editConn)
+		var resolveErr error
+		password, passwordCommand, resolveErr = database.ResolvePasswordFields(fields["Password"], passwordCommand, editConn)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
 		if name == "" {
 			name = host + ":" + portStr
 		}
@@ -114,15 +122,16 @@ func buildMariaDBConfig(fields map[string]string, editConn *config.SQLConfig) (*
 		return nil, err
 	}
 	cfg := &config.SQLConfig{
-		Driver:   "mariadb",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: username,
-		Password: password,
-		Database: dbName,
-		SSLMode:  sslMode,
-		Timeout:  timeout,
+		Driver:          "mariadb",
+		Name:            name,
+		Host:            host,
+		Port:            port,
+		Username:        username,
+		Password:        password,
+		PasswordCommand: passwordCommand,
+		Database:        dbName,
+		SSLMode:         sslMode,
+		Timeout:         timeout,
 	}
 	if fromURL {
 		cfg.DSN = cfg.GetSafeDSN()

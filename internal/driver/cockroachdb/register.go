@@ -32,6 +32,7 @@ func init() {
 			{Kind: database.FieldInput, Label: "Port", Default: "26257"},
 			{Kind: database.FieldInput, Label: "Username"},
 			{Kind: database.FieldPassword, Label: "Password"},
+			{Kind: database.FieldInput, Label: "Password command"},
 			{Kind: database.FieldInput, Label: "Database"},
 			{Kind: database.FieldDropDown, Label: "SSL Mode", Default: "disable", Options: []string{"disable", "require", "verify-ca", "verify-full", "prefer", "allow"}},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
@@ -50,7 +51,9 @@ func init() {
 			if conn.Timeout > 0 {
 				m["Timeout"] = fmt.Sprintf("%d", conn.Timeout)
 			}
-			if !util.IsEncrypted(conn.Password) {
+			if conn.PasswordCommand != "" {
+				m["Password command"] = conn.PasswordCommand
+			} else if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
 			return m
@@ -67,6 +70,7 @@ func buildCockroachDBConfig(fields map[string]string, editConn *config.SQLConfig
 		return nil, err
 	}
 
+	passwordCommand := fields["Password command"]
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
@@ -79,6 +83,7 @@ func buildCockroachDBConfig(fields map[string]string, editConn *config.SQLConfig
 		out := *editConn
 		out.Name = name
 		out.Timeout = timeout
+		out.PasswordCommand = passwordCommand
 		return &out, nil
 	}
 
@@ -87,10 +92,11 @@ func buildCockroachDBConfig(fields map[string]string, editConn *config.SQLConfig
 			name = trimmedDSN
 		}
 		cfg := &config.SQLConfig{
-			Driver:  "cockroachdb",
-			Name:    name,
-			DSN:     trimmedDSN,
-			Timeout: timeout,
+			Driver:          "cockroachdb",
+			Name:            name,
+			DSN:             trimmedDSN,
+			Timeout:         timeout,
+			PasswordCommand: passwordCommand,
 		}
 		if strings.HasPrefix(trimmedDSN, "$") {
 			return cfg, nil
@@ -128,19 +134,23 @@ func buildCockroachDBConfig(fields map[string]string, editConn *config.SQLConfig
 	if err != nil {
 		return nil, err
 	}
-	password := database.PreserveEncryptedPassword(fields["Password"], editConn)
+	password, passwordCommand, err := database.ResolvePasswordFields(fields["Password"], passwordCommand, editConn)
+	if err != nil {
+		return nil, err
+	}
 	if name == "" {
 		name = host + ":" + portStr
 	}
 	return &config.SQLConfig{
-		Driver:   "cockroachdb",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: fields["Username"],
-		Password: password,
-		Database: fields["Database"],
-		SSLMode:  fields["SSL Mode"],
-		Timeout:  timeout,
+		Driver:          "cockroachdb",
+		Name:            name,
+		Host:            host,
+		Port:            port,
+		Username:        fields["Username"],
+		Password:        password,
+		PasswordCommand: passwordCommand,
+		Database:        fields["Database"],
+		SSLMode:         fields["SSL Mode"],
+		Timeout:         timeout,
 	}, nil
 }

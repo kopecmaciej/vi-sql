@@ -29,6 +29,7 @@ func init() {
 			{Kind: database.FieldInput, Label: "Port", Default: "1433"},
 			{Kind: database.FieldInput, Label: "Username"},
 			{Kind: database.FieldPassword, Label: "Password"},
+			{Kind: database.FieldInput, Label: "Password command"},
 			{Kind: database.FieldInput, Label: "Database"},
 			{Kind: database.FieldDropDown, Label: "Encrypt", Default: "disable", Options: []string{"disable", "false", "true"}},
 			{Kind: database.FieldInput, Label: "Timeout", Default: "5"},
@@ -46,7 +47,9 @@ func init() {
 			if conn.Timeout > 0 {
 				m["Timeout"] = fmt.Sprintf("%d", conn.Timeout)
 			}
-			if !util.IsEncrypted(conn.Password) {
+			if conn.PasswordCommand != "" {
+				m["Password command"] = conn.PasswordCommand
+			} else if !util.IsEncrypted(conn.Password) {
 				m["Password"] = conn.Password
 			}
 			if conn.SSLMode != "" {
@@ -66,6 +69,7 @@ func buildSQLServerConfig(fields map[string]string, editConn *config.SQLConfig) 
 		return nil, err
 	}
 
+	passwordCommand := fields["Password command"]
 	trimmedDSN := strings.TrimSpace(fields["DSN"])
 	dsnUnchanged := editConn != nil && trimmedDSN == editConn.DSN
 
@@ -77,7 +81,7 @@ func buildSQLServerConfig(fields map[string]string, editConn *config.SQLConfig) 
 			if name == "" {
 				name = trimmedDSN
 			}
-			return &config.SQLConfig{Driver: "sqlserver", Name: name, DSN: trimmedDSN, Timeout: timeout}, nil
+			return &config.SQLConfig{Driver: "sqlserver", Name: name, DSN: trimmedDSN, Timeout: timeout, PasswordCommand: passwordCommand}, nil
 		}
 		if strings.HasPrefix(trimmedDSN, "sqlserver://") {
 			parsed, err := util.ParseSQLServerDSN(trimmedDSN)
@@ -96,7 +100,11 @@ func buildSQLServerConfig(fields map[string]string, editConn *config.SQLConfig) 
 	} else {
 		host, portStr = fields["Host"], fields["Port"]
 		username, dbName, encrypt = fields["Username"], fields["Database"], fields["Encrypt"]
-		password = database.PreserveEncryptedPassword(fields["Password"], editConn)
+		var resolveErr error
+		password, passwordCommand, resolveErr = database.ResolvePasswordFields(fields["Password"], passwordCommand, editConn)
+		if resolveErr != nil {
+			return nil, resolveErr
+		}
 		if name == "" {
 			name = host + ":" + portStr
 		}
@@ -120,15 +128,16 @@ func buildSQLServerConfig(fields map[string]string, editConn *config.SQLConfig) 
 	}
 
 	cfg := &config.SQLConfig{
-		Driver:   "sqlserver",
-		Name:     name,
-		Host:     host,
-		Port:     port,
-		Username: username,
-		Password: password,
-		Database: dbName,
-		SSLMode:  encrypt,
-		Timeout:  timeout,
+		Driver:          "sqlserver",
+		Name:            name,
+		Host:            host,
+		Port:            port,
+		Username:        username,
+		Password:        password,
+		PasswordCommand: passwordCommand,
+		Database:        dbName,
+		SSLMode:         encrypt,
+		Timeout:         timeout,
 	}
 	if fromURL {
 		cfg.DSN = cfg.GetSafeDSN()

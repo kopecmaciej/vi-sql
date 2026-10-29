@@ -100,6 +100,9 @@ func BuildConfigFromDSN(name, dsn string) (*config.SQLConfig, error) {
 
 // NewDriver instantiates the driver registered under cfg.GetDriver().
 func NewDriver(cfg *config.SQLConfig) (Driver, ValueFormatter, error) {
+	if err := cfg.ValidatePasswordCommand(); err != nil {
+		return nil, nil, err
+	}
 	name := cfg.GetDriver()
 	def, ok := registry[name]
 	if !ok {

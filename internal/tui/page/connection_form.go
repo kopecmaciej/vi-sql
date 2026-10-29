@@ -189,6 +189,7 @@ func (cf *ConnectionForm) buildForm(driver string) {
 		}
 	}
 	cf.form.ApplyClipboard()
+	cf.setupPasswordMutualExclusion()
 
 	// Options section is common to all drivers.
 	rowLimit := ""
@@ -270,6 +271,10 @@ func (cf *ConnectionForm) save() {
 		modal.ShowError(cf.App.Pages, "Invalid connection", err)
 		return
 	}
+	if err := sqlCfg.ValidatePasswordCommand(); err != nil {
+		modal.ShowError(cf.App.Pages, "Invalid connection", err)
+		return
+	}
 	sqlCfg.Options = opts
 
 	var saveErr error
@@ -342,4 +347,53 @@ func (cf *ConnectionForm) cancel() {
 	if cf.onCancel != nil {
 		cf.onCancel()
 	}
+}
+
+// setupPasswordMutualExclusion blocks whichever of the Password / Password
+// command fields isn't in use and hints why. The hint is a placeholder, not a
+// color change: the form overwrites field colors on every draw but leaves
+// placeholders alone.
+func (cf *ConnectionForm) setupPasswordMutualExclusion() {
+	pwItem := cf.form.GetFormItemByLabel("Password")
+	pcItem := cf.form.GetFormItemByLabel("Password command")
+	pwField, pwOK := pwItem.(*tview.InputField)
+	pcField, pcOK := pcItem.(*tview.InputField)
+	if !pwOK || !pcOK {
+		return
+	}
+
+	dimColor := cf.App.GetStyles().Global.DimColor.Color()
+	pwField.SetPlaceholderTextColor(dimColor)
+	pcField.SetPlaceholderTextColor(dimColor)
+
+	blockInput := func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyRune, tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyDelete:
+			return nil
+		}
+		return event
+	}
+
+	applyState := func(field *tview.InputField, inactive bool, hint string) {
+		if inactive {
+			field.SetPlaceholder(hint)
+			field.SetInputCapture(blockInput)
+		} else {
+			field.SetPlaceholder("")
+			field.SetInputCapture(nil)
+		}
+	}
+
+	updateState := func() {
+		pwFilled := pwField.GetText() != ""
+		pcFilled := pcField.GetText() != ""
+
+		// Block only the empty field so a filled one can always be cleared.
+		applyState(pcField, pwFilled && !pcFilled, "using password")
+		applyState(pwField, pcFilled && !pwFilled, "using password command")
+	}
+
+	pwField.SetChangedFunc(func(_ string) { updateState() })
+	pcField.SetChangedFunc(func(_ string) { updateState() })
+	updateState() // apply immediately for pre-filled edit mode
 }

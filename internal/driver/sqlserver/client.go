@@ -62,16 +62,9 @@ func (c *Client) buildDSN() (string, error) {
 	// When the user enters a URL in the form, register.go parses it into Host/Port/etc.
 	// and stores only a masked display DSN — so we always rebuild from the live fields.
 	if c.Config.Host != "" {
-		password := c.Config.Password
-		if util.IsEncrypted(password) {
-			if config.EncryptionKey == "" {
-				return "", fmt.Errorf("connection has an encrypted password but no encryption key is loaded")
-			}
-			decrypted, _, err := util.DecryptPasswordWithMethod(password, config.EncryptionKey)
-			if err != nil {
-				return "", err
-			}
-			password = decrypted
+		password, err := c.Config.ResolvePassword()
+		if err != nil {
+			return "", err
 		}
 		port := c.Config.Port
 		if port == 0 {
