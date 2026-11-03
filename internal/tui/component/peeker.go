@@ -29,6 +29,7 @@ type Peeker struct {
 	*core.ViewModal
 
 	doneFunc func()
+	editFunc func()
 }
 
 func NewPeeker() *Peeker {
@@ -112,6 +113,12 @@ func (p *Peeker) setKeybindings() {
 			p.ViewModal.SetFullScreen(!p.ViewModal.IsFullScreen())
 			p.ViewModal.MoveToTop()
 			return nil
+		case k.Match(k.Peeker.EditRow, event):
+			if p.editFunc != nil {
+				p.App.Pages.RemoveModalPage(p.GetIdentifier())
+				p.editFunc()
+			}
+			return nil
 		case k.Match(k.Common.Close, event):
 			p.App.Pages.RemoveModalPage(p.GetIdentifier())
 			return nil
@@ -122,6 +129,11 @@ func (p *Peeker) setKeybindings() {
 
 func (p *Peeker) SetDoneFunc(doneFunc func()) {
 	p.doneFunc = doneFunc
+}
+
+// SetEditFunc sets the callback run (after the peeker closes) when the edit key is pressed.
+func (p *Peeker) SetEditFunc(editFunc func()) {
+	p.editFunc = editFunc
 }
 
 const valueViewerPageSuffix = "-viewer"

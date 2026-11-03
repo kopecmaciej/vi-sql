@@ -269,6 +269,10 @@ func (k *KeyBindings) loadDefaults(vimMode bool) {
 			Runes:       []string{"v"},
 			Description: "Viewer",
 		},
+		EditRow: Key{
+			Runes:       []string{"e"},
+			Description: "Edit",
+		},
 		ToggleFullScreen: Key{
 			Runes:       []string{"f"},
 			Description: "Full screen",
