@@ -365,9 +365,9 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			}
 			return nil
 		case k.Match(k.Data.PeekRow, event):
-			return c.handlePeekRow(row, false)
+			return c.handlePeekRow(ctx, row, false)
 		case k.Match(k.Data.FullPagePeek, event):
-			return c.handlePeekRow(row, true)
+			return c.handlePeekRow(ctx, row, true)
 		case k.Match(k.Data.CopyCell, event):
 			c.resultGrid.CopyCell(row, col, c.search.filtered(c))
 			return nil
@@ -451,7 +451,7 @@ func (c *Data) setKeybindings(ctx context.Context) {
 			case k.Match(k.Common.Edit, event):
 				return c.handleInlineEdit(ctx, row, col)
 			case k.Match(k.Data.EditRow, event):
-				return c.handleEditRow(ctx, row)
+				return c.handleEditRow(ctx, row, nil)
 			case k.Match(k.Common.Add, event):
 				c.handleAddRow(ctx)
 				return nil
@@ -773,7 +773,7 @@ func (c *Data) orderBarHandler() {
 	c.orderBar.DoneFuncHandler(acceptFunc, rejectFunc)
 }
 
-func (c *Data) handlePeekRow(row int, fullScreen bool) *tcell.EventKey {
+func (c *Data) handlePeekRow(ctx context.Context, row int, fullScreen bool) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -782,8 +782,39 @@ func (c *Data) handlePeekRow(row int, fullScreen bool) *tcell.EventKey {
 		return nil
 	}
 	c.peeker.ViewModal.SetFullScreen(fullScreen)
+	if c.mode == TableMode {
+		c.peeker.SetEditFunc(func() {
+			pk := c.rowPrimaryKey(row)
+			c.handleEditRow(ctx, row, func() { c.peekRowByPrimaryKey(ctx, pk, fullScreen) })
+		})
+	} else {
+		c.peeker.SetEditFunc(nil)
+	}
 	c.peeker.Render(rowData, c.columns)
 	return nil
+}
+
+// peekRowByPrimaryKey reopens the peeker on the row with the given key after a
+// refresh reordered rows.
+func (c *Data) peekRowByPrimaryKey(ctx context.Context, pk *database.PrimaryKey, fullScreen bool) {
+	if pk == nil {
+		return
+	}
+	for i, r := range c.search.filtered(c) {
+		matches := true
+		for col, want := range pk.Columns {
+			if database.StringifyValue(r[col]) != database.StringifyValue(want) {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			_, col := c.resultGrid.GetSelection()
+			c.resultGrid.Select(i+1, col)
+			c.handlePeekRow(ctx, i+1, fullScreen)
+			return
+		}
+	}
 }
 
 func (c *Data) handleDeleteRow(ctx context.Context, row, col int) *tcell.EventKey {
@@ -1313,7 +1344,7 @@ func (c *Data) handleTermEditorForQuery() {
 // runEditorStatement opens the configured editor (built-in modal or external $EDITOR)
 // pre-filled with initialSQL, executes the result as a SQL statement, and retries on
 // error. The table is refreshed on success. modalTitle is shown in the modal header
-func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, errorTitle string) {
+func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, errorTitle string, onSaved func()) {
 	if !c.App.GetConfig().Editor.Enabled {
 		var openModal func(sql string)
 		openModal = func(sql string) {
@@ -1329,7 +1360,7 @@ func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, e
 						return
 					}
 					c.App.QueueUpdateDraw(func() {
-						c.triggerRefresh(nil, func(err error) {
+						c.triggerRefresh(onSaved, func(err error) {
 							modal.ShowError(c.App.Pages, "Error refreshing rows", err)
 						})
 					})
@@ -1357,7 +1388,7 @@ func (c *Data) runEditorStatement(ctx context.Context, modalTitle, initialSQL, e
 			})
 			return
 		}
-		c.triggerRefresh(nil, func(err error) {
+		c.triggerRefresh(onSaved, func(err error) {
 			modal.ShowError(c.App.Pages, "Error refreshing rows", err)
 		})
 	}
@@ -1461,7 +1492,7 @@ func (c *Data) handleAddRow(ctx context.Context) {
 	if len(c.columns) == 0 {
 		return
 	}
-	c.runEditorStatement(ctx, "Add Row", c.buildInsertSQL(), "Insert error")
+	c.runEditorStatement(ctx, "Add Row", c.buildInsertSQL(), "Insert error", nil)
 }
 
 func (c *Data) buildInsertSQL() string {
@@ -1494,13 +1525,13 @@ func (c *Data) handleDuplicateRow(ctx context.Context, row int) {
 	if dataRow < 0 || dataRow >= len(rows) {
 		return
 	}
-	c.runEditorStatement(ctx, "Duplicate Row", c.buildDuplicateInsertSQL(rows[dataRow]), "Insert error")
+	c.runEditorStatement(ctx, "Duplicate Row", c.buildDuplicateInsertSQL(rows[dataRow]), "Insert error", nil)
 }
 
 // handleEditRow opens the configured editor pre-filled with an UPDATE SQL template
 // for the current row. The edited statement is executed on save.
 // On execution error the user can choose Fix (reopen editor with their SQL) or Cancel.
-func (c *Data) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
+func (c *Data) handleEditRow(ctx context.Context, row int, onSaved func()) *tcell.EventKey {
 	if row < 1 {
 		return nil
 	}
@@ -1516,7 +1547,7 @@ func (c *Data) handleEditRow(ctx context.Context, row int) *tcell.EventKey {
 		return nil
 	}
 
-	c.runEditorStatement(ctx, "Edit Row", c.buildUpdateSQL(rows[dataRow], pk), "Update error")
+	c.runEditorStatement(ctx, "Edit Row", c.buildUpdateSQL(rows[dataRow], pk), "Update error", onSaved)
 	return nil
 }
 

@@ -138,6 +138,7 @@ type (
 		CopyHighlight    Key `yaml:"copyHighlight"`
 		ExpandRow        Key `yaml:"expandRow"`
 		OpenValueViewer  Key `yaml:"openValueViewer"`
+		EditRow          Key `yaml:"editRow"`
 		ToggleFullScreen Key `yaml:"toggleFullScreen"`
 	}
 
